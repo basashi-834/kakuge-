@@ -36,6 +36,18 @@ public:
     std::vector<EffectEvent> AllEffects;
     std::vector<std::string> AllSounds;
 
+    // Screen shake, driven by counter-hits (see Fighter::ReceiveHit /
+    // CounterKind). ShakeFrames counts down every Update() tick; the
+    // renderer reads ShakeFrames/ShakeMagnitude each draw to offset the
+    // camera by a random amount that decays to 0 as ShakeFrames reaches 0.
+    int ShakeFrames = 0;
+    double ShakeMagnitude = 0.0;
+
+    // "FIGHT" banner shown for a brief moment right as a match starts (see
+    // Screen 03's "FIGHT / 勝負" panel) - counts down to 0 once per match.
+    int RoundStartFlashFrames = 0;
+    static constexpr int RoundStartFlashDuration = 50;
+
     // New: combo tracking (unblocked hits only), feeds the HUD's "N HIT
     // COMBO" popup and the Result screen's "MAX COMBO" stat tile.
     int P1ComboCount = 0, P2ComboCount = 0;
@@ -92,6 +104,8 @@ public:
         MatchActive = true;
         Winner = nullptr;
         IsDraw = false;
+        ShakeFrames = 0;
+        RoundStartFlashFrames = RoundStartFlashDuration;
     }
 
     // One fixed 60Hz logic tick. p1RawInput is real keyboard state from
@@ -104,6 +118,9 @@ public:
         RawInput p2Input = CpuAI->Decide();
         Player1.FrameStep(dt, p1RawInput);
         Player2.FrameStep(dt, p2Input);
+
+        if (ShakeFrames > 0) ShakeFrames -= 1;
+        if (RoundStartFlashFrames > 0) RoundStartFlashFrames -= 1;
 
         ResolvePushboxes();
         ResolveCombat(Player1, Player2);
@@ -148,9 +165,19 @@ public:
         if (overlapX <= 0) return;
         double dir = 1.0;
         if (Player1.PositionX < Player2.PositionX) dir = -1.0;
-        double push = overlapX / 2.0;
-        Player1.PositionX += push * dir;
-        Player2.PositionX -= push * dir;
+
+        // A crouching or blocking fighter holds their ground - the other
+        // fighter absorbs the full separation instead of splitting it, so
+        // "planted" never drifts backward just because the opponent walked
+        // into them.
+        bool p1Planted = Player1.IsPlanted();
+        bool p2Planted = Player2.IsPlanted();
+        double push1 = overlapX / 2.0, push2 = overlapX / 2.0;
+        if (p1Planted && !p2Planted) { push1 = 0.0; push2 = overlapX; }
+        else if (p2Planted && !p1Planted) { push2 = 0.0; push1 = overlapX; }
+
+        Player1.PositionX += push1 * dir;
+        Player2.PositionX -= push2 * dir;
         Player1.ClampToStage();
         Player2.ClampToStage();
     }
@@ -176,6 +203,16 @@ public:
             int* maxCombo = (&attacker == &Player1) ? &P1MaxCombo : &P2MaxCombo;
             *comboCount = wasAlreadyStunned ? (*comboCount + 1) : 1;
             *maxCombo = std::max(*maxCombo, *comboCount);
+
+            if (result.counter == CounterKind::Counter) {
+                ShakeFrames = 8;
+                ShakeMagnitude = 6.0;
+                AllEffects.push_back({"counter", defender.PositionX, defender.PositionY});
+            } else if (result.counter == CounterKind::EffectiveCounter) {
+                ShakeFrames = 18;
+                ShakeMagnitude = 18.0;
+                AllEffects.push_back({"effective_counter", defender.PositionX, defender.PositionY});
+            }
         }
     }
 

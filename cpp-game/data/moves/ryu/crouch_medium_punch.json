@@ -1,0 +1,47 @@
+{
+ "id": "crouch_medium_punch",
+ "name": "しゃがみ中パンチ",
+ "startup": 6,
+ "active": 3,
+ "recovery": 10,
+ "damage": 52,
+ "hitstun": 16,
+ "blockstun": 10,
+ "hitstop": 6,
+ "guardType": "Low",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 156.4,
+   "offsetY": -175.0,
+   "width": 175.0,
+   "height": 101.2
+  }
+ ],
+ "knockbackX": 252.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 8,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "crouch_heavy_punch",
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 6,
+ "cancelEndFrame": 11,
+ "tags": [
+  "Medium",
+  "Normal",
+  "Low"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "MP",
+ "stance": "crouch"
+}

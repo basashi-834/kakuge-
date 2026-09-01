@@ -111,6 +111,38 @@ public:
     RECT PreEditorWindowRect{};
     bool EditorSizeSaved = false;
 
+    // ---- Hitbox/hurtbox editor (see Editor.cpp / App::DrawEditorPreview) ----
+    // The move's own hitbox (first entry only - every shipped move has
+    // exactly one) and the character's per-stance hurtbox are both edited
+    // as an in-memory draft (numeric fields + drag-in-preview), written
+    // back to the real MoveData/CharacterStats only on SAVE MOVE/SAVE
+    // CHARACTER.
+    HWND EditHitX = nullptr, EditHitY = nullptr, EditHitW = nullptr, EditHitH = nullptr;
+    HitboxDef EditorHitboxDraft;
+    bool EditorHitboxHasBox = false;
+
+    HWND ComboHurtStance = nullptr;
+    HWND EditHurtX = nullptr, EditHurtY = nullptr, EditHurtW = nullptr, EditHurtH = nullptr;
+    HurtboxSet EditorHurtboxDraft;
+    int EditorHurtStance = 0; // 0=stand, 1=crouch, 2=air
+
+    // Which box the preview canvas' mouse drag currently controls.
+    HWND BtnDragHitbox = nullptr, BtnDragHurtbox = nullptr;
+    bool EditorDragTargetIsHurtbox = false;
+    bool EditorDragging = false, EditorDragResizing = false;
+    int EditorDragStartMouseX = 0, EditorDragStartMouseY = 0;
+    double EditorDragStartCenterX = 0, EditorDragStartCenterY = 0, EditorDragStartW = 0, EditorDragStartH = 0;
+    Gdiplus::RectF EditorPreviewRect{700.0f, 440.0f, 300.0f, 300.0f};
+    double EditorPreviewScale = 0.42; // world px -> preview px
+
+    void SyncHitboxFieldsFromDraft();
+    void ApplyHitboxFieldsToDraft();
+    void SyncHurtboxFieldsFromDraft();
+    void ApplyHurtboxFieldsToDraft();
+    void DrawEditorPreview(Gdiplus::Graphics& g);
+    void OnMouseMove(int x, int y);
+    void OnLButtonUp(int x, int y);
+
     void Init(HWND hwnd, const fs::path& baseDataDir, const fs::path& userDir);
     void Shutdown();
 

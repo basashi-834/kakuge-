@@ -1,0 +1,49 @@
+{
+ "id": "crouch_light_punch",
+ "name": "しゃがみ弱パンチ",
+ "startup": 3,
+ "active": 3,
+ "recovery": 6,
+ "damage": 22,
+ "hitstun": 12,
+ "blockstun": 8,
+ "hitstop": 4,
+ "guardType": "Low",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 138.0,
+   "offsetY": -184.0,
+   "width": 147.2,
+   "height": 92.0
+  }
+ ],
+ "knockbackX": 180.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 5,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "crouch_medium_punch",
+  "crouch_heavy_punch",
+  "standing_medium",
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 3,
+ "cancelEndFrame": 9,
+ "tags": [
+  "Light",
+  "Normal",
+  "Low"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "LP",
+ "stance": "crouch"
+}

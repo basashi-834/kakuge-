@@ -44,6 +44,13 @@ void DrawHardShadow(Gdiplus::Graphics& g, const Gdiplus::RectF& panelRect);
 void DrawGlossCap(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
 void DrawDiagonalShine(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
 
+// Draws one of the data/images/*.png character renders scaled to fit
+// (preserving aspect ratio) inside rect, bottom-anchored and horizontally
+// centered - for "key visual" panels (Title, Character Select, Result)
+// rather than the in-battle ground-anchored DrawFighter path. Returns
+// false (draws nothing) if the file isn't present.
+bool DrawSpriteFit(Gdiplus::Graphics& g, const wchar_t* fileName, const Gdiplus::RectF& rect, float paddingFrac = 0.06f);
+
 Gdiplus::Color TagColor(const std::string& tag);
 Gdiplus::Color MoveTint(const Fighter& fighter);
 
@@ -70,9 +77,12 @@ struct LiveEffect { std::string kind; double x, y, age; };
 void DrawEffect(Gdiplus::Graphics& g, const LiveEffect& fx);
 
 void DrawBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio,
-             Gdiplus::Color fillColor, Gdiplus::Color emptyColor, bool mirror);
-void DrawHPBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio, bool mirror);
-void DrawGaugeBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio, bool mirror);
+             Gdiplus::Color fillColor, Gdiplus::Color emptyColor, bool mirror,
+             Gdiplus::Color borderColor = GetPalette().Ink);
+void DrawHPBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio, bool mirror,
+               Gdiplus::Color borderColor = GetPalette().Ink);
+void DrawGaugeBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio, bool mirror,
+                  Gdiplus::Color borderColor = GetPalette().Ink);
 
 // HUD: HP bars, round timer box, gauge bars, combo counter (new - matches
 // the reference mockup's "COMBO / N HIT" box).

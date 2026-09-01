@@ -75,7 +75,7 @@ int main() {
     std::cout << "=== DataManager load ===\n";
     Check("loaded character 'ryu'", dm.GetCharacter("ryu") != nullptr);
     const auto* ryuMoves = dm.GetMoveset("ryu");
-    Check("loaded 12 ryu moves", ryuMoves != nullptr && ryuMoves->size() == 12);
+    Check("loaded 23 ryu moves", ryuMoves != nullptr && ryuMoves->size() == 23);
 
     // -----------------------------------------------------------------
     // 1) Full simulated match
@@ -180,7 +180,7 @@ int main() {
     Check("CreateCharacter succeeded", created);
     Check("new character is immediately gettable", dm.GetCharacter("ken") != nullptr);
     const auto* kenMoves = dm.GetMoveset("ken");
-    Check("new character cloned the template's moveset", kenMoves != nullptr && kenMoves->size() == 12);
+    Check("new character cloned the template's moveset", kenMoves != nullptr && kenMoves->size() == 23);
     bool dupRejected = !dm.CreateCharacter("ken", "KEN2", "ryu");
     Check("duplicate id is rejected", dupRejected);
 

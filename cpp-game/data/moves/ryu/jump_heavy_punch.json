@@ -1,0 +1,42 @@
+{
+ "id": "jump_heavy_punch",
+ "name": "ジャンプ強パンチ",
+ "startup": 6,
+ "active": 7,
+ "recovery": 12,
+ "damage": 88,
+ "hitstun": 22,
+ "blockstun": 12,
+ "hitstop": 7,
+ "guardType": "Overhead",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 156.4,
+   "offsetY": -147.2,
+   "width": 211.6,
+   "height": 165.6
+  }
+ ],
+ "knockbackX": 306.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 10,
+ "meterCost": 0,
+ "cancelRoutes": [],
+ "cancelStartFrame": 0,
+ "cancelEndFrame": 0,
+ "tags": [
+  "Heavy",
+  "Normal",
+  "Overhead"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "HP",
+ "stance": "air"
+}

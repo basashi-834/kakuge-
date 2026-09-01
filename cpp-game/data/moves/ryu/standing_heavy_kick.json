@@ -1,0 +1,45 @@
+{
+ "id": "standing_heavy_kick",
+ "name": "立ち強キック",
+ "startup": 11,
+ "active": 4,
+ "recovery": 19,
+ "damage": 105,
+ "hitstun": 32,
+ "blockstun": 12,
+ "hitstop": 8,
+ "guardType": "High",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 211.6,
+   "offsetY": -198.0,
+   "width": 220.8,
+   "height": 119.6
+  }
+ ],
+ "knockbackX": 414.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Knockdown",
+ "meterGain": 12,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 11,
+ "cancelEndFrame": 17,
+ "tags": [
+  "Heavy",
+  "Normal"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "HK",
+ "stance": "stand"
+}

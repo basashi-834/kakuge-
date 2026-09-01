@@ -80,6 +80,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_LBUTTONDOWN:
             if (g_App) g_App->OnLButtonDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return 0;
+        case WM_MOUSEMOVE:
+            if (g_App) g_App->OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            return 0;
+        case WM_LBUTTONUP:
+            if (g_App) g_App->OnLButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            return 0;
         case WM_KEYDOWN:
             if (g_App) g_App->OnKeyDown(static_cast<int>(wParam));
             return 0;

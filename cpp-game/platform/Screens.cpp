@@ -5,6 +5,7 @@
 #include "App.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 using namespace Gdiplus;
 
@@ -52,32 +53,64 @@ static UiButton MakeButton(float x, float y, float w, float h, const std::string
 // ---------------------------------------------------------------------
 void App::BuildTitleButtons() {
     Buttons.clear();
-    float cx = VirtualW / 2.0f;
-    Buttons.push_back(MakeButton(cx - 170, 272, 340, 60, "GAME START", true, [this]() { IsTrainingMode = false; GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(cx - 170, 340, 340, 52, "TRAINING MODE", false, [this]() { IsTrainingMode = true; GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(cx - 170, 402, 340, 52, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
-    Buttons.push_back(MakeButton(cx - 170, 464, 340, 52, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
-    Buttons.push_back(MakeButton(cx - 170, 526, 340, 52, "EXIT", false, []() { PostQuitMessage(0); }));
+    float colX = 60, colW = 460;
+    Buttons.push_back(MakeButton(colX, 300, colW, 58, "GAME START", true, [this]() { IsTrainingMode = false; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(colX, 364, colW, 46, "TRAINING MODE", false, [this]() { IsTrainingMode = true; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(colX, 416, colW, 46, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
+    Buttons.push_back(MakeButton(colX, 468, colW, 46, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
+    Buttons.push_back(MakeButton(colX, 520, colW, 46, "EXIT", false, []() { PostQuitMessage(0); }));
 }
 
+// Left text column + right "key visual" panel, an asymmetric composition
+// (per the HARD CANDY reference's Screen 01 - left-aligned eyebrow/title/
+// tagline stacked over a button group, with a bordered art panel filling
+// the right side) rather than the old fully-centered layout.
 void App::DrawTitle(Graphics& g) {
     const auto& pal = GetPalette();
     Font eyebrowFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
-    Font titleFont(UiFontFamily(), 56, FontStyleBold, UnitPixel);
-    Font footerFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
+    Font titleFont(UiFontFamily(), 72, FontStyleBold, UnitPixel);
+    Font taglineFont(UiFontFamily(), 15, FontStyleRegular, UnitPixel);
+    Font captionFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
+    Font footerFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
 
-    DrawTextCentered(g, L"2D FIGHTING GAME", eyebrowFont, RectF(0, 96, static_cast<REAL>(VirtualW), 28), pal.Accent);
-    DrawTextCentered(g, L"KAKUGE", titleFont, RectF(0, 120, static_cast<REAL>(VirtualW), 90), pal.TextDark);
+    float colX = 60.0f;
+
+    SolidBrush markBrush(pal.Accent);
+    g.FillRectangle(&markBrush, colX, 66.0f, 22.0f, 22.0f);
+    DrawTextLeft(g, L"2D FIGHTING GAME", eyebrowFont, colX + 34, 70, pal.Accent);
+
+    DrawTextLeft(g, L"KAKUGE", titleFont, colX - 4, 96, pal.Ink);
 
     float ruleW = 120;
     SolidBrush ruleBrush(pal.Accent);
-    g.FillRectangle(&ruleBrush, (VirtualW - ruleW) / 2.0f, 214.0f, ruleW, 4.0f);
+    g.FillRectangle(&ruleBrush, colX, 206.0f, ruleW, 4.0f);
+
+    DrawTextLeft(g, L"6-button, frame-data fighting.", taglineFont, colX, 228, pal.Ink70);
+    DrawTextLeft(g, L"1 CHARACTER (IN DEVELOPMENT) - VERSUS / TRAINING", captionFont, colX, 254, pal.Ink55);
 
     DrawButtons(g, Buttons);
     if (!Buttons.empty()) DrawDiagonalShine(g, Buttons[0].Rect); // GAME START - primary CTA gets the shine
 
-    DrawTextCentered(g, L"A/D move  S crouch  Space jump  U I O punch  J K L kick  Esc pause",
-                      footerFont, RectF(0, static_cast<REAL>(VirtualH - 40), static_cast<REAL>(VirtualW), 24), pal.TextGray);
+    DrawTextLeft(g, L"A/D move  S crouch  Space jump  U I O punch  J K L kick  Esc pause",
+                 footerFont, colX, static_cast<REAL>(VirtualH - 34), pal.Ink55);
+
+    // Right "key visual" panel - the provided character render, on a
+    // tinted, hard-bordered, hard-shadowed panel.
+    RectF artPanel(580, 90, 640, 560);
+    DrawHardShadow(g, artPanel);
+    GraphicsPath artPath;
+    AddRoundedRect(artPath, artPanel, 0.0f);
+    SolidBrush artBg(pal.TintRed);
+    g.FillPath(&artBg, &artPath);
+    Pen artBorder(pal.Ink, 2.0f);
+    g.DrawPath(&artBorder, &artPath);
+    if (!DrawSpriteFit(g, L"fighter_stand.png", artPanel, 0.05f)) {
+        Font phFont(UiFontFamily(), 13, FontStyleRegular, UnitPixel);
+        DrawTextCentered(g, L"KEY VISUAL", phFont, artPanel, pal.Ink45);
+    }
+
+    Font copyFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
+    DrawTextLeft(g, L"© 2026 KAKUGE PROJECT - PROTOTYPE BUILD", copyFont, colX, static_cast<REAL>(VirtualH - 16), pal.Ink45);
 }
 
 // ---------------------------------------------------------------------
@@ -117,30 +150,37 @@ static void DrawMiniStatBar(Graphics& g, float x, float y, float w, const std::s
     DrawBar(g, x, y + 14, w, 8, value / 100.0, pal.Accent, pal.HpEmpty, false);
 }
 
+// Compact tile grid on the left + one big detail panel on the right (per
+// the reference's Screen 02: a wall of small "?" tiles feeding a single
+// large portrait/stats panel), replacing the old layout where every tile
+// carried its own full stat block.
+static constexpr float kSelectTileW = 132, kSelectTileH = 150, kSelectGap = 14;
+static constexpr float kSelectGridX = 40, kSelectGridY = 108;
+static constexpr int kSelectCols = 4;
+
 void App::BuildSelectButtons() {
     Buttons.clear();
     auto ids = Dm->GetCharacterIds();
-    float tileW = 220, tileH = 260, gap = 20;
-    float startX = 60, startY = 170;
-    int col = 0;
     for (size_t i = 0; i < ids.size(); i++) {
-        float x = startX + col * (tileW + gap);
-        float y = startY;
+        int col = static_cast<int>(i) % kSelectCols, row = static_cast<int>(i) / kSelectCols;
+        float x = kSelectGridX + col * (kSelectTileW + kSelectGap);
+        float y = kSelectGridY + row * (kSelectTileH + kSelectGap);
         std::string id = ids[i];
-        Buttons.push_back(MakeButton(x, y, tileW, tileH, "", true, [this, id]() {
+        Buttons.push_back(MakeButton(x, y, kSelectTileW, kSelectTileH, "", true, [this, id]() {
             if (SelectStep == 0) P1CharId = id; else P2CharId = id;
         }));
-        col++;
     }
     // "+ ADD CHARACTER" tile -> jump into the editor's creation flow.
-    float x = startX + col * (tileW + gap);
-    Buttons.push_back(MakeButton(x, startY, tileW, tileH, "+ ADD\nCHARACTER", false, [this]() {
+    int col = static_cast<int>(ids.size()) % kSelectCols, row = static_cast<int>(ids.size()) / kSelectCols;
+    float x = kSelectGridX + col * (kSelectTileW + kSelectGap);
+    float y = kSelectGridY + row * (kSelectTileH + kSelectGap);
+    Buttons.push_back(MakeButton(x, y, kSelectTileW, kSelectTileH, "+\nADD", false, [this]() {
         EditorCreatingNew = true;
         GoTo(Screen::Editor);
     }));
 
-    Buttons.push_back(MakeButton(60, 620, 200, 56, "BACK", false, [this]() { GoTo(Screen::Title); }));
-    Buttons.push_back(MakeButton(VirtualW - 260.0f, 620, 200, 56, "CONFIRM", true, [this]() {
+    Buttons.push_back(MakeButton(60, 648, 200, 52, "BACK", false, [this]() { GoTo(Screen::Title); }));
+    Buttons.push_back(MakeButton(VirtualW - 260.0f, 648, 200, 52, "CONFIRM", true, [this]() {
         if (SelectStep == 0) {
             SelectStep = 1;
             BuildSelectButtons();
@@ -155,8 +195,7 @@ void App::BuildSelectButtons() {
 void App::DrawCharacterSelect(Graphics& g) {
     const auto& pal = GetPalette();
     Font headerFont(UiFontFamily(), 26, FontStyleBold, UnitPixel);
-    Font nameFont(UiFontFamily(), 15, FontStyleBold, UnitPixel);
-    Font plusFont(UiFontFamily(), 14, FontStyleBold, UnitPixel);
+    Font plusFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
 
     std::wstring header = SelectStep == 0 ? L"SELECT YOUR FIGHTER" : L"SELECT CPU OPPONENT";
     SolidBrush headerBg(pal.Accent);
@@ -178,30 +217,54 @@ void App::DrawCharacterSelect(Graphics& g) {
         g.DrawPath(&border, &path);
 
         if (isAddTile) {
-            DrawTextCentered(g, L"+\nADD\nCHARACTER", plusFont, b.Rect, pal.TextGray);
+            DrawTextCentered(g, L"+\nADD", plusFont, b.Rect, pal.Ink55);
             continue;
         }
         const std::string& id = ids[i];
         double px = b.Rect.X + b.Rect.Width / 2.0;
-        double py = b.Rect.Y + 130;
+        double py = b.Rect.Y + 90;
         auto* stats = Dm->GetCharacter(id);
         Color bodyColor = stats ? Color(255, static_cast<BYTE>(stats->ColorR), static_cast<BYTE>(stats->ColorG), static_cast<BYTE>(stats->ColorB)) : pal.TextDark;
-        // A thumbnail preview, not the battle-scale render: heightScale is
-        // relative to kCharScale (which now makes an idle fighter ~497px
-        // tall), so this must be small enough to fit the ~148px-tall image
-        // area above the name label, not the 1.3x used before that scale-up.
-        DrawHumanoid(g, px, py, bodyColor, {0.22, 1});
-        DrawTextCentered(g, Utf8ToWide(stats ? stats->Name : id), nameFont, RectF(b.Rect.X, b.Rect.Y + 148, b.Rect.Width, 24), pal.TextDark);
-
-        StatBars sb = ComputeStatBars(*Dm, id);
-        float statX = b.Rect.X + 16, statW = b.Rect.Width - 32;
-        DrawMiniStatBar(g, statX, b.Rect.Y + 178, statW, "POWER", sb.power);
-        DrawMiniStatBar(g, statX, b.Rect.Y + 200, statW, "STAMINA", sb.stamina);
-        DrawMiniStatBar(g, statX, b.Rect.Y + 222, statW, "SPEED", sb.speed);
-        DrawMiniStatBar(g, statX, b.Rect.Y + 244, statW, "REACH", sb.reach);
+        DrawHumanoid(g, px, py, bodyColor, {0.16, 1});
+        Font tileNameFont(UiFontFamily(), 12, FontStyleBold, UnitPixel);
+        DrawTextCentered(g, Utf8ToWide(stats ? stats->Name : id), tileNameFont, RectF(b.Rect.X, b.Rect.Y + b.Rect.Height - 22, b.Rect.Width, 20), pal.TextDark);
     }
 
-    // BACK/CONFIRM are the last two entries in Buttons.
+    // Right-side detail panel: big portrait on top, name + full stat block
+    // below - the single large panel the reference feeds every tile into,
+    // instead of repeating stats inside each small tile.
+    RectF detailPanel(700, 108, 520, 512);
+    DrawHardShadow(g, detailPanel);
+    GraphicsPath dp;
+    AddRoundedRect(dp, detailPanel, 0.0f);
+    SolidBrush detailBg(pal.PanelBg);
+    g.FillPath(&detailBg, &dp);
+    Pen detailBorder(pal.Ink, 2.0f);
+    g.DrawPath(&detailBorder, &dp);
+
+    RectF portraitRect(detailPanel.X, detailPanel.Y, detailPanel.Width, 300);
+    SolidBrush portraitBg(pal.TintRed);
+    g.FillRectangle(&portraitBg, portraitRect);
+    auto* selStats = Dm->GetCharacter(selectedId);
+    if (!DrawSpriteFit(g, L"fighter_stand.png", portraitRect, 0.04f)) {
+        Color bodyColor = selStats ? Color(255, static_cast<BYTE>(selStats->ColorR), static_cast<BYTE>(selStats->ColorG), static_cast<BYTE>(selStats->ColorB)) : pal.TextDark;
+        DrawHumanoid(g, portraitRect.X + portraitRect.Width / 2.0, portraitRect.Y + portraitRect.Height - 20, bodyColor, {0.55, 1});
+    }
+    Pen portraitDivider(pal.Ink, 2.0f);
+    g.DrawLine(&portraitDivider, detailPanel.X, detailPanel.Y + 300, detailPanel.X + detailPanel.Width, detailPanel.Y + 300);
+
+    Font detailNameFont(UiFontFamily(), 26, FontStyleBold, UnitPixel);
+    DrawTextLeft(g, Utf8ToWide(selStats ? selStats->Name : selectedId), detailNameFont, detailPanel.X + 24, detailPanel.Y + 316, pal.Ink);
+
+    StatBars sb = ComputeStatBars(*Dm, selectedId);
+    float statX = detailPanel.X + 24, statW = detailPanel.Width - 48, statY = detailPanel.Y + 366;
+    DrawMiniStatBar(g, statX, statY, statW, "POWER", sb.power);
+    DrawMiniStatBar(g, statX, statY + 40, statW, "STAMINA", sb.stamina);
+    DrawMiniStatBar(g, statX, statY + 80, statW, "SPEED", sb.speed);
+    DrawMiniStatBar(g, statX, statY + 120, statW, "REACH", sb.reach);
+
+    // BACK/CONFIRM are the last two entries in Buttons (DrawUiButton already
+    // applies the gloss cap itself for the primary CONFIRM button).
     for (size_t i = ids.size() + 1; i < Buttons.size(); i++) DrawUiButton(g, Buttons[i]);
 }
 
@@ -321,10 +384,33 @@ void App::BuildGameButtons() {
 
 void App::DrawGame(Graphics& g) {
     const auto& pal = GetPalette();
+
+    // Counter-hit screen shake (see BattleSystem::ShakeFrames/ShakeMagnitude,
+    // set from Fighter::CounterKind in ResolveCombat): a small camera jolt
+    // on Counter, a bigger one on Effective Counter, decaying to nothing as
+    // ShakeFrames counts down. Applied to the whole scene (arena + HUD),
+    // restored before the pause overlay so the pause panel itself never
+    // shakes.
+    GraphicsState shakeState = g.Save();
+    if (Battle->ShakeFrames > 0) {
+        double t = std::min(1.0, Battle->ShakeFrames / 18.0);
+        double amp = Battle->ShakeMagnitude * t;
+        double ox = (static_cast<double>(std::rand()) / RAND_MAX * 2.0 - 1.0) * amp;
+        double oy = (static_cast<double>(std::rand()) / RAND_MAX * 2.0 - 1.0) * amp * 0.6;
+        g.TranslateTransform(static_cast<REAL>(ox), static_cast<REAL>(oy));
+    }
+
+    // In-match arena runs on a dark ground (Screen 03 in the reference),
+    // unlike every other (light) screen - overpainted here, oversized by a
+    // margin so the shake transform above never reveals the light canvas
+    // fill (pal.Bg) App::OnPaint already laid down behind this screen.
+    SolidBrush arenaBg(pal.ArenaBg);
+    g.FillRectangle(&arenaBg, -40.0f, -40.0f, static_cast<REAL>(VirtualW + 80), static_cast<REAL>(VirtualH + 80));
+
     // Thin floor line rather than a tall band: the ground line moved down
     // (OriginY=647, see Draw.h) to hit the user's footroom spec, leaving
     // little clearance before the GAUGE HUD row starts at y=665.
-    SolidBrush groundBrush(pal.GroundStrip);
+    SolidBrush groundBrush(pal.ArenaPanel);
     g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 12.0f);
 
     DrawFighter(g, Battle->Player1);
@@ -334,6 +420,8 @@ void App::DrawGame(Graphics& g) {
 
     DrawHUD(g, *Battle, LastP1Combo, LastP2Combo, std::max(P1ComboFade, P2ComboFade));
     if (DebugVisible && IsTrainingMode) DrawDebugOverlay(g, *Battle);
+
+    g.Restore(shakeState);
 
     if (Paused) {
         SolidBrush dim(Color(140, 0, 0, 0));
@@ -367,12 +455,14 @@ void App::DrawGame(Graphics& g) {
 // ---------------------------------------------------------------------
 void App::BuildResultButtons() {
     Buttons.clear();
-    float cx = VirtualW / 2.0f;
-    Buttons.push_back(MakeButton(cx - 170, 470, 340, 60, "REMATCH", true, [this]() { GoTo(Screen::Game); }));
-    Buttons.push_back(MakeButton(cx - 170, 542, 340, 52, "CHARACTER SELECT", false, [this]() { GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(cx - 170, 604, 340, 52, "TITLE", false, [this]() { GoTo(Screen::Title); }));
+    float colX = 60, colW = 520;
+    Buttons.push_back(MakeButton(colX, 470, colW, 58, "REMATCH", true, [this]() { GoTo(Screen::Game); }));
+    Buttons.push_back(MakeButton(colX, 536, colW, 46, "CHARACTER SELECT", false, [this]() { GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(colX, 588, colW, 46, "TITLE", false, [this]() { GoTo(Screen::Title); }));
 }
 
+// Left column (banner/quote/stat tiles/buttons) + right "WIN POSE" panel,
+// per the reference's Screen 05 - replacing the old fully-centered layout.
 void App::DrawResult(Graphics& g) {
     const auto& pal = GetPalette();
     std::wstring resultText = L"DRAW";
@@ -382,8 +472,8 @@ void App::DrawResult(Graphics& g) {
         else { resultText = L"CPU WIN"; quote = L"Train harder. Try again."; }
     }
 
-    float cx = VirtualW / 2.0f;
-    RectF banner(cx - 220, 130, 440, 90);
+    float colX = 60;
+    RectF banner(colX, 60, 360, 90);
     DrawHardShadow(g, banner);
     GraphicsPath path;
     AddRoundedRect(path, banner, 0.0f);
@@ -397,7 +487,7 @@ void App::DrawResult(Graphics& g) {
     DrawTextCentered(g, resultText, bannerFont, banner, pal.White);
 
     Font quoteFont(UiFontFamily(), 13, FontStyleItalic, UnitPixel);
-    DrawTextCentered(g, quote, quoteFont, RectF(0, 230, static_cast<REAL>(VirtualW), 24), pal.TextGray);
+    DrawTextLeft(g, quote, quoteFont, colX, 172, pal.Ink70);
 
     struct Tile { std::wstring label; std::wstring value; };
     std::vector<Tile> tiles = {
@@ -405,13 +495,11 @@ void App::DrawResult(Graphics& g) {
         {L"TIME LEFT", std::to_wstring(LastResult.timeLeftSeconds) + L"s"},
         {L"DAMAGE TAKEN", std::to_wstring(LastResult.damageTaken)},
     };
-    float tileW = 140, tileH = 80, gap = 20;
-    float totalW = tileW * 3 + gap * 2;
-    float startX = cx - totalW / 2.0f;
+    float tileW = 165, tileH = 84, gap = 20;
     Font valueFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
     Font labelFont(UiFontFamily(), 10, FontStyleBold, UnitPixel);
     for (size_t i = 0; i < tiles.size(); i++) {
-        RectF tr(startX + i * (tileW + gap), 280, tileW, tileH);
+        RectF tr(colX + i * (tileW + gap), 208, tileW, tileH);
         GraphicsPath tp;
         AddRoundedRect(tp, tr, 0.0f);
         SolidBrush tileBg(pal.PanelBg);
@@ -423,6 +511,36 @@ void App::DrawResult(Graphics& g) {
     }
 
     DrawButtons(g, Buttons);
+
+    // Right "WIN POSE" panel - the winner's render, on a tinted, bordered
+    // panel with a name/subtitle strip below it.
+    RectF winPanel(660, 60, 560, 574);
+    DrawHardShadow(g, winPanel);
+    GraphicsPath wp;
+    AddRoundedRect(wp, winPanel, 0.0f);
+    SolidBrush winBg(pal.PanelBg);
+    g.FillPath(&winBg, &wp);
+    Pen winBorder(pal.Ink, 2.0f);
+    g.DrawPath(&winBorder, &wp);
+
+    RectF poseRect(winPanel.X, winPanel.Y, winPanel.Width, winPanel.Height - 70);
+    SolidBrush poseBg(pal.TintRed);
+    g.FillRectangle(&poseBg, poseRect);
+    bool winnerIsP1 = LastResult.isDraw || LastResult.winnerIsPlayer;
+    const wchar_t* poseSprite = winnerIsP1 ? L"fighter_punch.png" : L"fighter_kick.png";
+    if (!DrawSpriteFit(g, poseSprite, poseRect, 0.05f)) {
+        Font phFont(UiFontFamily(), 13, FontStyleRegular, UnitPixel);
+        DrawTextCentered(g, L"WIN POSE", phFont, poseRect, pal.Ink45);
+    }
+    Pen poseDivider(pal.Ink, 2.0f);
+    g.DrawLine(&poseDivider, winPanel.X, winPanel.Y + poseRect.Height, winPanel.X + winPanel.Width, winPanel.Y + poseRect.Height);
+
+    const std::string& winnerId = winnerIsP1 ? P1CharId : P2CharId;
+    auto* winnerStats = Dm->GetCharacter(winnerId);
+    Font winNameFont(UiFontFamily(), 22, FontStyleBold, UnitPixel);
+    DrawTextLeft(g, Utf8ToWide(winnerStats ? winnerStats->Name : winnerId), winNameFont, winPanel.X + 24, winPanel.Y + poseRect.Height + 14, pal.Ink);
+    Font winSubFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
+    DrawTextLeft(g, LastResult.isDraw ? L"DRAW" : (winnerIsP1 ? L"PLAYER 1" : L"CPU"), winSubFont, winPanel.X + 24, winPanel.Y + poseRect.Height + 42, pal.Ink55);
 }
 
 // ---------------------------------------------------------------------

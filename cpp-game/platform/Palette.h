@@ -29,6 +29,14 @@ struct Palette {
     Gdiplus::Color Gauge{255, 236, 48, 19};          // gauge fill reuses accent (segmented bar, not a separate hue)
     Gdiplus::Color GroundStrip{255, 224, 210, 196};
 
+    // The in-match HUD ("Screen 03" in the reference) runs on a dark arena
+    // ground, unlike every other (light) screen - these are used only by
+    // App::DrawGame / DrawHUD.
+    Gdiplus::Color ArenaBg{255, 58, 56, 55};
+    Gdiplus::Color ArenaPanel{255, 40, 38, 37};        // name tag / FIGHT banner fill
+    Gdiplus::Color ArenaLine{255, 235, 232, 230};      // borders/text that must read on ArenaBg
+    Gdiplus::Color ArenaTextDim{200, 235, 232, 230};   // secondary labels on ArenaBg
+
     // ---- Back-compat aliases for call sites not yet migrated to the named
     // tokens above (kept so this pass doesn't require touching every
     // draw call in one shot) ----

@@ -1,0 +1,46 @@
+{
+ "id": "crouch_heavy_punch",
+ "name": "しゃがみ強パンチ",
+ "startup": 9,
+ "active": 4,
+ "recovery": 17,
+ "damage": 85,
+ "hitstun": 28,
+ "blockstun": 12,
+ "hitstop": 8,
+ "guardType": "Low",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 175.0,
+   "offsetY": -166.0,
+   "width": 202.4,
+   "height": 110.4
+  }
+ ],
+ "knockbackX": 342.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Knockdown",
+ "meterGain": 12,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 9,
+ "cancelEndFrame": 15,
+ "tags": [
+  "Heavy",
+  "Normal",
+  "Low"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "HP",
+ "stance": "crouch"
+}

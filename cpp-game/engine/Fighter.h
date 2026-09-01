@@ -33,7 +33,14 @@ struct ProjectileRequest {
     int facing = 1;
 };
 
-struct HitResult { bool blocked = false; bool whiffed = false; };
+// A hit lands as a "Counter" if the defender was themselves mid-attack in
+// startup (committed but not yet active) when it landed, or an "Effective
+// Counter" if it landed during the defender's recovery (their own move's
+// active frames already came and went) - the classic fighting-game
+// counter-hit bonus, split into two tiers per the user's spec.
+enum class CounterKind { None, Counter, EffectiveCounter };
+
+struct HitResult { bool blocked = false; bool whiffed = false; CounterKind counter = CounterKind::None; };
 
 class Fighter {
 public:
@@ -77,6 +84,7 @@ public:
     bool PendingProjectileValid = false;
     ProjectileRequest PendingProjectileRequestData;
     bool LastHitBlocked = false;
+    CounterKind LastCounterKind = CounterKind::None;
 
     ButtonsHeld HeldButtonsPrev;
     int LastForwardTapFrame = -999;
@@ -91,6 +99,7 @@ public:
 
     void Setup(const CharacterStats& stats, const std::unordered_map<std::string, MoveData>* moveset) {
         Stats = stats;
+        Hurtboxes = stats.Hurtboxes;
         Moveset = moveset;
         ResetForRound();
     }
@@ -271,10 +280,17 @@ public:
             VelocityX = spd * Facing;
             SM.ChangeState(CharState::WalkForward, "");
         } else if (IsHoldingBack(raw)) {
-            VelocityX = -Stats.WalkBackwardSpeed * Facing;
+            // Only actually walk backward when that's where we're staying -
+            // entering Block here must leave VelocityX at 0, or the walk
+            // speed set in this same frame briefly carries over and the
+            // character visibly slides during blockstun's decay instead of
+            // planting immediately (same bug the crouch-guard fix below
+            // guards against).
             if (Opponent != nullptr && Opponent->SM.CurrentState == CharState::Attack) {
+                VelocityX = 0.0;
                 SM.ChangeState(CharState::Block, "");
             } else {
+                VelocityX = -Stats.WalkBackwardSpeed * Facing;
                 SM.ChangeState(CharState::WalkBackward, "");
             }
         } else {
@@ -325,6 +341,14 @@ public:
         if (SM.CurrentState == CharState::Jump) return "air";
         if (SM.CurrentState == CharState::Crouch) return "crouch";
         return "stand";
+    }
+
+    // Crouching (with or without holding back) and blocking are "planted" -
+    // the fighter should hold their ground rather than get shoved back by
+    // pushbox separation when the opponent walks into them (see
+    // ResolvePushboxes in BattleSystem.h).
+    bool IsPlanted() const {
+        return SM.CurrentState == CharState::Crouch || SM.CurrentState == CharState::Block;
     }
 
     bool CanStart(const MoveData& move) const {
@@ -403,8 +427,20 @@ public:
         if (move.GuardType == Constants::GuardThrow) invKind = Constants::InvincibleThrow;
         if (IsInvincibleAgainst(invKind)) return {false, true};
 
+        // Was *this* fighter itself mid-attack (committed to their own move)
+        // at the moment the hit landed? Captured before anything below
+        // changes SM.CurrentState, since that's what StartMove/ProgressMove
+        // would otherwise clobber.
+        CounterKind counter = CounterKind::None;
+        if (SM.CurrentState == CharState::Attack && CurrentMoveData != nullptr) {
+            MovePhase myPhase = MoveExecutor::GetPhase(*CurrentMoveData, SM.CurrentFrame);
+            if (myPhase == MovePhase::Startup) counter = CounterKind::Counter;
+            else if (myPhase == MovePhase::Recovery) counter = CounterKind::EffectiveCounter;
+        }
+
         bool blocked = false;
         if (move.GuardType != Constants::GuardThrow) blocked = CheckGuard(move);
+        if (blocked) counter = CounterKind::None; // guarding is never a counter hit
 
         HitstopTimer = move.Hitstop;
         if (blocked) {
@@ -443,7 +479,8 @@ public:
             PendingSounds.push_back("ko");
         }
         LastHitBlocked = blocked;
-        return {blocked, false};
+        LastCounterKind = counter;
+        return {blocked, false, counter};
     }
 
     void EnterKnockdown(bool hard, int customFrames) {
@@ -536,6 +573,7 @@ public:
         int frame = 0, hp = 0;
         double gauge = 0, velocityX = 0, velocityY = 0;
         int hitstun = 0, blockstun = 0, hitstop = 0;
+        double positionX = 0, positionY = 0;
     };
 
     DebugInfoT DebugInfo() const {
@@ -549,6 +587,8 @@ public:
         d.velocityY = VelocityY;
         d.hitstun = HitstunTimer;
         d.blockstun = BlockstunTimer;
+        d.positionX = PositionX;
+        d.positionY = PositionY;
         d.hitstop = HitstopTimer;
         return d;
     }

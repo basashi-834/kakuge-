@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
+#include "Boxes.h"
 
 namespace kakuge {
 
@@ -21,6 +22,10 @@ public:
     double Gravity = 2400.0;
     int ColorR = 200, ColorG = 50, ColorB = 45;
     std::vector<std::string> MoveIds;
+    // Per-stance hurtbox, editable in the Character Editor. Defaults to
+    // HurtboxSet's own built-in defaults when absent from JSON, so existing
+    // character files stay valid without this field.
+    HurtboxSet Hurtboxes;
 
     static CharacterStats FromJson(const nlohmann::json& obj) {
         CharacterStats s;
@@ -40,6 +45,18 @@ public:
         if (obj.contains("moves") && obj["moves"].is_array()) {
             for (const auto& mid : obj["moves"]) s.MoveIds.push_back(mid.get<std::string>());
         }
+        if (obj.contains("hurtboxes") && obj["hurtboxes"].is_object()) {
+            const auto& hb = obj["hurtboxes"];
+            auto loadBox = [](const nlohmann::json& j, RectBox& box) {
+                box.CenterX = j.value("offsetX", box.CenterX);
+                box.CenterY = j.value("offsetY", box.CenterY);
+                box.Width = j.value("width", box.Width);
+                box.Height = j.value("height", box.Height);
+            };
+            if (hb.contains("stand")) loadBox(hb["stand"], s.Hurtboxes.Stand);
+            if (hb.contains("crouch")) loadBox(hb["crouch"], s.Hurtboxes.Crouch);
+            if (hb.contains("air")) loadBox(hb["air"], s.Hurtboxes.Air);
+        }
         return s;
     }
 
@@ -49,6 +66,10 @@ public:
         j["walkForwardSpeed"] = WalkForwardSpeed; j["walkBackwardSpeed"] = WalkBackwardSpeed;
         j["dashSpeed"] = DashSpeed; j["jumpVelocity"] = JumpVelocity; j["gravity"] = Gravity;
         j["color"] = {ColorR / 255.0, ColorG / 255.0, ColorB / 255.0};
+        auto saveBox = [](const RectBox& box) {
+            return nlohmann::json{{"offsetX", box.CenterX}, {"offsetY", box.CenterY}, {"width", box.Width}, {"height", box.Height}};
+        };
+        j["hurtboxes"] = {{"stand", saveBox(Hurtboxes.Stand)}, {"crouch", saveBox(Hurtboxes.Crouch)}, {"air", saveBox(Hurtboxes.Air)}};
         j["moves"] = MoveIds;
         return j;
     }

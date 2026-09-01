@@ -1,0 +1,42 @@
+{
+ "id": "jump_light_kick",
+ "name": "ジャンプ弱キック",
+ "startup": 4,
+ "active": 5,
+ "recovery": 8,
+ "damage": 38,
+ "hitstun": 14,
+ "blockstun": 8,
+ "hitstop": 4,
+ "guardType": "Overhead",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 120.0,
+   "offsetY": -110.0,
+   "width": 165.6,
+   "height": 119.6
+  }
+ ],
+ "knockbackX": 198.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 5,
+ "meterCost": 0,
+ "cancelRoutes": [],
+ "cancelStartFrame": 0,
+ "cancelEndFrame": 0,
+ "tags": [
+  "Light",
+  "Normal",
+  "Overhead"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "LK",
+ "stance": "air"
+}

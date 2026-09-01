@@ -56,6 +56,18 @@ constexpr int ID_COMBO_TEMPLATE = 2042;
 constexpr int ID_BTN_CREATE_CONFIRM = 2043;
 constexpr int ID_BTN_CREATE_CANCEL = 2044;
 
+constexpr int ID_EDIT_HIT_X = 2050;
+constexpr int ID_EDIT_HIT_Y = 2051;
+constexpr int ID_EDIT_HIT_W = 2052;
+constexpr int ID_EDIT_HIT_H = 2053;
+constexpr int ID_COMBO_HURT_STANCE = 2054;
+constexpr int ID_EDIT_HURT_X = 2055;
+constexpr int ID_EDIT_HURT_Y = 2056;
+constexpr int ID_EDIT_HURT_W = 2057;
+constexpr int ID_EDIT_HURT_H = 2058;
+constexpr int ID_BTN_DRAG_HITBOX = 2059;
+constexpr int ID_BTN_DRAG_HURTBOX = 2060;
+
 std::vector<std::string> g_EditorMoveIdsInCombo;
 std::vector<HWND> g_NormalModeControls;
 std::vector<HWND> g_CreateModeControls;
@@ -211,6 +223,42 @@ void App::CreateEditorControls() {
     }
 
     BtnBack = MakeButton(Hwnd, hInst, ID_BTN_BACK, 20, 760, 260, 36, L"BACK TO TITLE");
+
+    // ---- Far-right column: hitbox/hurtbox visual+numeric editor ----
+    // The preview canvas itself (drag-to-move, drag-corner-to-resize) is
+    // custom-painted in App::DrawEditorPreview, called from App::OnPaint's
+    // Editor branch - it isn't a child control, just real window pixels
+    // drawn directly, matching how the red header bar is drawn.
+    int px = 700;
+    lbl = MakeLabel(Hwnd, hInst, px, 56, 300, 18, L"HITBOX / HURTBOX PREVIEW (drag box, drag corner to resize)");
+    g_NormalModeControls.push_back(lbl);
+
+    BtnDragHitbox = MakeButton(Hwnd, hInst, ID_BTN_DRAG_HITBOX, px, 528, 145, 30, L"DRAG: HITBOX");
+    BtnDragHurtbox = MakeButton(Hwnd, hInst, ID_BTN_DRAG_HURTBOX, px + 155, 528, 145, 30, L"DRAG: HURTBOX");
+
+    lbl = MakeLabel(Hwnd, hInst, px, 566, 300, 16, L"MOVE HITBOX  X / Y / W / H"); g_NormalModeControls.push_back(lbl);
+    EditHitX = MakeEdit(Hwnd, hInst, ID_EDIT_HIT_X, px, 584, 70, 24);
+    EditHitY = MakeEdit(Hwnd, hInst, ID_EDIT_HIT_Y, px + 76, 584, 70, 24);
+    EditHitW = MakeEdit(Hwnd, hInst, ID_EDIT_HIT_W, px + 152, 584, 70, 24);
+    EditHitH = MakeEdit(Hwnd, hInst, ID_EDIT_HIT_H, px + 228, 584, 70, 24);
+
+    lbl = MakeLabel(Hwnd, hInst, px, 622, 200, 16, L"HURTBOX STANCE"); g_NormalModeControls.push_back(lbl);
+    ComboHurtStance = MakeCombo(Hwnd, hInst, ID_COMBO_HURT_STANCE, px, 640, 150, 100);
+    lbl = MakeLabel(Hwnd, hInst, px, 670, 300, 16, L"CHARACTER HURTBOX  X / Y / W / H"); g_NormalModeControls.push_back(lbl);
+    EditHurtX = MakeEdit(Hwnd, hInst, ID_EDIT_HURT_X, px, 688, 70, 24);
+    EditHurtY = MakeEdit(Hwnd, hInst, ID_EDIT_HURT_Y, px + 76, 688, 70, 24);
+    EditHurtW = MakeEdit(Hwnd, hInst, ID_EDIT_HURT_W, px + 152, 688, 70, 24);
+    EditHurtH = MakeEdit(Hwnd, hInst, ID_EDIT_HURT_H, px + 228, 688, 70, 24);
+
+    for (HWND h : {BtnDragHitbox, BtnDragHurtbox, EditHitX, EditHitY, EditHitW, EditHitH,
+                    ComboHurtStance, EditHurtX, EditHurtY, EditHurtW, EditHurtH}) {
+        g_NormalModeControls.push_back(h);
+    }
+
+    SendMessageW(ComboHurtStance, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"STAND"));
+    SendMessageW(ComboHurtStance, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"CROUCH"));
+    SendMessageW(ComboHurtStance, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"AIR"));
+    SendMessageW(ComboHurtStance, CB_SETCURSEL, 0, 0);
 }
 
 void App::DestroyEditorControls() {
@@ -225,6 +273,9 @@ void App::DestroyEditorControls() {
     EditMoveName = EditStartup = EditActive = EditRecovery = EditDamage = EditHitstun = EditBlockstun = EditHitstop = nullptr;
     LabelAdvantage = nullptr;
     BtnSave = BtnNewCharacter = BtnCreateConfirm = BtnCreateCancel = nullptr;
+    EditHitX = EditHitY = EditHitW = EditHitH = nullptr;
+    ComboHurtStance = EditHurtX = EditHurtY = EditHurtW = EditHurtH = nullptr;
+    BtnDragHitbox = BtnDragHurtbox = nullptr;
 }
 
 void App::LayoutEditorControls() {
@@ -296,6 +347,12 @@ void App::LoadCharacterIntoForm(const std::string& charId) {
     SetEditDouble(EditDash, stats->DashSpeed);
     SetEditDouble(EditJumpVel, stats->JumpVelocity);
     SetEditDouble(EditGravity, stats->Gravity);
+
+    EditorHurtboxDraft = stats->Hurtboxes;
+    EditorHurtStance = 0;
+    if (ComboHurtStance) SendMessageW(ComboHurtStance, CB_SETCURSEL, 0, 0);
+    SyncHurtboxFieldsFromDraft();
+
     PopulateMoveCombo();
 }
 
@@ -312,6 +369,51 @@ void App::LoadMoveIntoForm(const std::string& moveId) {
     SetEditInt(EditBlockstun, move->Blockstun);
     SetEditInt(EditHitstop, move->Hitstop);
     UpdateAdvantagePreview();
+
+    EditorHitboxHasBox = !move->Hitboxes.empty();
+    EditorHitboxDraft = EditorHitboxHasBox ? move->Hitboxes[0] : HitboxDef{};
+    SyncHitboxFieldsFromDraft();
+    InvalidateRect(Hwnd, nullptr, FALSE);
+}
+
+void App::SyncHitboxFieldsFromDraft() {
+    if (!EditHitX) return;
+    SetEditDouble(EditHitX, EditorHitboxDraft.offsetX);
+    SetEditDouble(EditHitY, EditorHitboxDraft.offsetY);
+    SetEditDouble(EditHitW, EditorHitboxDraft.width);
+    SetEditDouble(EditHitH, EditorHitboxDraft.height);
+}
+
+void App::ApplyHitboxFieldsToDraft() {
+    if (!EditHitX) return;
+    EditorHitboxDraft.offsetX = GetEditDouble(EditHitX, EditorHitboxDraft.offsetX);
+    EditorHitboxDraft.offsetY = GetEditDouble(EditHitY, EditorHitboxDraft.offsetY);
+    EditorHitboxDraft.width = GetEditDouble(EditHitW, EditorHitboxDraft.width);
+    EditorHitboxDraft.height = GetEditDouble(EditHitH, EditorHitboxDraft.height);
+}
+
+static RectBox& HurtboxForStance(HurtboxSet& set, int stance) {
+    if (stance == 1) return set.Crouch;
+    if (stance == 2) return set.Air;
+    return set.Stand;
+}
+
+void App::SyncHurtboxFieldsFromDraft() {
+    if (!EditHurtX) return;
+    RectBox& box = HurtboxForStance(EditorHurtboxDraft, EditorHurtStance);
+    SetEditDouble(EditHurtX, box.CenterX);
+    SetEditDouble(EditHurtY, box.CenterY);
+    SetEditDouble(EditHurtW, box.Width);
+    SetEditDouble(EditHurtH, box.Height);
+}
+
+void App::ApplyHurtboxFieldsToDraft() {
+    if (!EditHurtX) return;
+    RectBox& box = HurtboxForStance(EditorHurtboxDraft, EditorHurtStance);
+    box.CenterX = GetEditDouble(EditHurtX, box.CenterX);
+    box.CenterY = GetEditDouble(EditHurtY, box.CenterY);
+    box.Width = GetEditDouble(EditHurtW, box.Width);
+    box.Height = GetEditDouble(EditHurtH, box.Height);
 }
 
 void App::UpdateAdvantagePreview() {
@@ -340,6 +442,8 @@ void App::ApplyStatsForm() {
     stats.DashSpeed = GetEditDouble(EditDash, stats.DashSpeed);
     stats.JumpVelocity = GetEditDouble(EditJumpVel, stats.JumpVelocity);
     stats.Gravity = GetEditDouble(EditGravity, stats.Gravity);
+    ApplyHurtboxFieldsToDraft();
+    stats.Hurtboxes = EditorHurtboxDraft;
     Dm->SaveCharacter(stats);
     PopulateCharacterCombo();
     PopulateTemplateCombo();
@@ -359,6 +463,8 @@ void App::ApplyMoveForm() {
     move.Hitstun = GetEditInt(EditHitstun, move.Hitstun);
     move.Blockstun = GetEditInt(EditBlockstun, move.Blockstun);
     move.Hitstop = GetEditInt(EditHitstop, move.Hitstop);
+    ApplyHitboxFieldsToDraft();
+    if (EditorHitboxHasBox && !move.Hitboxes.empty()) move.Hitboxes[0] = EditorHitboxDraft;
     Dm->SaveMove(EditorCharId, move);
     PopulateMoveCombo();
 }
@@ -379,6 +485,14 @@ void App::HideCreateCharacterPrompt() {
 // are secondary (outlined).
 void Editor_OnDrawItem(DRAWITEMSTRUCT* dis) {
     bool primary = (dis->CtlID == ID_BTN_SAVE || dis->CtlID == ID_BTN_SAVE_MOVE || dis->CtlID == ID_BTN_CREATE_CONFIRM);
+    // The two drag-mode toggle buttons double as a radio group - whichever
+    // one matches the live EditorDragTargetIsHurtbox state reads as "on"
+    // (primary/red) so the user can see which box the preview canvas will
+    // move when they drag.
+    if (g_App) {
+        if (dis->CtlID == ID_BTN_DRAG_HITBOX) primary = !g_App->EditorDragTargetIsHurtbox;
+        else if (dis->CtlID == ID_BTN_DRAG_HURTBOX) primary = g_App->EditorDragTargetIsHurtbox;
+    }
     bool pressed = (dis->itemState & ODS_SELECTED) != 0;
 
     wchar_t text[128];
@@ -456,7 +570,74 @@ void Editor_OnCommand(App& app, int controlId, int notifyCode, HWND ctrl) {
         app.GoTo(Screen::Title);
     } else if ((controlId == ID_EDIT_STARTUP || controlId == ID_EDIT_RECOVERY || controlId == ID_EDIT_HITSTUN || controlId == ID_EDIT_BLOCKSTUN) && notifyCode == EN_CHANGE) {
         app.UpdateAdvantagePreview();
+    } else if (controlId == ID_COMBO_HURT_STANCE && notifyCode == CBN_SELCHANGE) {
+        app.ApplyHurtboxFieldsToDraft(); // keep whatever was typed for the old stance
+        app.EditorHurtStance = static_cast<int>(SendMessageW(app.ComboHurtStance, CB_GETCURSEL, 0, 0));
+        app.SyncHurtboxFieldsFromDraft();
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
+    } else if ((controlId == ID_EDIT_HIT_X || controlId == ID_EDIT_HIT_Y || controlId == ID_EDIT_HIT_W || controlId == ID_EDIT_HIT_H) && notifyCode == EN_CHANGE) {
+        app.ApplyHitboxFieldsToDraft();
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
+    } else if ((controlId == ID_EDIT_HURT_X || controlId == ID_EDIT_HURT_Y || controlId == ID_EDIT_HURT_W || controlId == ID_EDIT_HURT_H) && notifyCode == EN_CHANGE) {
+        app.ApplyHurtboxFieldsToDraft();
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
+    } else if (controlId == ID_BTN_DRAG_HITBOX && notifyCode == BN_CLICKED) {
+        app.EditorDragTargetIsHurtbox = false;
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
+    } else if (controlId == ID_BTN_DRAG_HURTBOX && notifyCode == BN_CLICKED) {
+        app.EditorDragTargetIsHurtbox = true;
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
     }
+}
+
+// Custom-painted (not a child control) preview of the move's hitbox (red)
+// and the character's selected-stance hurtbox (blue) over a small humanoid
+// silhouette, drawn in real window pixels - see App::OnLButtonDown/
+// OnMouseMove for the drag-to-edit half of this. Hitbox/hurtbox offsetX/Y
+// are already in the same coordinate space as the in-game virtual canvas
+// (see MoveExecutor::GetActiveHitboxRect), so EditorPreviewScale is a
+// plain zoom factor - no per-part unit conversion needed.
+void App::DrawEditorPreview(Gdiplus::Graphics& g) {
+    const auto& pal = GetPalette();
+    const Gdiplus::RectF& r = EditorPreviewRect;
+
+    Gdiplus::SolidBrush bg(pal.PanelBg);
+    g.FillRectangle(&bg, r);
+    Gdiplus::Pen border(pal.Ink, 2.0f);
+    g.DrawRectangle(&border, r);
+
+    float groundX = r.X + r.Width / 2.0f;
+    float groundY = r.Y + r.Height - 20.0f;
+    Gdiplus::Pen groundPen(pal.Ink45, 1.5f);
+    g.DrawLine(&groundPen, r.X + 8, groundY, r.X + r.Width - 8, groundY);
+
+    Gdiplus::Color bodyColor(255, 210, 205, 205);
+    DrawHumanoid(g, groundX, groundY, bodyColor, {static_cast<double>(EditorPreviewScale), 1});
+
+    auto drawBox = [&](double cx, double cy, double w, double h, Gdiplus::Color color, bool active) {
+        float pcx = groundX + static_cast<float>(cx * EditorPreviewScale);
+        float pcy = groundY + static_cast<float>(cy * EditorPreviewScale);
+        float pw = static_cast<float>(w * EditorPreviewScale), ph = static_cast<float>(h * EditorPreviewScale);
+        Gdiplus::RectF br(pcx - pw / 2.0f, pcy - ph / 2.0f, pw, ph);
+        Gdiplus::Pen pen(color, active ? 2.5f : 1.5f);
+        g.DrawRectangle(&pen, br);
+        if (active) {
+            // Resize-handle marker at the bottom-right corner.
+            Gdiplus::SolidBrush handleBrush(color);
+            g.FillRectangle(&handleBrush, br.X + br.Width - 5, br.Y + br.Height - 5, 10.0f, 10.0f);
+        }
+    };
+
+    RectBox& hurtBox = HurtboxForStance(EditorHurtboxDraft, EditorHurtStance);
+    drawBox(hurtBox.CenterX, hurtBox.CenterY, hurtBox.Width, hurtBox.Height,
+            Gdiplus::Color(255, 50, 110, 230), EditorDragTargetIsHurtbox);
+    if (EditorHitboxHasBox) {
+        drawBox(EditorHitboxDraft.offsetX, EditorHitboxDraft.offsetY, EditorHitboxDraft.width, EditorHitboxDraft.height,
+                Gdiplus::Color(255, 230, 30, 30), !EditorDragTargetIsHurtbox);
+    }
+
+    Gdiplus::Font legendFont(UiFontFamily(), 11, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    DrawTextLeft(g, L"blue = hurtbox   red = hitbox", legendFont, r.X, r.Y + r.Height + 4, pal.Ink55);
 }
 
 } // namespace kakuge

@@ -84,6 +84,26 @@ bool DrawAttackSprite(Graphics& g, double sx, double sy, int facing, const wchar
 
 } // namespace
 
+bool DrawSpriteFit(Graphics& g, const wchar_t* fileName, const RectF& rect, float paddingFrac) {
+    const AttackSprite& sprite = GetAttackSprite(fileName, 0.5);
+    if (!sprite.ok) return false;
+    Image* img = sprite.image.get();
+    double srcW = img->GetWidth();
+    double srcH = img->GetHeight();
+    if (srcW <= 0 || srcH <= 0) return false;
+
+    float pad = std::min(rect.Width, rect.Height) * paddingFrac;
+    float availW = rect.Width - pad * 2.0f, availH = rect.Height - pad * 2.0f;
+    double scale = std::min(availW / srcW, availH / srcH);
+    double drawW = srcW * scale, drawH = srcH * scale;
+    // Standing renders read best anchored to the panel's bottom (feet on
+    // the "ground"), horizontally centered, rather than vertically centered.
+    double drawX = rect.X + (rect.Width - drawW) / 2.0;
+    double drawY = rect.Y + rect.Height - pad - drawH;
+    g.DrawImage(img, static_cast<REAL>(drawX), static_cast<REAL>(drawY), static_cast<REAL>(drawW), static_cast<REAL>(drawH));
+    return true;
+}
+
 std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return L"";
     int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
@@ -345,7 +365,6 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             DrawHumanoid(g, sx, sy, bodyColor, {0.72, facing});
             break;
         case CharState::Block:
-            if (DrawAttackSprite(g, sx, sy, facing, L"fighter_guard.png", 0.55)) break;
             DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), {1.0, facing, 0, 0, 0, 10});
             break;
         case CharState::Hitstun:
@@ -355,7 +374,10 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             DrawHumanoid(g, sx, sy, Color(255, 200, 50, 50), {0.85, facing});
             break;
         case CharState::Dead: {
-            Color c(255, 140, 140, 140);
+            // Lighter than before (was 140,140,140) - the arena ground is
+            // now dark (Screen 03 reference), and the old gray barely read
+            // against it.
+            Color c(255, 220, 218, 216);
             Pen pen(c, static_cast<REAL>(3.0 * kCharScale));
             g.DrawLine(&pen, static_cast<REAL>(sx - 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale), static_cast<REAL>(sx + 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale));
             g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * kCharScale), static_cast<REAL>(sy - 20 * kCharScale), static_cast<REAL>(18 * kCharScale), static_cast<REAL>(18 * kCharScale));
@@ -379,6 +401,9 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             break;
         }
         default:
+            // Idle/standing - the user-provided "1P Stand" render, falling
+            // back to the line-art humanoid if the art file is missing.
+            if (DrawAttackSprite(g, sx, sy, facing, L"fighter_stand.png", 0.55)) break;
             DrawHumanoid(g, sx, sy, bodyColor, {1.0, facing});
             break;
     }
@@ -399,6 +424,8 @@ EffectStyle GetEffectStyle(const std::string& kind) {
     if (kind == "guard") return {Color(255, 60, 130, 220), 20.0, 0.14};
     if (kind == "special") return {Color(255, 140, 40, 220), 30.0, 0.22};
     if (kind == "super") return {Color(255, 230, 30, 30), 46.0, 0.32};
+    if (kind == "counter") return {Color(255, 255, 210, 30), 24.0, 0.35};
+    if (kind == "effective_counter") return {Color(255, 255, 40, 40), 40.0, 0.5};
     return {Color(255, 255, 255, 255), 16.0, 0.14};
 }
 
@@ -411,9 +438,22 @@ void DrawEffect(Graphics& g, const LiveEffect& fx) {
     double sx = ToScreenX(fx.x), sy = ToScreenY(fx.y);
     SolidBrush brush(Color(static_cast<BYTE>(alpha), style.color.GetR(), style.color.GetG(), style.color.GetB()));
     g.FillEllipse(&brush, static_cast<REAL>(sx - r), static_cast<REAL>(sy - r), static_cast<REAL>(r * 2), static_cast<REAL>(r * 2));
+
+    // Counter / Effective Counter get a bold label too - a plain flash
+    // reads as an ordinary hit spark otherwise, and the whole point is to
+    // tell the two tiers apart.
+    if (fx.kind == "counter" || fx.kind == "effective_counter") {
+        bool effective = (fx.kind == "effective_counter");
+        std::wstring label = effective ? L"EFFECTIVE COUNTER" : L"COUNTER";
+        REAL size = effective ? 22.0f : 16.0f;
+        Font font(UiFontFamily(), size, FontStyleBold, UnitPixel);
+        Color textColor(static_cast<BYTE>(alpha), style.color.GetR(), style.color.GetG(), style.color.GetB());
+        RectF labelRect(static_cast<REAL>(sx - 200), static_cast<REAL>(sy - 320.0 - t * 30.0), 400.0f, 34.0f);
+        DrawTextCentered(g, label, font, labelRect, textColor);
+    }
 }
 
-void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Color fillColor, Color emptyColor, bool mirror) {
+void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Color fillColor, Color emptyColor, bool mirror, Color borderColor) {
     ratio = std::max(0.0, std::min(1.0, ratio));
     RectF rect(x, y, w, h);
     GraphicsPath path;
@@ -434,31 +474,66 @@ void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Colo
         g.SetClip(&oldClip, CombineModeReplace);
     }
 
-    Pen pen(GetPalette().TextDark, 2.0f);
+    Pen pen(borderColor, 2.0f);
     g.DrawPath(&pen, &path);
 }
 
-void DrawHPBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror) {
+void DrawHPBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror, Color borderColor) {
     const auto& pal = GetPalette();
-    DrawBar(g, x, y, w, h, ratio, pal.Accent, pal.HpEmpty, mirror);
+    DrawBar(g, x, y, w, h, ratio, pal.Accent, pal.HpEmpty, mirror, borderColor);
 }
 
-void DrawGaugeBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror) {
+void DrawGaugeBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror, Color borderColor) {
     const auto& pal = GetPalette();
-    DrawBar(g, x, y, w, h, ratio, pal.Gauge, pal.GaugeEmpty, mirror);
+    DrawBar(g, x, y, w, h, ratio, pal.Gauge, pal.GaugeEmpty, mirror, borderColor);
+}
+
+// Small dark name tag + 3 round-win pips, sitting at the bottom-left (or,
+// mirrored, bottom-right) corner of a player's HP bar - matches the
+// reference "Screen 03" HUD's tag placement. This build doesn't play best-
+// of-N rounds yet, so the pips are decorative: the first one lit shows
+// "round in progress" rather than a real win count.
+static void DrawNameTag(Graphics& g, float barX, float barBottom, float barW, const std::wstring& name, bool mirror) {
+    const auto& pal = GetPalette();
+    Font nameFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
+    float tagH = 22.0f;
+    RectF bbox;
+    Font measureFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
+    g.MeasureString(name.c_str(), -1, &measureFont, PointF(0, 0), &bbox);
+    float tagW = bbox.Width + 16.0f;
+    float tagX = mirror ? (barX + barW - tagW) : barX;
+    RectF tagRect(tagX, barBottom - 2.0f, tagW, tagH);
+    SolidBrush tagBg(pal.ArenaPanel);
+    g.FillRectangle(&tagBg, tagRect);
+    Pen tagBorder(pal.ArenaLine, 1.5f);
+    g.DrawRectangle(&tagBorder, tagRect);
+    DrawTextCentered(g, name, nameFont, tagRect, pal.ArenaLine);
+
+    float pipSize = 10.0f, pipGap = 4.0f;
+    float pipsX = mirror ? (tagX - pipGap - pipSize) : (tagX + tagW + pipGap);
+    for (int i = 0; i < 3; i++) {
+        float px = mirror ? (pipsX - i * (pipSize + pipGap)) : (pipsX + i * (pipSize + pipGap));
+        RectF pipRect(px, barBottom + (tagH - pipSize) / 2.0f - 2.0f, pipSize, pipSize);
+        SolidBrush pipBrush(i == 0 ? pal.Accent : pal.EmptyBar);
+        g.FillRectangle(&pipBrush, pipRect);
+        Pen pipBorder(pal.ArenaLine, 1.0f);
+        g.DrawRectangle(&pipBorder, pipRect);
+    }
 }
 
 void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade) {
     const auto& pal = GetPalette();
-    Font nameFont(UiFontFamily(), 18, FontStyleBold, UnitPixel);
     Font labelFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
     Font timerFont(UiFontFamily(), 32, FontStyleBold, UnitPixel);
     Font comboFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
 
-    DrawHPBar(g, 24, 40, 420, 26, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false);
-    DrawHPBar(g, VirtualW - 444.0f, 40, 420, 26, bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP), true);
-    DrawTextLeft(g, Utf8ToWide(bs.Player1.Stats.Name), nameFont, 24, 12, pal.TextDark);
-    DrawTextRight(g, Utf8ToWide(bs.Player2.Stats.Name), nameFont, VirtualW - 24.0f, 12, pal.TextDark);
+    float barY = 34.0f, barH = 26.0f;
+    float p1BarX = 24.0f, barW = 420.0f;
+    float p2BarX = VirtualW - 444.0f;
+    DrawHPBar(g, p1BarX, barY, barW, barH, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false, pal.ArenaLine);
+    DrawHPBar(g, p2BarX, barY, barW, barH, bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP), true, pal.ArenaLine);
+    DrawNameTag(g, p1BarX, barY + barH, barW, Utf8ToWide(bs.Player1.Stats.Name), false);
+    DrawNameTag(g, p2BarX, barY + barH, barW, Utf8ToWide(bs.Player2.Stats.Name), true);
 
     // Round timer: bold red rounded box. Training mode never runs out, so
     // it shows an infinity symbol instead of a counting-down number.
@@ -471,13 +546,27 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     SolidBrush accentBrush(pal.Accent);
     g.FillPath(&accentBrush, &boxPath);
     DrawGlossCap(g, boxRect);
-    Pen boxBorder(pal.Ink, 2.0f);
+    Pen boxBorder(pal.ArenaLine, 2.0f);
     g.DrawPath(&boxBorder, &boxPath);
     DrawTextCentered(g, timerText, timerFont, boxRect, pal.White);
     RectF roundLabelRect(VirtualW / 2.0f - 60, 74, 120, 20);
-    DrawTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", labelFont, roundLabelRect, pal.TextGray);
+    DrawTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", labelFont, roundLabelRect, pal.ArenaTextDim);
 
-    // Combo counter (new - matches the reference HUD's "COMBO / N HIT" box).
+    // "FIGHT" banner - a brief flash right as the match starts (Screen 03's
+    // "FIGHT / 勝負" panel), fading out over its last ~15 frames.
+    if (bs.RoundStartFlashFrames > 0) {
+        double t = bs.RoundStartFlashFrames / static_cast<double>(BattleSystem::RoundStartFlashDuration);
+        int alpha = t > 0.3 ? 255 : static_cast<int>(255 * (t / 0.3));
+        RectF fightRect(VirtualW / 2.0f - 130, 190, 260, 46);
+        GraphicsPath fp;
+        AddRoundedRect(fp, fightRect, 0.0f);
+        SolidBrush fightBg(Color(static_cast<BYTE>(alpha), 20, 19, 18));
+        g.FillPath(&fightBg, &fp);
+        Font fightFont(UiFontFamily(), 24, FontStyleBold, UnitPixel);
+        DrawTextCentered(g, L"FIGHT / 勝負", fightFont, fightRect, Color(static_cast<BYTE>(alpha), 255, 255, 255));
+    }
+
+    // Combo counter (matches the reference HUD's "COMBO / N HIT" box).
     if (comboFade > 0.01) {
         int alpha = static_cast<int>(255 * comboFade);
         int shownCombo = p1ComboDisplay > 0 ? p1ComboDisplay : p2ComboDisplay;
@@ -493,10 +582,10 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
         }
     }
 
-    DrawGaugeBar(g, 24, 682, 320, 14, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false);
-    DrawGaugeBar(g, VirtualW - 344.0f, 682, 320, 14, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true);
-    DrawTextLeft(g, L"GAUGE", labelFont, 24, 663, pal.TextGray);
-    DrawTextRight(g, L"GAUGE", labelFont, VirtualW - 24.0f, 663, pal.TextGray);
+    DrawGaugeBar(g, 24, 682, 320, 14, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false, pal.ArenaLine);
+    DrawGaugeBar(g, VirtualW - 344.0f, 682, 320, 14, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true, pal.ArenaLine);
+    DrawTextLeft(g, L"GAUGE", labelFont, 24, 663, pal.ArenaTextDim);
+    DrawTextRight(g, L"GAUGE", labelFont, VirtualW - 24.0f, 663, pal.ArenaTextDim);
 }
 
 void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
@@ -504,7 +593,7 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
     Pen hurtPen(Color(255, 50, 110, 230), 2.0f);
     Pen hitPen(Color(255, 230, 30, 30), 3.0f);
     Font font(MonospaceFontFamily(), 12, FontStyleRegular, UnitPixel);
-    SolidBrush brush(GetPalette().TextDark);
+    SolidBrush brush(GetPalette().ArenaLine); // the arena ground is dark now - needs a light-on-dark color
 
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
         RectBox push = f->PushboxRect();
@@ -530,6 +619,8 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
         g.DrawString(line3.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 32)), &brush);
         std::wstring line4 = L"hitstun=" + std::to_wstring(info.hitstun) + L" blockstun=" + std::to_wstring(info.blockstun) + L" hitstop=" + std::to_wstring(info.hitstop);
         g.DrawString(line4.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 48)), &brush);
+        std::wstring line5 = L"pos=(" + std::to_wstring(static_cast<int>(info.positionX)) + L"," + std::to_wstring(static_cast<int>(info.positionY)) + L")";
+        g.DrawString(line5.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 64)), &brush);
     }
 }
 

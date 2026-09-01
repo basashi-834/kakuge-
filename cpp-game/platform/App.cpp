@@ -1,6 +1,7 @@
 // platform/App.cpp
 #include "App.h"
 #include <algorithm>
+#include <cmath>
 
 using namespace Gdiplus;
 
@@ -104,6 +105,7 @@ void App::OnPaint() {
         g.FillRectangle(&headerBg, 0, 0, w, kEditorHeaderHeight);
         Font headerFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
         DrawTextCentered(g, L"CHARACTER EDITOR", headerFont, RectF(0, 0, static_cast<REAL>(w), static_cast<REAL>(kEditorHeaderHeight)), pal.White);
+        DrawEditorPreview(g);
     }
 
     // Single blit of the fully-rendered frame onto the real window surface
@@ -120,7 +122,51 @@ void App::OnResize(int, int) {
 }
 
 void App::OnLButtonDown(int x, int y) {
-    if (Current == Screen::Editor) return; // native controls handle their own clicks
+    if (Current == Screen::Editor) {
+        // Native controls handle their own clicks; the only thing this
+        // window proc needs to do is start a drag if the click landed
+        // inside the hitbox/hurtbox preview canvas (drawn directly in real
+        // window pixels by DrawEditorPreview, not a child control).
+        double& cx = EditorDragTargetIsHurtbox
+            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.CenterX : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.CenterX : EditorHurtboxDraft.Air.CenterX)
+            : EditorHitboxDraft.offsetX;
+        double& cy = EditorDragTargetIsHurtbox
+            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.CenterY : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.CenterY : EditorHurtboxDraft.Air.CenterY)
+            : EditorHitboxDraft.offsetY;
+        double& bw = EditorDragTargetIsHurtbox
+            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.Width : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.Width : EditorHurtboxDraft.Air.Width)
+            : EditorHitboxDraft.width;
+        double& bh = EditorDragTargetIsHurtbox
+            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.Height : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.Height : EditorHurtboxDraft.Air.Height)
+            : EditorHitboxDraft.height;
+
+        float groundX = EditorPreviewRect.X + EditorPreviewRect.Width / 2.0f;
+        float groundY = EditorPreviewRect.Y + EditorPreviewRect.Height - 20.0f;
+        double pcx = groundX + cx * EditorPreviewScale;
+        double pcy = groundY + cy * EditorPreviewScale;
+        double pw = bw * EditorPreviewScale, ph = bh * EditorPreviewScale;
+        double left = pcx - pw / 2.0, top = pcy - ph / 2.0, right = pcx + pw / 2.0, bottom = pcy + ph / 2.0;
+
+        bool inPanel = x >= EditorPreviewRect.X && x <= EditorPreviewRect.X + EditorPreviewRect.Width &&
+                       y >= EditorPreviewRect.Y && y <= EditorPreviewRect.Y + EditorPreviewRect.Height;
+        if (!inPanel) return;
+
+        bool nearCorner = std::abs(x - right) <= 10 && std::abs(y - bottom) <= 10;
+        EditorDragStartMouseX = x;
+        EditorDragStartMouseY = y;
+        EditorDragStartCenterX = cx;
+        EditorDragStartCenterY = cy;
+        EditorDragStartW = bw;
+        EditorDragStartH = bh;
+        if (nearCorner) {
+            EditorDragResizing = true;
+            EditorDragging = false;
+        } else if (x >= left && x <= right && y >= top && y <= bottom) {
+            EditorDragging = true;
+            EditorDragResizing = false;
+        }
+        return;
+    }
     ViewTransform t = CurrentTransform();
     double vx, vy;
     t.ScreenToVirtual(x, y, vx, vy);
@@ -131,6 +177,34 @@ void App::OnLButtonDown(int x, int y) {
             return;
         }
     }
+}
+
+void App::OnMouseMove(int x, int y) {
+    if (Current != Screen::Editor || (!EditorDragging && !EditorDragResizing)) return;
+    double dxWorld = (x - EditorDragStartMouseX) / EditorPreviewScale;
+    double dyWorld = (y - EditorDragStartMouseY) / EditorPreviewScale;
+
+    double* cx; double* cy; double* bw; double* bh;
+    RectBox* hb = EditorDragTargetIsHurtbox
+        ? (EditorHurtStance == 0 ? &EditorHurtboxDraft.Stand : EditorHurtStance == 1 ? &EditorHurtboxDraft.Crouch : &EditorHurtboxDraft.Air)
+        : nullptr;
+    if (hb) { cx = &hb->CenterX; cy = &hb->CenterY; bw = &hb->Width; bh = &hb->Height; }
+    else { cx = &EditorHitboxDraft.offsetX; cy = &EditorHitboxDraft.offsetY; bw = &EditorHitboxDraft.width; bh = &EditorHitboxDraft.height; }
+
+    if (EditorDragging) {
+        *cx = EditorDragStartCenterX + dxWorld;
+        *cy = EditorDragStartCenterY + dyWorld;
+    } else if (EditorDragResizing) {
+        *bw = std::max(8.0, EditorDragStartW + dxWorld * 2.0);
+        *bh = std::max(8.0, EditorDragStartH + dyWorld * 2.0);
+    }
+    if (EditorDragTargetIsHurtbox) SyncHurtboxFieldsFromDraft(); else SyncHitboxFieldsFromDraft();
+    InvalidateRect(Hwnd, nullptr, FALSE);
+}
+
+void App::OnLButtonUp(int, int) {
+    EditorDragging = false;
+    EditorDragResizing = false;
 }
 
 void App::OnKeyDown(int vk) {
