@@ -102,6 +102,10 @@ try {
     # variable here would NOT be the same variable GameScreen.ps1 sees.
     $global:KakugeActiveGameState = $null
 
+    # GetNewClosure() added defensively on every handler in this project
+    # after a confirmed real-machine failure: a plain scriptblock attached
+    # via .Add_X() is invoked through .NET's delegate machinery, which does
+    # not reliably resolve outer variables without it (see TitleScreen.ps1).
     $script:MainForm.Add_KeyDown({
         param($sender, $e)
         if ($null -eq $global:KakugeActiveGameState) { return }
@@ -110,12 +114,12 @@ try {
             return
         }
         [void]$global:KakugeActiveGameState.HeldKeys.Add($e.KeyCode)
-    })
+    }.GetNewClosure())
     $script:MainForm.Add_KeyUp({
         param($sender, $e)
         if ($null -eq $global:KakugeActiveGameState) { return }
         [void]$global:KakugeActiveGameState.HeldKeys.Remove($e.KeyCode)
-    })
+    }.GetNewClosure())
 
     # Show-Screen is a genuine FUNCTION (not a scriptblock variable) so
     # there is no self-reference/closure ordering problem when a screen

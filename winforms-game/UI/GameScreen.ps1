@@ -115,6 +115,12 @@ function New-GameScreen {
     }.GetNewClosure())
 
     $renderPanel.Tag = $state
+    # GetNewClosure() here too, even though this handler reads state via
+    # $sender.Tag rather than an outer variable - it still references
+    # $script:ScreenW, and the .NET Add_Paint delegate path has been
+    # confirmed (on a real machine) not to reliably resolve anything from
+    # the defining function's scope without it. Better safe than another
+    # round-trip.
     $renderPanel.Add_Paint({
         param($sender, $e)
         $st = $sender.Tag
@@ -133,7 +139,7 @@ function New-GameScreen {
 
         Draw-HUD $g $st.BattleSystem
         if ($st.DebugVisible) { Draw-DebugOverlay $g $st.BattleSystem }
-    })
+    }.GetNewClosure())
 
     $panel.Add_VisibleChanged({
         if ($panel.Visible) {

@@ -4,6 +4,16 @@
 # Main.ps1 to switch screens - kept as an explicit parameter (rather than
 # an ambient closure) so this file has no hidden dependency on how Main.ps1
 # is structured.
+#
+# IMPORTANT: every WinForms event handler here uses .GetNewClosure().
+# Confirmed by an actual failure on a real Windows machine: a plain `{...}`
+# scriptblock attached via .Add_Click()/.Add_VisibleChanged() is invoked
+# through .NET's delegate machinery (ScriptBlock.InvokeAsDelegateHelper),
+# not through a normal PowerShell call - and that path does NOT reliably
+# resolve a parent function's local variables (like $Navigate) unless the
+# scriptblock was created with GetNewClosure(). Without it, `& $Navigate`
+# inside the handler fails with "the expression after '&' created an
+# invalid object" the first time the button is actually clicked.
 
 function New-TitleScreen {
     param(
@@ -40,18 +50,18 @@ function New-TitleScreen {
         return $b
     }
 
-    $startButton = New-MenuButton "GAME START" 60
-    $editButton  = New-MenuButton "CHARACTER EDIT" 140
-    $exitButton  = New-MenuButton "EXIT" 220
+    $startButton = New-MenuButton "GAME START" 40
+    $editButton  = New-MenuButton "CHARACTER EDIT" 120
+    $exitButton  = New-MenuButton "EXIT" 200
 
-    $startButton.Add_Click({ & $Navigate "Game" $null })
-    $editButton.Add_Click({ & $Navigate "Editor" $null })
-    $exitButton.Add_Click({ [System.Windows.Forms.Application]::Exit() })
+    $startButton.Add_Click({ & $Navigate "Game" $null }.GetNewClosure())
+    $editButton.Add_Click({ & $Navigate "Editor" $null }.GetNewClosure())
+    $exitButton.Add_Click({ [System.Windows.Forms.Application]::Exit() }.GetNewClosure())
 
     $buttonPanel.Controls.Add($startButton)
     $buttonPanel.Controls.Add($editButton)
     $buttonPanel.Controls.Add($exitButton)
 
-    $panel.Add_VisibleChanged({ if ($panel.Visible) { $startButton.Focus() } })
+    $panel.Add_VisibleChanged({ if ($panel.Visible) { $startButton.Focus() } }.GetNewClosure())
     return $panel
 }

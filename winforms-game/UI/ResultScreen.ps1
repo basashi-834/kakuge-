@@ -2,6 +2,11 @@
 # Result screen (section 4): PLAYER WIN / CPU WIN / DRAW, REMATCH / TITLE.
 # $ResultData is a hashtable @{ winnerIsPlayer=[bool]; isDraw=[bool] }
 # passed in by GameScreen via Main.ps1's navigation dispatch.
+#
+# Event handlers use .GetNewClosure() - see the note at the top of
+# TitleScreen.ps1 for why this is required (confirmed by a real failure:
+# a plain scriptblock invoked through .NET's Add_Click delegate machinery
+# does not reliably see $Navigate otherwise).
 
 function New-ResultScreen {
     param(
@@ -50,12 +55,12 @@ function New-ResultScreen {
     $titleButton.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 60)
     $titleButton.ForeColor = [System.Drawing.Color]::White
 
-    $rematchButton.Add_Click({ & $Navigate "Game" $null })
-    $titleButton.Add_Click({ & $Navigate "Title" $null })
+    $rematchButton.Add_Click({ & $Navigate "Game" $null }.GetNewClosure())
+    $titleButton.Add_Click({ & $Navigate "Title" $null }.GetNewClosure())
 
     $buttonPanel.Controls.Add($rematchButton)
     $buttonPanel.Controls.Add($titleButton)
 
-    $panel.Add_VisibleChanged({ if ($panel.Visible) { $rematchButton.Focus() } })
+    $panel.Add_VisibleChanged({ if ($panel.Visible) { $rematchButton.Focus() } }.GetNewClosure())
     return $panel
 }
