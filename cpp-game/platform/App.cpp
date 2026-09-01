@@ -63,9 +63,15 @@ void App::OnPaint() {
     HDC hdc = BeginPaint(Hwnd, &ps);
     RECT rc;
     GetClientRect(Hwnd, &rc);
-    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    int w = std::max(1L, rc.right - rc.left), h = std::max(1L, rc.bottom - rc.top);
 
-    Graphics g(hdc);
+    if (!BackBuffer || BackBufferW != w || BackBufferH != h) {
+        BackBuffer = std::make_unique<Bitmap>(w, h, PixelFormat32bppRGB);
+        BackBufferW = w;
+        BackBufferH = h;
+    }
+
+    Graphics g(BackBuffer.get());
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetTextRenderingHint(TextRenderingHintAntiAlias);
 
@@ -89,6 +95,12 @@ void App::OnPaint() {
             default: break;
         }
     }
+
+    // Single blit of the fully-rendered frame onto the real window surface
+    // - this is what actually eliminates the flicker (see BackBuffer's
+    // declaration comment in App.h).
+    Graphics screenG(hdc);
+    screenG.DrawImage(BackBuffer.get(), 0, 0);
 
     EndPaint(Hwnd, &ps);
 }

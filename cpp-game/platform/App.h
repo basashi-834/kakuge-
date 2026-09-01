@@ -41,6 +41,15 @@ public:
     Screen Current = Screen::Title;
     std::vector<UiButton> Buttons;
 
+    // Off-screen back buffer: every screen is drawn into this bitmap, then
+    // blitted to the window in one shot at the end of OnPaint. Without it,
+    // each individual GDI+ fill/line/path call would be briefly visible on
+    // the real window surface as it happens (visible flicker, worse the
+    // busier a frame is - reported on a real machine after the WM_PAINT
+    // Timer-driven redraws every ~15ms started hitting real hardware).
+    std::unique_ptr<Gdiplus::Bitmap> BackBuffer;
+    int BackBufferW = 0, BackBufferH = 0;
+
     // ---- Character Select state ----
     int SelectStep = 0; // 0 = picking P1, 1 = picking P2 (CPU)
     std::string P1CharId, P2CharId;
