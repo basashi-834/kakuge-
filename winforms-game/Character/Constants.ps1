@@ -1,4 +1,4 @@
-# Character/Constants.ps1
+﻿# Character/Constants.ps1
 # Shared enums / constant strings used across every module - kept in one
 # place so combat rules (guard types, tags, invincibility kinds) aren't
 # scattered as magic strings through Fighter / BattleSystem / CPUAI.

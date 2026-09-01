@@ -1,4 +1,4 @@
-# MoveData/MoveData.ps1
+﻿# MoveData/MoveData.ps1
 # Pure data description of a single move (normal/special/super). Mirrors
 # the schema used by the earlier Godot prototype 1:1 so the same JSON files
 # under Data/moves/<character>/ work unchanged (section 8/31/38: "技をコード

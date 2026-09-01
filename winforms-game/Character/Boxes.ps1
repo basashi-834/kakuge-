@@ -1,4 +1,4 @@
-# Character/Boxes.ps1
+﻿# Character/Boxes.ps1
 # Hitbox / Hurtbox / Pushbox are plain axis-aligned rectangles (world-space,
 # centered on X, top-left/height style on Y) kept as a small value-ish
 # class so BattleSystem can intersect them without any dependency on

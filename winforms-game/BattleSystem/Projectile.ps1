@@ -1,4 +1,4 @@
-# BattleSystem/Projectile.ps1
+﻿# BattleSystem/Projectile.ps1
 # Standalone object (section 26) - deliberately NOT a Fighter, just a
 # moving rectangle with a lifetime and a reference to the move that
 # defines its damage/hitstun/etc.

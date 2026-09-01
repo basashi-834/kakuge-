@@ -1,4 +1,4 @@
-# BattleSystem/BattleSystem.ps1
+﻿# BattleSystem/BattleSystem.ps1
 # Per-match orchestrator. The ONLY place that calls Fighter.FrameStep(), so
 # hit detection / pushbox resolution / projectile updates always run in one
 # deterministic order every fixed 60Hz logic tick (section 11/38 - mirrors

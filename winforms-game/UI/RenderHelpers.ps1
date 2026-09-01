@@ -1,4 +1,4 @@
-# UI/RenderHelpers.ps1
+﻿# UI/RenderHelpers.ps1
 # Shared GDI+ drawing helpers + the world-space -> screen-space mapping
 # used by GameScreen. Kept separate from BattleSystem so combat logic
 # never depends on System.Drawing (section 38: UI と戦闘処理の分離).

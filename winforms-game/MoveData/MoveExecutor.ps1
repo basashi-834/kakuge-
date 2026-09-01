@@ -1,4 +1,4 @@
-# MoveData/MoveExecutor.ps1
+﻿# MoveData/MoveExecutor.ps1
 # Frame management for whichever move is currently playing (section 11).
 # Stateless: phase is derived purely from (move, currentFrame), so it can
 # never desync from StateMachine.CurrentFrame, which is the single source

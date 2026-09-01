@@ -1,4 +1,4 @@
-# UI/ResultScreen.ps1
+﻿# UI/ResultScreen.ps1
 # Result screen (section 4): PLAYER WIN / CPU WIN / DRAW, REMATCH / TITLE.
 # $ResultData is a hashtable @{ winnerIsPlayer=[bool]; isDraw=[bool] }
 # passed in by GameScreen via Main.ps1's navigation dispatch.

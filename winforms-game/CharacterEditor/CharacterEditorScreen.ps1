@@ -1,4 +1,4 @@
-# CharacterEditor/CharacterEditorScreen.ps1
+﻿# CharacterEditor/CharacterEditorScreen.ps1
 # In-game Character Editor (section 4/31). Builds its form controls in
 # code (no separate designer file) so adding a new editable field is one
 # call to New-FormRow. Edits are held in the loaded MoveData/CharacterStats

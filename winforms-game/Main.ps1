@@ -1,4 +1,4 @@
-# Main.ps1
+﻿# Main.ps1
 # Entry point: loads every module in dependency order, wires up screen
 # navigation, and starts the WinForms message loop. Launched via Launch.bat
 # (double-click) so execution-policy restrictions never block it.

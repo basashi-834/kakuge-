@@ -1,4 +1,4 @@
-# Character/StateMachine.ps1
+﻿# Character/StateMachine.ps1
 # Pure state-tracking (section 6). Only remembers CurrentState / CurrentMove
 # / CurrentFrame - all "what should happen" logic lives in Fighter /
 # MoveExecutor, matching the Godot prototype's separation.

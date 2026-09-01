@@ -1,4 +1,4 @@
-# Data/JsonHelpers.ps1
+﻿# Data/JsonHelpers.ps1
 # Small helpers around PowerShell's BUILT-IN ConvertTo-Json/ConvertFrom-Json
 # cmdlets (Microsoft.PowerShell.Utility - always present, no assembly to
 # load, no extra install). ConvertFrom-Json returns a PSCustomObject whose

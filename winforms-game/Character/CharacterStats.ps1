@@ -1,4 +1,4 @@
-# Character/CharacterStats.ps1
+﻿# Character/CharacterStats.ps1
 # Base performance data for a character (section 5/31). Pure data - runtime
 # fields (current HP, position, velocity, facing) live on Fighter and are
 # re-initialized from this every round.

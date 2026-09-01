@@ -1,4 +1,4 @@
-# InputSystem/InputSystem.ps1
+﻿# InputSystem/InputSystem.ps1
 # Raw input snapshot + rolling history + motion-command recognition
 # (sections 23/24). Raw per-frame input is passed around as a hashtable
 # with keys Left/Right/Down/Up (bool) and ButtonsHeld (hashtable of

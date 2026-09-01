@@ -1,4 +1,4 @@
-# UI/GameScreen.ps1
+﻿# UI/GameScreen.ps1
 # The battle screen: owns the render Panel, the fixed-timestep game loop
 # Timer, and keyboard input capture. Combat logic itself lives entirely in
 # BattleSystem/Fighter/CPUAI - this file only reads their PUBLIC state to

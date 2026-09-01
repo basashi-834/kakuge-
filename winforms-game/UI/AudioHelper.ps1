@@ -1,4 +1,4 @@
-# UI/AudioHelper.ps1
+﻿# UI/AudioHelper.ps1
 # Sound playback (section 34). WinForms has no game audio mixer, so this
 # uses System.Media.SoundPlayer, which only supports uncompressed .wav
 # files (a real format limitation vs. the earlier Godot prototype, called

@@ -1,4 +1,4 @@
-# Character/SuperGauge.ps1
+﻿# Character/SuperGauge.ps1
 # Super meter (section 25). 0-100, gained on dealing AND receiving hits;
 # supers are locked out below their MeterCost.
 

@@ -1,4 +1,4 @@
-# CPUAI/CPUAI.ps1
+﻿# CPUAI/CPUAI.ps1
 # CPU opponent "brain" - deliberately separate from Fighter (section 27/38:
 # "CPU AIをCharacterから分離する"). Reads public state off both fighters and
 # returns a synthetic raw-input hashtable that Fighter.FrameStep() consumes

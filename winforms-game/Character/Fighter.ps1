@@ -1,4 +1,4 @@
-# Character/Fighter.ps1
+﻿# Character/Fighter.ps1
 # The character controller. Owns physics + delegates to small focused
 # helpers (StateMachine, MoveExecutor, InputBuffer, CommandParser,
 # SuperGauge) rather than doing everything itself (section 38).

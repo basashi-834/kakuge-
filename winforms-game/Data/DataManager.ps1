@@ -1,4 +1,4 @@
-# Data/DataManager.ps1
+﻿# Data/DataManager.ps1
 # Owns ALL external data I/O: character base stats + move frame data.
 #
 # Default data ships read-only next to the launcher under Data/characters

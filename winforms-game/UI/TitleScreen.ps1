@@ -1,4 +1,4 @@
-# UI/TitleScreen.ps1
+﻿# UI/TitleScreen.ps1
 # Title screen (section 4): GAME START / CHARACTER EDIT / EXIT.
 # $Navigate is a scriptblock: { param($screen, $data) ... } provided by
 # Main.ps1 to switch screens - kept as an explicit parameter (rather than

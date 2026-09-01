@@ -1,4 +1,4 @@
-# tests/HeadlessLogicTest.ps1
+﻿# tests/HeadlessLogicTest.ps1
 # Engine-agnostic regression check for the core fight loop, runnable with
 # plain PowerShell (Windows PowerShell 5.1 OR PowerShell 7) - it never
 # touches System.Windows.Forms/System.Drawing, only Character/MoveData/
