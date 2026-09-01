@@ -1,0 +1,17 @@
+{
+	"id": "ryu",
+	"name": "RYU",
+	"maxHP": 1000,
+	"walkForwardSpeed": 220.0,
+	"walkBackwardSpeed": 170.0,
+	"dashSpeed": 430.0,
+	"jumpVelocity": -900.0,
+	"gravity": 2400.0,
+	"color": [0.75, 0.2, 0.18],
+	"moves": [
+		"standing_light", "standing_medium", "standing_heavy",
+		"crouch_light", "crouch_medium", "crouch_heavy",
+		"jump_attack", "standing_throw",
+		"fireball", "anti_air_special", "super_combo"
+	]
+}
