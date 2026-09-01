@@ -1,0 +1,4 @@
+# Delivery/packaging artifacts created during a session (already sent to
+# the user via SendUserFile) - not source, not tracked, same convention as
+# cpp-game/build/ and cpp-game/dist/.
+*.zip
