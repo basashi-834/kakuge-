@@ -1,0 +1,37 @@
+; Kakuge - 2D Fighting Game
+; Godot 4.3 project configuration
+
+config_version=5
+
+[application]
+
+config/name="Kakuge"
+config/description="2D Fighting Game (Street-Fighter-like) built with Godot 4."
+run/main_scene="res://scenes/Title.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+boot_splash/bg_color=Color(0.05, 0.05, 0.08, 1)
+
+[autoload]
+
+DataManager="*res://scripts/autoload/DataManager.gd"
+GameManager="*res://scripts/autoload/GameManager.gd"
+AudioManager="*res://scripts/autoload/AudioManager.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/vsync/vsync_mode=1
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=0
