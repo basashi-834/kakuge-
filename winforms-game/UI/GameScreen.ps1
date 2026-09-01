@@ -47,14 +47,16 @@ function New-GameScreen {
         [string]$CpuCharacterId
     )
 
+    $pal = Get-Palette
+
     $panel = New-Object System.Windows.Forms.Panel
     $panel.Size = New-Object System.Drawing.Size($script:ScreenW, $script:ScreenH)
-    $panel.BackColor = [System.Drawing.Color]::FromArgb(10, 10, 16)
+    $panel.BackColor = $pal.Bg
 
     $renderPanel = New-Object System.Windows.Forms.Panel
     $renderPanel.Location = New-Object System.Drawing.Point(0, 0)
     $renderPanel.Size = New-Object System.Drawing.Size($script:ScreenW, $script:ScreenH)
-    $renderPanel.BackColor = [System.Drawing.Color]::FromArgb(23, 25, 40)
+    $renderPanel.BackColor = $pal.PanelBg
     # DoubleBuffered is declared on the base Control class (protected), so
     # the PropertyInfo must be looked up via [Control] itself, not via
     # $renderPanel.GetType() (Panel) - reflection's default NonPublic
@@ -67,35 +69,46 @@ function New-GameScreen {
     $pausePanel = New-Object System.Windows.Forms.Panel
     $pausePanel.Size = New-Object System.Drawing.Size(420, 260)
     $pausePanel.Location = New-Object System.Drawing.Point(([int](($script:ScreenW - 420)/2)), ([int](($script:ScreenH - 260)/2)))
-    $pausePanel.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 30)
+    $pausePanel.BackColor = $pal.PanelBg
     $pausePanel.Visible = $false
     $pausePanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    $pauseAccent = New-Object System.Windows.Forms.Panel
+    $pauseAccent.BackColor = $pal.Accent
+    $pauseAccent.Size = New-Object System.Drawing.Size(420, 6)
+    $pauseAccent.Location = New-Object System.Drawing.Point(0, 0)
+    $pausePanel.Controls.Add($pauseAccent)
 
     $pauseLabel = New-Object System.Windows.Forms.Label
     $pauseLabel.Text = "PAUSED"
     $pauseLabel.Font = New-Object System.Drawing.Font("Segoe UI", 22, [System.Drawing.FontStyle]::Bold)
-    $pauseLabel.ForeColor = [System.Drawing.Color]::White
+    $pauseLabel.ForeColor = $pal.White
     $pauseLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $pauseLabel.Location = New-Object System.Drawing.Point(0, 20)
+    $pauseLabel.Location = New-Object System.Drawing.Point(0, 24)
     $pauseLabel.Size = New-Object System.Drawing.Size(420, 50)
     $pausePanel.Controls.Add($pauseLabel)
 
-    function New-PauseButton([string]$text, [int]$top) {
+    function New-PauseButton([string]$text, [int]$top, [bool]$primary) {
         $b = New-Object System.Windows.Forms.Button
         $b.Text = $text
         $b.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
         $b.Size = New-Object System.Drawing.Size(300, 50)
         $b.Location = New-Object System.Drawing.Point(60, $top)
         $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-        $b.FlatAppearance.BorderSize = 2
-        $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 120, 160)
-        $b.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 70)
-        $b.ForeColor = [System.Drawing.Color]::White
+        if ($primary) {
+            $b.FlatAppearance.BorderSize = 0
+            $b.BackColor = $pal.Accent
+        } else {
+            $b.FlatAppearance.BorderSize = 2
+            $b.FlatAppearance.BorderColor = $pal.MidGray
+            $b.BackColor = $pal.PanelBg2
+        }
+        $b.ForeColor = $pal.White
         $b.UseVisualStyleBackColor = $false
         return $b
     }
-    $resumeButton = New-PauseButton "RESUME (Esc)" 90
-    $pauseTitleButton = New-PauseButton "GIVE UP -> TITLE" 160
+    $resumeButton = New-PauseButton "RESUME (Esc)" 100 $true
+    $pauseTitleButton = New-PauseButton "GIVE UP -> TITLE" 170 $false
     $pausePanel.Controls.Add($resumeButton)
     $pausePanel.Controls.Add($pauseTitleButton)
     $panel.Controls.Add($pausePanel)
@@ -198,7 +211,7 @@ function New-GameScreen {
         $st = $sender.Tag
         $g = $e.Graphics
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-        $g.Clear([System.Drawing.Color]::FromArgb(23, 25, 40))
+        $g.Clear($pal.PanelBg)
 
         $groundBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(46, 41, 36))
         $g.FillRectangle($groundBrush, 0, (ConvertTo-ScreenY 0), $script:ScreenW, 40)

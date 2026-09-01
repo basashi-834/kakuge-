@@ -58,9 +58,11 @@ function New-CharacterEditorScreen {
         [DataManager]$DataManager
     )
 
+    $pal = Get-Palette
+
     $panel = New-Object System.Windows.Forms.Panel
     $panel.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $panel.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 28)
+    $panel.BackColor = $pal.Bg
 
     # ---- Top bar -------------------------------------------------------
     # NOTE: buttons here explicitly set FlatStyle/BackColor/ForeColor - the
@@ -70,40 +72,41 @@ function New-CharacterEditorScreen {
     $topBar = New-Object System.Windows.Forms.Panel
     $topBar.Dock = [System.Windows.Forms.DockStyle]::Top
     $topBar.Height = 46
-    $topBar.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 36)
+    $topBar.BackColor = $pal.PanelBg
     $panel.Controls.Add($topBar)
 
     $charCombo = New-Object System.Windows.Forms.ComboBox
     $charCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     $charCombo.Location = New-Object System.Drawing.Point(8, 10)
     $charCombo.Width = 150
-    $charCombo.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 55)
-    $charCombo.ForeColor = [System.Drawing.Color]::White
+    $charCombo.BackColor = $pal.PanelBg2
+    $charCombo.ForeColor = $pal.White
     $topBar.Controls.Add($charCombo)
 
     $moveCombo = New-Object System.Windows.Forms.ComboBox
     $moveCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     $moveCombo.Location = New-Object System.Drawing.Point(166, 10)
     $moveCombo.Width = 200
-    $moveCombo.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 55)
-    $moveCombo.ForeColor = [System.Drawing.Color]::White
+    $moveCombo.BackColor = $pal.PanelBg2
+    $moveCombo.ForeColor = $pal.White
     $topBar.Controls.Add($moveCombo)
 
-    function New-BarButton([string]$text, [int]$x, [int]$width) {
+    function New-BarButton([string]$text, [int]$x, [int]$width, [bool]$primary) {
         $b = New-Object System.Windows.Forms.Button
         $b.Text = $text
         $b.Location = New-Object System.Drawing.Point($x, 8)
         $b.Size = New-Object System.Drawing.Size($width, 30)
         $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-        $b.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 70)
-        $b.ForeColor = [System.Drawing.Color]::White
+        $b.FlatAppearance.BorderSize = 0
+        $b.BackColor = if ($primary) { $pal.Accent } else { $pal.PanelBg2 }
+        $b.ForeColor = $pal.White
         $b.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
         return $b
     }
 
-    $newMoveButton = New-BarButton "New Move" 374 90
-    $saveButton = New-BarButton "SAVE" 470 80
-    $backButton = New-BarButton "TITLE" 556 80
+    $newMoveButton = New-BarButton "New Move" 374 90 $false
+    $saveButton = New-BarButton "SAVE" 470 80 $true
+    $backButton = New-BarButton "TITLE" 556 80 $false
     $topBar.Controls.Add($newMoveButton)
     $topBar.Controls.Add($saveButton)
     $topBar.Controls.Add($backButton)
@@ -111,7 +114,7 @@ function New-CharacterEditorScreen {
     $statusLabel = New-Object System.Windows.Forms.Label
     $statusLabel.Location = New-Object System.Drawing.Point(646, 14)
     $statusLabel.Width = 600
-    $statusLabel.ForeColor = [System.Drawing.Color]::LightGreen
+    $statusLabel.ForeColor = $pal.Accent
     $topBar.Controls.Add($statusLabel)
 
     # ---- Scrollable body: two columns ----------------------------------
