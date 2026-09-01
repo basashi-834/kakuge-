@@ -5,12 +5,23 @@
 # draw and only writes raw input hashtables into Fighter.FrameStep(),
 # never touching combat rules directly (section 38: UIと戦闘処理の分離).
 #
-# Cross-screen key routing note: PowerShell's `$script:` scope is tied to
+# Lifecycle note: starting the Timer / registering this screen as the
+# keyboard owner used to happen on Add_VisibleChanged, which is NOT
+# guaranteed to fire just from Controls.Add() (a Control's Visible
+# property already defaults to true, so nothing may actually "change").
+# That was the root cause of "the character doesn't respond to input at
+# all" on a real machine - the timer never started. Activation/
+# deactivation is now done explicitly by Show-Screen (Main.ps1), via the
+# scriptblocks stored on $panel.Tag, guaranteed to run exactly once per
+# screen switch.
+#
+# Cross-screen key routing: PowerShell's `$script:` scope is tied to
 # whichever .ps1 file a function was DEFINED in, which is NOT the same
 # script-scope as Main.ps1 even though everything is dot-sourced together.
 # To avoid that ambiguity, the "which screen currently owns the keyboard"
 # flag is deliberately kept as $global:KakugeActiveGameState (set here,
-# read by Main.ps1's single pair of Form-level KeyDown/KeyUp handlers).
+# read by Main.ps1's single pair of Form-level KeyDown/KeyUp handlers,
+# which also call $global:KakugeActiveGameState.TogglePause on Escape).
 
 function Get-P1RawInput([System.Collections.Generic.HashSet[System.Windows.Forms.Keys]]$heldKeys) {
     $input = New-RawInput
@@ -37,11 +48,12 @@ function New-GameScreen {
     )
 
     $panel = New-Object System.Windows.Forms.Panel
-    $panel.Dock = [System.Windows.Forms.DockStyle]::Fill
+    $panel.Size = New-Object System.Drawing.Size($script:ScreenW, $script:ScreenH)
     $panel.BackColor = [System.Drawing.Color]::FromArgb(10, 10, 16)
 
     $renderPanel = New-Object System.Windows.Forms.Panel
-    $renderPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
+    $renderPanel.Location = New-Object System.Drawing.Point(0, 0)
+    $renderPanel.Size = New-Object System.Drawing.Size($script:ScreenW, $script:ScreenH)
     $renderPanel.BackColor = [System.Drawing.Color]::FromArgb(23, 25, 40)
     # DoubleBuffered is declared on the base Control class (protected), so
     # the PropertyInfo must be looked up via [Control] itself, not via
@@ -50,6 +62,44 @@ function New-GameScreen {
     $doubleBufferProp = [System.Windows.Forms.Control].GetProperty("DoubleBuffered", [System.Reflection.BindingFlags]"Instance,NonPublic")
     $doubleBufferProp.SetValue($renderPanel, $true, $null)
     $panel.Controls.Add($renderPanel)
+
+    # ---- Pause overlay (section: "戻れるようにポーズメニューを追加") ------
+    $pausePanel = New-Object System.Windows.Forms.Panel
+    $pausePanel.Size = New-Object System.Drawing.Size(420, 260)
+    $pausePanel.Location = New-Object System.Drawing.Point(([int](($script:ScreenW - 420)/2)), ([int](($script:ScreenH - 260)/2)))
+    $pausePanel.BackColor = [System.Drawing.Color]::FromArgb(20, 20, 30)
+    $pausePanel.Visible = $false
+    $pausePanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+
+    $pauseLabel = New-Object System.Windows.Forms.Label
+    $pauseLabel.Text = "PAUSED"
+    $pauseLabel.Font = New-Object System.Drawing.Font("Segoe UI", 22, [System.Drawing.FontStyle]::Bold)
+    $pauseLabel.ForeColor = [System.Drawing.Color]::White
+    $pauseLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $pauseLabel.Location = New-Object System.Drawing.Point(0, 20)
+    $pauseLabel.Size = New-Object System.Drawing.Size(420, 50)
+    $pausePanel.Controls.Add($pauseLabel)
+
+    function New-PauseButton([string]$text, [int]$top) {
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $text
+        $b.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+        $b.Size = New-Object System.Drawing.Size(300, 50)
+        $b.Location = New-Object System.Drawing.Point(60, $top)
+        $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $b.FlatAppearance.BorderSize = 2
+        $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 120, 160)
+        $b.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 70)
+        $b.ForeColor = [System.Drawing.Color]::White
+        $b.UseVisualStyleBackColor = $false
+        return $b
+    }
+    $resumeButton = New-PauseButton "RESUME (Esc)" 90
+    $pauseTitleButton = New-PauseButton "GIVE UP -> TITLE" 160
+    $pausePanel.Controls.Add($resumeButton)
+    $pausePanel.Controls.Add($pauseTitleButton)
+    $panel.Controls.Add($pausePanel)
+    $pausePanel.BringToFront()
 
     $bs = [BattleSystem]::new()
     $bs.StartMatch(
@@ -61,6 +111,7 @@ function New-GameScreen {
         BattleSystem = $bs
         HeldKeys = New-Object 'System.Collections.Generic.HashSet[System.Windows.Forms.Keys]'
         DebugVisible = $false
+        Paused = $false
         Effects = New-Object System.Collections.ArrayList
         Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         Accumulator = 0.0
@@ -77,28 +128,30 @@ function New-GameScreen {
         $elapsed = $state.Stopwatch.Elapsed.TotalSeconds
         $state.Stopwatch.Restart()
         if ($elapsed -gt 0.25) { $elapsed = 0.25 } # clamp huge stalls (e.g. window drag)
-        $state.Accumulator += $elapsed
 
-        $maxSteps = 6
-        $steps = 0
-        while ($state.Accumulator -ge $state.Dt -and $steps -lt $maxSteps) {
-            $p1Input = Get-P1RawInput $state.HeldKeys
-            $state.BattleSystem.Update($state.Dt, $p1Input)
-            foreach ($snd in $state.BattleSystem.AllSounds) { Play-Sound $snd }
-            foreach ($fx in $state.BattleSystem.AllEffects) {
-                [void]$state.Effects.Add(@{ kind = $fx.kind; x = $fx.x; y = $fx.y; age = 0.0 })
+        if (-not $state.Paused) {
+            $state.Accumulator += $elapsed
+            $maxSteps = 6
+            $steps = 0
+            while ($state.Accumulator -ge $state.Dt -and $steps -lt $maxSteps) {
+                $p1Input = Get-P1RawInput $state.HeldKeys
+                $state.BattleSystem.Update($state.Dt, $p1Input)
+                foreach ($snd in $state.BattleSystem.AllSounds) { Play-Sound $snd }
+                foreach ($fx in $state.BattleSystem.AllEffects) {
+                    [void]$state.Effects.Add(@{ kind = $fx.kind; x = $fx.x; y = $fx.y; age = 0.0 })
+                }
+                $state.Accumulator -= $state.Dt
+                $steps++
             }
-            $state.Accumulator -= $state.Dt
-            $steps++
-        }
 
-        $survivors = New-Object System.Collections.ArrayList
-        foreach ($fx in $state.Effects) {
-            $fx.age += $elapsed
-            $style = Get-EffectStyle $fx.kind
-            if ($fx.age -lt [double]$style.duration) { [void]$survivors.Add($fx) }
+            $survivors = New-Object System.Collections.ArrayList
+            foreach ($fx in $state.Effects) {
+                $fx.age += $elapsed
+                $style = Get-EffectStyle $fx.kind
+                if ($fx.age -lt [double]$style.duration) { [void]$survivors.Add($fx) }
+            }
+            $state.Effects = $survivors
         }
-        $state.Effects = $survivors
 
         $renderPanel.Invalidate()
 
@@ -114,13 +167,32 @@ function New-GameScreen {
         }
     }.GetNewClosure())
 
+    $togglePause = {
+        $state.Paused = -not $state.Paused
+        $pausePanel.Visible = $state.Paused
+        if ($state.Paused) {
+            $state.HeldKeys.Clear() # don't keep moving once resumed from a stuck key
+            $pausePanel.BringToFront()
+            $resumeButton.Focus()
+        } else {
+            $renderPanel.Focus()
+        }
+    }.GetNewClosure()
+    $state.TogglePause = $togglePause
+
+    $resumeButton.Add_Click({ & $togglePause }.GetNewClosure())
+    $pauseTitleButton.Add_Click({
+        $timer.Stop()
+        $global:KakugeActiveGameState = $null
+        & $Navigate "Title" $null
+    }.GetNewClosure())
+
     $renderPanel.Tag = $state
     # GetNewClosure() here too, even though this handler reads state via
     # $sender.Tag rather than an outer variable - it still references
     # $script:ScreenW, and the .NET Add_Paint delegate path has been
     # confirmed (on a real machine) not to reliably resolve anything from
-    # the defining function's scope without it. Better safe than another
-    # round-trip.
+    # the defining function's scope without it.
     $renderPanel.Add_Paint({
         param($sender, $e)
         $st = $sender.Tag
@@ -141,16 +213,18 @@ function New-GameScreen {
         if ($st.DebugVisible) { Draw-DebugOverlay $g $st.BattleSystem }
     }.GetNewClosure())
 
-    $panel.Add_VisibleChanged({
-        if ($panel.Visible) {
+    $panel.Tag = @{
+        Activate = {
             $global:KakugeActiveGameState = $state
+            $state.Stopwatch.Restart()
             $renderPanel.Focus()
             $timer.Start()
-        } else {
+        }.GetNewClosure()
+        Deactivate = {
             $timer.Stop()
             if ($global:KakugeActiveGameState -eq $state) { $global:KakugeActiveGameState = $null }
-        }
-    }.GetNewClosure())
+        }.GetNewClosure()
+    }
 
     return $panel
 }

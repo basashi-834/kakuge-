@@ -113,6 +113,12 @@ try {
             $global:KakugeActiveGameState.DebugVisible = -not $global:KakugeActiveGameState.DebugVisible
             return
         }
+        if ($e.KeyCode -eq [System.Windows.Forms.Keys]::Escape) {
+            if ($global:KakugeActiveGameState.ContainsKey("TogglePause")) {
+                & $global:KakugeActiveGameState.TogglePause
+            }
+            return
+        }
         [void]$global:KakugeActiveGameState.HeldKeys.Add($e.KeyCode)
     }.GetNewClosure())
     $script:MainForm.Add_KeyUp({
@@ -129,6 +135,17 @@ try {
     function Show-Screen {
         param([string]$ScreenName, $Data)
         $script:MainForm.SuspendLayout()
+
+        # Explicitly deactivate the outgoing screen (e.g. stop GameScreen's
+        # Timer) before tearing it down - Controls.Clear() does NOT dispose
+        # or otherwise notify removed controls, so without this an old
+        # screen's timer would keep running invisibly in the background.
+        if ($script:MainForm.Controls.Count -gt 0) {
+            $oldPanel = $script:MainForm.Controls[0]
+            if ($oldPanel.Tag -is [hashtable] -and $oldPanel.Tag.ContainsKey("Deactivate")) {
+                & $oldPanel.Tag.Deactivate
+            }
+        }
         $script:MainForm.Controls.Clear()
         $newPanel = $null
         switch ($ScreenName) {
@@ -156,6 +173,9 @@ try {
         if ($null -ne $newPanel) {
             $newPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
             $script:MainForm.Controls.Add($newPanel)
+            if ($newPanel.Tag -is [hashtable] -and $newPanel.Tag.ContainsKey("Activate")) {
+                & $newPanel.Tag.Activate
+            }
         }
         $script:MainForm.ResumeLayout()
     }

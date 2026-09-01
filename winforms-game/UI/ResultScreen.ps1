@@ -6,7 +6,8 @@
 # Event handlers use .GetNewClosure() - see the note at the top of
 # TitleScreen.ps1 for why this is required (confirmed by a real failure:
 # a plain scriptblock invoked through .NET's Add_Click delegate machinery
-# does not reliably see $Navigate otherwise).
+# does not reliably see $Navigate otherwise). Layout follows the same
+# "no nested Dock=Fill sub-panel" approach as TitleScreen.ps1.
 
 function New-ResultScreen {
     param(
@@ -16,7 +17,7 @@ function New-ResultScreen {
     )
 
     $panel = New-Object System.Windows.Forms.Panel
-    $panel.Dock = [System.Windows.Forms.DockStyle]::Fill
+    $panel.Size = New-Object System.Drawing.Size($script:ScreenW, $script:ScreenH)
     $panel.BackColor = [System.Drawing.Color]::FromArgb(14, 14, 22)
 
     $resultText = "DRAW"
@@ -26,41 +27,41 @@ function New-ResultScreen {
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $resultText
-    $label.Font = New-Object System.Drawing.Font("Segoe UI", 40, [System.Drawing.FontStyle]::Bold)
+    $label.Font = New-Object System.Drawing.Font("Segoe UI", 44, [System.Drawing.FontStyle]::Bold)
     $label.ForeColor = [System.Drawing.Color]::White
     $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $label.Dock = [System.Windows.Forms.DockStyle]::Top
-    $label.Height = 220
+    $label.Location = New-Object System.Drawing.Point(0, 160)
+    $label.Size = New-Object System.Drawing.Size($script:ScreenW, 100)
     $panel.Controls.Add($label)
 
-    $buttonPanel = New-Object System.Windows.Forms.Panel
-    $buttonPanel.Dock = [System.Windows.Forms.DockStyle]::Fill
-    $panel.Controls.Add($buttonPanel)
+    function New-ResultButton([string]$text, [int]$top) {
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $text
+        $b.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+        $b.Size = New-Object System.Drawing.Size(340, 64)
+        $b.Location = New-Object System.Drawing.Point(([int](($script:ScreenW - 340) / 2)), $top)
+        $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $b.FlatAppearance.BorderSize = 2
+        $b.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(120, 120, 160)
+        $b.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 70)
+        $b.ForeColor = [System.Drawing.Color]::White
+        $b.UseVisualStyleBackColor = $false
+        $b.TabStop = $true
+        return $b
+    }
 
-    $rematchButton = New-Object System.Windows.Forms.Button
-    $rematchButton.Text = "REMATCH"
-    $rematchButton.Font = New-Object System.Drawing.Font("Segoe UI", 14)
-    $rematchButton.Size = New-Object System.Drawing.Size(300, 56)
-    $rematchButton.Location = New-Object System.Drawing.Point(([int](($script:ScreenW - 300) / 2)), 40)
-    $rematchButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $rematchButton.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 60)
-    $rematchButton.ForeColor = [System.Drawing.Color]::White
-
-    $titleButton = New-Object System.Windows.Forms.Button
-    $titleButton.Text = "TITLE"
-    $titleButton.Font = New-Object System.Drawing.Font("Segoe UI", 14)
-    $titleButton.Size = New-Object System.Drawing.Size(300, 56)
-    $titleButton.Location = New-Object System.Drawing.Point(([int](($script:ScreenW - 300) / 2)), 120)
-    $titleButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-    $titleButton.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 60)
-    $titleButton.ForeColor = [System.Drawing.Color]::White
+    $rematchButton = New-ResultButton "REMATCH" 340
+    $titleButton = New-ResultButton "TITLE" 430
 
     $rematchButton.Add_Click({ & $Navigate "Game" $null }.GetNewClosure())
     $titleButton.Add_Click({ & $Navigate "Title" $null }.GetNewClosure())
 
-    $buttonPanel.Controls.Add($rematchButton)
-    $buttonPanel.Controls.Add($titleButton)
+    $panel.Controls.Add($rematchButton)
+    $panel.Controls.Add($titleButton)
 
-    $panel.Add_VisibleChanged({ if ($panel.Visible) { $rematchButton.Focus() } }.GetNewClosure())
+    $panel.Tag = @{
+        Activate = { $rematchButton.Focus() }.GetNewClosure()
+    }
+
     return $panel
 }

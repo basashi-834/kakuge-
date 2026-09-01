@@ -33,70 +33,107 @@ function Get-MoveTint($fighter) {
     return [System.Drawing.Color]::FromArgb($fighter.Stats.ColorR, $fighter.Stats.ColorG, $fighter.Stats.ColorB)
 }
 
-# Draws one fighter as simple procedural shapes, pose/color varying by
-# state (section 32: Idle/Walk/Crouch/Jump/Attack/Hit/Knockdown/WakeUp/
-# Block/Special/Super must be visually distinguishable).
+# Draws a simple humanoid silhouette (head/torso/arms/legs) rather than a
+# bare rectangle (section 10/32 allows plain shapes, but a head+limbs
+# reads as "a person" far better than one flat rectangle while still
+# needing no art assets). $sx/$sy is the feet position (ground contact).
+function Draw-Humanoid {
+    param(
+        [System.Drawing.Graphics]$g,
+        [int]$sx, [int]$sy,
+        [System.Drawing.Color]$color,
+        [double]$heightScale = 1.0,
+        [int]$facing = 1,
+        [double]$armSwingForward = 0.0,
+        [double]$leanBack = 0.0
+    )
+    $legH = 42.0 * $heightScale
+    $torsoH = 40.0 * $heightScale
+    $headR = 13.0 * $heightScale
+    $hipY = $sy - $legH
+    $shoulderY = $hipY - $torsoH
+    $headCenterY = $shoulderY - $headR - 1
+
+    $brush = New-Object System.Drawing.SolidBrush $color
+    $skin = [System.Drawing.Color]::FromArgb([Math]::Min(255,$color.R+50), [Math]::Min(255,$color.G+35), [Math]::Min(255,$color.B+35))
+    $headBrush = New-Object System.Drawing.SolidBrush $skin
+    $limbPen = New-Object System.Drawing.Pen $color, (7.0 * $heightScale)
+    $limbPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $limbPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+
+    # legs (slightly apart stance)
+    $g.DrawLine($limbPen, $sx - (7 * $heightScale), $hipY, $sx - (9 * $heightScale) + $leanBack, $sy)
+    $g.DrawLine($limbPen, $sx + (7 * $heightScale), $hipY, $sx + (9 * $heightScale) + $leanBack, $sy)
+
+    # torso
+    $torsoW = 26.0 * $heightScale
+    $g.FillRectangle($brush, [int]($sx - $torsoW/2 + $leanBack*0.4), [int]$shoulderY, [int]$torsoW, [int]$torsoH)
+
+    # arms (back arm static, front arm swings with armSwingForward for attacks)
+    $backArmX = $sx - ($facing * 10 * $heightScale)
+    $g.DrawLine($limbPen, $sx, $shoulderY + 4, $backArmX, $hipY - 4)
+    $frontArmX = $sx + ($facing * (12 + $armSwingForward) * $heightScale)
+    $frontArmY = $shoulderY + 4 - ([Math]::Min($armSwingForward, 20) * 0.3)
+    $g.DrawLine($limbPen, $sx, $shoulderY + 4, $frontArmX, $frontArmY)
+
+    # head
+    $g.FillEllipse($headBrush, [int]($sx - $headR + $leanBack*0.4), [int]($headCenterY - $headR), [int]($headR*2), [int]($headR*2))
+
+    $limbPen.Dispose(); $brush.Dispose(); $headBrush.Dispose()
+}
+
+# Pose/color varies by state (section 32: Idle/Walk/Crouch/Jump/Attack/
+# Hit/Knockdown/WakeUp/Block/Special/Super must be visually distinguishable).
 function Draw-Fighter([System.Drawing.Graphics]$g, $fighter) {
     $bodyColor = [System.Drawing.Color]::FromArgb($fighter.Stats.ColorR, $fighter.Stats.ColorG, $fighter.Stats.ColorB)
-    $bw = 46.0; $bh = 100.0; $ch = 62.0
     $sx = ConvertTo-ScreenX $fighter.PositionX
     $sy = ConvertTo-ScreenY $fighter.PositionY
-    $brush = $null
+    $facing = $fighter.Facing
 
     switch ($fighter.SM.CurrentState) {
         ([CharState]::Knockdown) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb([Math]::Max(0,$bodyColor.R-60),[Math]::Max(0,$bodyColor.G-60),[Math]::Max(0,$bodyColor.B-60)))
-            $g.FillRectangle($brush, $sx - 50, $sy - 22, 100, 22)
+            $c = [System.Drawing.Color]::FromArgb([Math]::Max(0,$bodyColor.R-60),[Math]::Max(0,$bodyColor.G-60),[Math]::Max(0,$bodyColor.B-60))
+            $brush = New-Object System.Drawing.SolidBrush $c
+            $g.FillRectangle($brush, $sx - 46, $sy - 16, 92, 16)
+            $headBrush = New-Object System.Drawing.SolidBrush $c
+            $g.FillEllipse($headBrush, $sx + ($facing * 40), $sy - 22, 20, 20)
+            $brush.Dispose(); $headBrush.Dispose()
         }
         ([CharState]::WakeUp) {
-            $brush = New-Object System.Drawing.SolidBrush $bodyColor
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]($ch*0.7), [int]$bw, [int]($ch*0.7))
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color $bodyColor -heightScale 0.75 -facing $facing
         }
         ([CharState]::Crouch) {
-            $brush = New-Object System.Drawing.SolidBrush $bodyColor
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$ch, [int]$bw, [int]$ch)
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color $bodyColor -heightScale 0.72 -facing $facing
         }
         ([CharState]::Block) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(90,150,220))
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$bh, [int]$bw, [int]$bh)
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color ([System.Drawing.Color]::FromArgb(90,150,220)) -facing $facing -armSwingForward 6
         }
         ([CharState]::Hitstun) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255,220,220))
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$bh, [int]$bw, [int]$bh)
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color ([System.Drawing.Color]::FromArgb(255,210,210)) -facing $facing -leanBack (-8 * (-$facing))
         }
         ([CharState]::Throw) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(200,60,60))
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]($bh*0.8), [int]$bw, [int]($bh*0.8))
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color ([System.Drawing.Color]::FromArgb(210,70,70)) -heightScale 0.85 -facing $facing
         }
         ([CharState]::Dead) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(70,70,70))
-            $g.FillRectangle($brush, $sx - 50, $sy - 14, 100, 14)
+            $c = [System.Drawing.Color]::FromArgb(70,70,70)
+            $brush = New-Object System.Drawing.SolidBrush $c
+            $g.FillRectangle($brush, $sx - 46, $sy - 12, 92, 12)
+            $headBrush = New-Object System.Drawing.SolidBrush $c
+            $g.FillEllipse($headBrush, $sx + ($facing * 40), $sy - 18, 18, 18)
+            $brush.Dispose(); $headBrush.Dispose()
         }
         ([CharState]::Attack) {
             $tint = Get-MoveTint $fighter
-            $brush = New-Object System.Drawing.SolidBrush $tint
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$bh, [int]$bw, [int]$bh)
-            $limbX = $sx + ($fighter.Facing * 8)
-            $limbW = $fighter.Facing * 46
-            $rx = [Math]::Min($limbX, $limbX + $limbW)
-            $g.FillRectangle($brush, $rx, $sy - [int]($bh*0.65), [Math]::Abs($limbW), 16)
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color $tint -facing $facing -armSwingForward 34
         }
         ([CharState]::Jump) {
-            $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb([Math]::Min(255,$bodyColor.R+25),[Math]::Min(255,$bodyColor.G+25),[Math]::Min(255,$bodyColor.B+25)))
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$bh, [int]$bw, [int]$bh)
+            $c = [System.Drawing.Color]::FromArgb([Math]::Min(255,$bodyColor.R+25),[Math]::Min(255,$bodyColor.G+25),[Math]::Min(255,$bodyColor.B+25))
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color $c -heightScale 0.92 -facing $facing
         }
         default {
-            $brush = New-Object System.Drawing.SolidBrush $bodyColor
-            $g.FillRectangle($brush, $sx - [int]($bw/2), $sy - [int]$bh, [int]$bw, [int]$bh)
+            Draw-Humanoid -g $g -sx $sx -sy $sy -color $bodyColor -facing $facing
         }
     }
-    if ($null -ne $brush) { $brush.Dispose() }
-
-    # facing indicator
-    $noseBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb([Math]::Min(255,$bodyColor.R+60),[Math]::Min(255,$bodyColor.G+60),[Math]::Min(255,$bodyColor.B+60)))
-    $noseX = $sx + $fighter.Facing * ([int]($bw/2) + 6)
-    $g.FillEllipse($noseBrush, $noseX - 4, $sy - [int]($bh*0.85) - 4, 8, 8)
-    $noseBrush.Dispose()
 }
 
 function Draw-Projectile([System.Drawing.Graphics]$g, $proj) {

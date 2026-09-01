@@ -13,11 +13,17 @@ function New-FormRow {
         [System.Windows.Forms.Control]$Control,
         [int]$LabelWidth = 190,
         [int]$ControlX = 200,
-        [int]$ControlWidth = 190
+        [int]$ControlWidth = 190,
+        [int]$LabelX = 4
     )
+    # BUG FIX: LabelX used to be hardcoded to 4 for every call, so the
+    # stats column's labels and the move column's labels (a separate call
+    # site further right) both landed in the exact same x position and
+    # overlapped each other - only the non-overlapping tail of whichever
+    # list was longer stayed readable. Callers now pass their own LabelX.
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $LabelText
-    $label.Location = New-Object System.Drawing.Point(4, ($Y + 3))
+    $label.Location = New-Object System.Drawing.Point($LabelX, ($Y + 3))
     $label.Size = New-Object System.Drawing.Size($LabelWidth, 22)
     $label.ForeColor = [System.Drawing.Color]::White
     $Parent.Controls.Add($label)
@@ -57,43 +63,53 @@ function New-CharacterEditorScreen {
     $panel.BackColor = [System.Drawing.Color]::FromArgb(18, 18, 28)
 
     # ---- Top bar -------------------------------------------------------
+    # NOTE: buttons here explicitly set FlatStyle/BackColor/ForeColor - the
+    # default "System" button style barely shows custom colors against a
+    # dark background on some Windows themes, which is why button text was
+    # unreadable before this fix.
     $topBar = New-Object System.Windows.Forms.Panel
     $topBar.Dock = [System.Windows.Forms.DockStyle]::Top
-    $topBar.Height = 40
+    $topBar.Height = 46
+    $topBar.BackColor = [System.Drawing.Color]::FromArgb(24, 24, 36)
     $panel.Controls.Add($topBar)
 
     $charCombo = New-Object System.Windows.Forms.ComboBox
     $charCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-    $charCombo.Location = New-Object System.Drawing.Point(8, 6)
+    $charCombo.Location = New-Object System.Drawing.Point(8, 10)
     $charCombo.Width = 150
+    $charCombo.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 55)
+    $charCombo.ForeColor = [System.Drawing.Color]::White
     $topBar.Controls.Add($charCombo)
 
     $moveCombo = New-Object System.Windows.Forms.ComboBox
     $moveCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-    $moveCombo.Location = New-Object System.Drawing.Point(166, 6)
+    $moveCombo.Location = New-Object System.Drawing.Point(166, 10)
     $moveCombo.Width = 200
+    $moveCombo.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 55)
+    $moveCombo.ForeColor = [System.Drawing.Color]::White
     $topBar.Controls.Add($moveCombo)
 
-    $newMoveButton = New-Object System.Windows.Forms.Button
-    $newMoveButton.Text = "New Move"
-    $newMoveButton.Location = New-Object System.Drawing.Point(374, 4)
-    $newMoveButton.Width = 90
+    function New-BarButton([string]$text, [int]$x, [int]$width) {
+        $b = New-Object System.Windows.Forms.Button
+        $b.Text = $text
+        $b.Location = New-Object System.Drawing.Point($x, 8)
+        $b.Size = New-Object System.Drawing.Size($width, 30)
+        $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $b.BackColor = [System.Drawing.Color]::FromArgb(50, 50, 70)
+        $b.ForeColor = [System.Drawing.Color]::White
+        $b.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        return $b
+    }
+
+    $newMoveButton = New-BarButton "New Move" 374 90
+    $saveButton = New-BarButton "SAVE" 470 80
+    $backButton = New-BarButton "TITLE" 556 80
     $topBar.Controls.Add($newMoveButton)
-
-    $saveButton = New-Object System.Windows.Forms.Button
-    $saveButton.Text = "SAVE"
-    $saveButton.Location = New-Object System.Drawing.Point(470, 4)
-    $saveButton.Width = 80
     $topBar.Controls.Add($saveButton)
-
-    $backButton = New-Object System.Windows.Forms.Button
-    $backButton.Text = "TITLE"
-    $backButton.Location = New-Object System.Drawing.Point(556, 4)
-    $backButton.Width = 80
     $topBar.Controls.Add($backButton)
 
     $statusLabel = New-Object System.Windows.Forms.Label
-    $statusLabel.Location = New-Object System.Drawing.Point(646, 8)
+    $statusLabel.Location = New-Object System.Drawing.Point(646, 14)
     $statusLabel.Width = 600
     $statusLabel.ForeColor = [System.Drawing.Color]::LightGreen
     $topBar.Controls.Add($statusLabel)
@@ -145,44 +161,44 @@ function New-CharacterEditorScreen {
     $moveColX = 440
     $moveCtrlX = 640
     $mf.Name = New-Object System.Windows.Forms.TextBox
-    $my = New-FormRow $scroll $my "技名" $mf.Name 190 $moveCtrlX 200
+    $my = New-FormRow $scroll $my "技名" $mf.Name 190 $moveCtrlX 200 $moveColX
     $mf.Startup = New-NumUpDown 1 999 4 0
-    $my = New-FormRow $scroll $my "発生フレーム" $mf.Startup 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "発生フレーム" $mf.Startup 190 $moveCtrlX 190 $moveColX
     $mf.Active = New-NumUpDown 1 999 3 0
-    $my = New-FormRow $scroll $my "持続フレーム" $mf.Active 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "持続フレーム" $mf.Active 190 $moveCtrlX 190 $moveColX
     $mf.Recovery = New-NumUpDown 0 999 7 0
-    $my = New-FormRow $scroll $my "硬直フレーム" $mf.Recovery 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "硬直フレーム" $mf.Recovery 190 $moveCtrlX 190 $moveColX
     $mf.Damage = New-NumUpDown 0 9999 30 0
-    $my = New-FormRow $scroll $my "ダメージ" $mf.Damage 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ダメージ" $mf.Damage 190 $moveCtrlX 190 $moveColX
     $mf.Hitstun = New-NumUpDown 0 999 12 0
-    $my = New-FormRow $scroll $my "ヒット硬直" $mf.Hitstun 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ヒット硬直" $mf.Hitstun 190 $moveCtrlX 190 $moveColX
     $mf.Blockstun = New-NumUpDown 0 999 8 0
-    $my = New-FormRow $scroll $my "ガード硬直" $mf.Blockstun 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ガード硬直" $mf.Blockstun 190 $moveCtrlX 190 $moveColX
     $mf.Hitstop = New-NumUpDown 0 60 4 0
-    $my = New-FormRow $scroll $my "ヒットストップ" $mf.Hitstop 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ヒットストップ" $mf.Hitstop 190 $moveCtrlX 190 $moveColX
     $mf.KnockbackX = New-NumUpDown -3000 3000 120 1
-    $my = New-FormRow $scroll $my "ノックバックX" $mf.KnockbackX 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ノックバックX" $mf.KnockbackX 190 $moveCtrlX 190 $moveColX
     $mf.KnockbackY = New-NumUpDown -3000 3000 0 1
-    $my = New-FormRow $scroll $my "ノックバックY" $mf.KnockbackY 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ノックバックY" $mf.KnockbackY 190 $moveCtrlX 190 $moveColX
     $mf.OffsetX = New-NumUpDown -500 500 35 1
-    $my = New-FormRow $scroll $my "Hitbox offsetX" $mf.OffsetX 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "Hitbox offsetX" $mf.OffsetX 190 $moveCtrlX 190 $moveColX
     $mf.OffsetY = New-NumUpDown -500 500 -70 1
-    $my = New-FormRow $scroll $my "Hitbox offsetY" $mf.OffsetY 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "Hitbox offsetY" $mf.OffsetY 190 $moveCtrlX 190 $moveColX
     $mf.Width = New-NumUpDown 1 500 36 1
-    $my = New-FormRow $scroll $my "Hitbox width" $mf.Width 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "Hitbox width" $mf.Width 190 $moveCtrlX 190 $moveColX
     $mf.Height = New-NumUpDown 1 500 22 1
-    $my = New-FormRow $scroll $my "Hitbox height" $mf.Height 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "Hitbox height" $mf.Height 190 $moveCtrlX 190 $moveColX
 
     $mf.GuardType = New-Object System.Windows.Forms.ComboBox
     $mf.GuardType.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     [void]$mf.GuardType.Items.AddRange(@([Constants]::GuardHigh, [Constants]::GuardLow, [Constants]::GuardOverhead, [Constants]::GuardThrow))
-    $my = New-FormRow $scroll $my "ガード属性" $mf.GuardType 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "ガード属性" $mf.GuardType 190 $moveCtrlX 190 $moveColX
 
     $mf.Cancelable = New-Object System.Windows.Forms.CheckBox
-    $my = New-FormRow $scroll $my "キャンセル可否" $mf.Cancelable 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "キャンセル可否" $mf.Cancelable 190 $moveCtrlX 190 $moveColX
 
     $mf.CancelRoutes = New-Object System.Windows.Forms.TextBox
-    $my = New-FormRow $scroll $my "キャンセル先(カンマ区切り)" $mf.CancelRoutes 190 $moveCtrlX 190
+    $my = New-FormRow $scroll $my "キャンセル先(カンマ区切り)" $mf.CancelRoutes 190 $moveCtrlX 190 $moveColX
 
     foreach ($ctrl in $mf.Values) {
         if ($ctrl -isnot [System.Windows.Forms.CheckBox]) {
@@ -373,14 +389,20 @@ function New-CharacterEditorScreen {
 
     $backButton.Add_Click({ & $Navigate "Title" $null }.GetNewClosure())
 
-    $panel.Add_VisibleChanged({
-        if ($panel.Visible) {
+    # NOTE: initialization used to run on Add_VisibleChanged, but that
+    # event is not guaranteed to fire just from Controls.Add() (Visible
+    # already defaults to true, so nothing may actually "change"). Show-
+    # Screen in Main.ps1 now calls this Activate scriptblock explicitly,
+    # right after adding the panel to the form - guaranteed to run exactly
+    # once per screen switch.
+    $panel.Tag = @{
+        Activate = {
             $charCombo.Items.Clear()
             $ids = @($DataManager.GetCharacterIds()) | Sort-Object
             foreach ($id in $ids) { [void]$charCombo.Items.Add($id) }
             if ($ids.Count -gt 0) { $charCombo.SelectedIndex = 0 }
-        }
-    }.GetNewClosure())
+        }.GetNewClosure()
+    }
 
     return $panel
 }
