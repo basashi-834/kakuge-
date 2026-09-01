@@ -18,15 +18,31 @@ namespace kakuge {
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
 constexpr double OriginX = 640.0;
 // Ground line's Y in the 1280x720 virtual canvas. Tuned so an idle
-// character (~440px tall, see kCharScale in Draw.cpp) leaves roughly
-// 100-120px of headroom above their head, matching the tighter classic-
-// arcade framing the user asked for (as opposed to a taller ~150px gap).
-constexpr double OriginY = 550.0;
+// character (~497px tall, see kCharScale in Draw.cpp) leaves ~150px of
+// headroom above their head and ~35px of footroom before the HUD gauge
+// bars start at y=682 (both within the user's specified 120-160px /
+// 30-40px ranges).
+constexpr double OriginY = 647.0;
 
 inline double ToScreenX(double worldX) { return OriginX + worldX; }
 inline double ToScreenY(double worldY) { return OriginY + worldY; }
 
 void AddRoundedRect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& rect, float radius);
+
+// HARD CANDY "candy" overlay devices - applied on top of the flat,
+// zero-radius skeleton (never as a substitute for it). All three are
+// deliberately hard-edged: no blur, no rounding.
+//   - DrawHardShadow: the panel's own offset shadow, drawn *before* the
+//     panel fill so it peeks out from behind it (10px right/down, flat
+//     translucent ink, per spec - call with the panel's own rect).
+//   - DrawGlossCap: a white-to-transparent gradient over the top ~45% of
+//     a solid red block (buttons, badges, accent panels).
+//   - DrawDiagonalShine: an ~18-degree translucent white stripe clipped to
+//     the rect - reserved for large red blocks only (VS badge, primary
+//     title button, title accent mark), not every red surface.
+void DrawHardShadow(Gdiplus::Graphics& g, const Gdiplus::RectF& panelRect);
+void DrawGlossCap(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
+void DrawDiagonalShine(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
 
 Gdiplus::Color TagColor(const std::string& tag);
 Gdiplus::Color MoveTint(const Fighter& fighter);

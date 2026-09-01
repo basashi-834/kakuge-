@@ -33,9 +33,9 @@ public:
     // must sit above that floor while still being inside normal-attack
     // reach, or the CPU would never consider itself "close enough" to
     // attack at all.
-    static constexpr double CloseRange = 280.0;
-    static constexpr double MidRange = 600.0;
-    static constexpr double AntiAirRange = 320.0;
+    static constexpr double CloseRange = 314.2;
+    static constexpr double MidRange = 673.2;
+    static constexpr double AntiAirRange = 359.0;
     static constexpr double LowHpRatio = 0.25;
 
     CPUAI(Fighter* self, Fighter* opp) : Self(self), Opp(opp) {}
@@ -59,7 +59,7 @@ public:
         double dist = std::abs(dx);
         int dirToOpp = dx < 0 ? -1 : 1;
 
-        if (Opp->SM.CurrentState == CharState::Attack && dist < 300.0 && Self->SM.IsActionable() && RandDouble() < 0.7) {
+        if (Opp->SM.CurrentState == CharState::Attack && dist < 336.6 && Self->SM.IsActionable() && RandDouble() < 0.7) {
             return HoldBack();
         }
 
@@ -86,7 +86,7 @@ public:
             if (antiAir) return UseMove(*antiAir);
         }
 
-        if (dist < 500.0 && RandDouble() < 0.5) {
+        if (dist < 561.0 && RandDouble() < 0.5) {
             const MoveData* superMove = FindMove([this](const MoveData& m) {
                 return m.HasTag(Constants::TagSuper) && Self->Gauge.CanSpend(m.MeterCost);
             });

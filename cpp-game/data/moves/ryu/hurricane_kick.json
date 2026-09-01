@@ -1,6 +1,6 @@
 {
  "id": "hurricane_kick",
- "name": "竜巻旋風腳 (Hurricane Kick)",
+ "name": "\u7adc\u5dfb\u65cb\u98a8\u8173 (Hurricane Kick)",
  "startup": 9,
  "active": 16,
  "recovery": 20,
@@ -12,10 +12,10 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 155.8,
-   "offsetY": -164.0,
-   "width": 196.8,
-   "height": 147.6
+   "offsetX": 174.8,
+   "offsetY": -184.0,
+   "width": 220.8,
+   "height": 165.6
   }
  ],
  "knockbackX": 252.0,
@@ -41,5 +41,5 @@
  "stance": "stand",
  "requiresAir": false,
  "projectile": {},
- "effectiveRange": 533.0
+ "effectiveRange": 598.0
 }

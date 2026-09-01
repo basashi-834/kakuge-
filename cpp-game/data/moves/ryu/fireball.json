@@ -36,10 +36,10 @@
  "projectile": {
   "speed": 520,
   "lifetime": 100,
-  "width": 131.2,
-  "height": 131.2,
-  "spawnOffsetX": 205.0,
-  "spawnOffsetY": -246.0
+  "width": 147.2,
+  "height": 147.2,
+  "spawnOffsetX": 230.0,
+  "spawnOffsetY": -276.0
  },
- "effectiveRange": 3690.0
+ "effectiveRange": 4140.0
 }

@@ -67,7 +67,7 @@ public:
     // Scaled to match the renderer's ~440px-tall humanoid (platform/Draw.cpp's
     // kCharScale) so two fighters visually stop shoulder-to-shoulder instead
     // of overlapping/passing through each other.
-    double PushboxHalfWidth = 114.8, PushboxHalfHeight = 225.5;
+    double PushboxHalfWidth = 128.8, PushboxHalfHeight = 253.0;
     bool ActiveHitboxValid = false;
     RectBox ActiveHitboxRect;
     std::vector<Fighter*> AlreadyHit;

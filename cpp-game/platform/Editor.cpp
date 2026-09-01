@@ -392,7 +392,7 @@ void Editor_OnDrawItem(DRAWITEMSTRUCT* dis) {
     Gdiplus::RectF rect(0.0f, 0.0f, static_cast<Gdiplus::REAL>(dis->rcItem.right - dis->rcItem.left),
                          static_cast<Gdiplus::REAL>(dis->rcItem.bottom - dis->rcItem.top));
     Gdiplus::GraphicsPath path;
-    AddRoundedRect(path, rect, 6);
+    AddRoundedRect(path, rect, 0.0f);
 
     if (primary) {
         Gdiplus::SolidBrush fill(pressed ? pal.AccentDark : pal.Accent);

@@ -16,10 +16,13 @@ namespace kakuge {
 static void DrawUiButton(Graphics& g, const UiButton& b) {
     const auto& pal = GetPalette();
     GraphicsPath path;
-    AddRoundedRect(path, b.Rect, 8);
+    AddRoundedRect(path, b.Rect, 0.0f);
     if (b.Primary) {
         SolidBrush fill(b.Enabled ? pal.Accent : pal.Border);
         g.FillPath(&fill, &path);
+        if (b.Enabled) DrawGlossCap(g, b.Rect);
+        Pen border(pal.Ink, 2.0f);
+        g.DrawPath(&border, &path);
     } else {
         SolidBrush fill(pal.PanelBg);
         g.FillPath(&fill, &path);
@@ -71,6 +74,7 @@ void App::DrawTitle(Graphics& g) {
     g.FillRectangle(&ruleBrush, (VirtualW - ruleW) / 2.0f, 214.0f, ruleW, 4.0f);
 
     DrawButtons(g, Buttons);
+    if (!Buttons.empty()) DrawDiagonalShine(g, Buttons[0].Rect); // GAME START - primary CTA gets the shine
 
     DrawTextCentered(g, L"A/D move  S crouch  Space jump  U I O punch  J K L kick  Esc pause",
                       footerFont, RectF(0, static_cast<REAL>(VirtualH - 40), static_cast<REAL>(VirtualW), 24), pal.TextGray);
@@ -166,7 +170,7 @@ void App::DrawCharacterSelect(Graphics& g) {
         const auto& b = Buttons[i];
         bool isAddTile = (i == ids.size());
         GraphicsPath path;
-        AddRoundedRect(path, b.Rect, 10);
+        AddRoundedRect(path, b.Rect, 0.0f);
         bool selected = !isAddTile && ids[i] == selectedId;
         SolidBrush fill(selected ? pal.PanelBg2 : pal.PanelBg);
         g.FillPath(&fill, &path);
@@ -179,10 +183,14 @@ void App::DrawCharacterSelect(Graphics& g) {
         }
         const std::string& id = ids[i];
         double px = b.Rect.X + b.Rect.Width / 2.0;
-        double py = b.Rect.Y + 120;
+        double py = b.Rect.Y + 130;
         auto* stats = Dm->GetCharacter(id);
         Color bodyColor = stats ? Color(255, static_cast<BYTE>(stats->ColorR), static_cast<BYTE>(stats->ColorG), static_cast<BYTE>(stats->ColorB)) : pal.TextDark;
-        DrawHumanoid(g, px, py, bodyColor, {1.3, 1});
+        // A thumbnail preview, not the battle-scale render: heightScale is
+        // relative to kCharScale (which now makes an idle fighter ~497px
+        // tall), so this must be small enough to fit the ~148px-tall image
+        // area above the name label, not the 1.3x used before that scale-up.
+        DrawHumanoid(g, px, py, bodyColor, {0.22, 1});
         DrawTextCentered(g, Utf8ToWide(stats ? stats->Name : id), nameFont, RectF(b.Rect.X, b.Rect.Y + 148, b.Rect.Width, 24), pal.TextDark);
 
         StatBars sb = ComputeStatBars(*Dm, id);
@@ -211,7 +219,9 @@ void App::DrawVS(Graphics& g) {
     float rightW = static_cast<float>(half * t);
 
     SolidBrush leftBrush(pal.Accent);
-    g.FillRectangle(&leftBrush, half - leftW, 0.0f, leftW, static_cast<REAL>(VirtualH));
+    RectF leftPanel(half - leftW, 0.0f, leftW, static_cast<REAL>(VirtualH));
+    g.FillRectangle(&leftBrush, leftPanel);
+    if (leftW > 4.0f) DrawDiagonalShine(g, leftPanel); // large red block - candy shine per spec
     SolidBrush rightBrush(Color(255, 60, 58, 58));
     g.FillRectangle(&rightBrush, half, 0.0f, rightW, static_cast<REAL>(VirtualH));
 
@@ -311,8 +321,11 @@ void App::BuildGameButtons() {
 
 void App::DrawGame(Graphics& g) {
     const auto& pal = GetPalette();
+    // Thin floor line rather than a tall band: the ground line moved down
+    // (OriginY=647, see Draw.h) to hit the user's footroom spec, leaving
+    // little clearance before the GAUGE HUD row starts at y=665.
     SolidBrush groundBrush(pal.GroundStrip);
-    g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 40.0f);
+    g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 12.0f);
 
     DrawFighter(g, Battle->Player1);
     DrawFighter(g, Battle->Player2);
@@ -320,7 +333,7 @@ void App::DrawGame(Graphics& g) {
     for (const auto& fx : Effects) DrawEffect(g, fx);
 
     DrawHUD(g, *Battle, LastP1Combo, LastP2Combo, std::max(P1ComboFade, P2ComboFade));
-    if (DebugVisible) DrawDebugOverlay(g, *Battle);
+    if (DebugVisible && IsTrainingMode) DrawDebugOverlay(g, *Battle);
 
     if (Paused) {
         SolidBrush dim(Color(140, 0, 0, 0));
@@ -330,11 +343,12 @@ void App::DrawGame(Graphics& g) {
         float panelTop = VirtualH / 2.0f - 190;
         float panelHeight = IsTrainingMode ? 350.0f : 220.0f;
         RectF panelRect(cx - 340, panelTop, 680, panelHeight);
+        DrawHardShadow(g, panelRect);
         GraphicsPath path;
-        AddRoundedRect(path, panelRect, 12);
+        AddRoundedRect(path, panelRect, 0.0f);
         SolidBrush panelBg(pal.PanelBg);
         g.FillPath(&panelBg, &path);
-        Pen border(pal.Accent, 3.0f);
+        Pen border(pal.Ink, 2.0f);
         g.DrawPath(&border, &path);
 
         Font titleFont(UiFontFamily(), 24, FontStyleBold, UnitPixel);
@@ -370,10 +384,15 @@ void App::DrawResult(Graphics& g) {
 
     float cx = VirtualW / 2.0f;
     RectF banner(cx - 220, 130, 440, 90);
+    DrawHardShadow(g, banner);
     GraphicsPath path;
-    AddRoundedRect(path, banner, 10);
+    AddRoundedRect(path, banner, 0.0f);
     SolidBrush bannerBrush(pal.Accent);
     g.FillPath(&bannerBrush, &path);
+    DrawGlossCap(g, banner);
+    DrawDiagonalShine(g, banner);
+    Pen bannerBorder(pal.Ink, 2.0f);
+    g.DrawPath(&bannerBorder, &path);
     Font bannerFont(UiFontFamily(), 34, FontStyleBold, UnitPixel);
     DrawTextCentered(g, resultText, bannerFont, banner, pal.White);
 
@@ -394,7 +413,7 @@ void App::DrawResult(Graphics& g) {
     for (size_t i = 0; i < tiles.size(); i++) {
         RectF tr(startX + i * (tileW + gap), 280, tileW, tileH);
         GraphicsPath tp;
-        AddRoundedRect(tp, tr, 8);
+        AddRoundedRect(tp, tr, 0.0f);
         SolidBrush tileBg(pal.PanelBg);
         g.FillPath(&tileBg, &tp);
         Pen tileBorder(pal.Border, 2.0f);
@@ -456,7 +475,7 @@ void App::DrawSettings(Graphics& g) {
         const auto& b = Buttons[i];
         bool selected = static_cast<int>(i) == PendingResIndex;
         GraphicsPath path;
-        AddRoundedRect(path, b.Rect, 8);
+        AddRoundedRect(path, b.Rect, 0.0f);
         SolidBrush fill(selected ? pal.Accent : pal.PanelBg);
         g.FillPath(&fill, &path);
         Pen border(selected ? pal.Accent : pal.Border, 2.0f);

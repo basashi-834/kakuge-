@@ -2,16 +2,87 @@
 #include "Draw.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <map>
 
 using namespace Gdiplus;
 
 namespace kakuge {
+// Defined in WinMain.cpp, alongside the identical g_AudioDir convention -
+// set once at startup to Data/Images next to the .exe.
+extern std::filesystem::path g_ImagesDir;
+}
 
-// Sized so an idle character stands ~440px tall in the 1280x720 virtual
-// canvas (per the SF6-style reference the user measured: ~400-470px,
-// ~430px baseline). Shared by DrawHumanoid and the lying-down Knockdown/
-// Dead poses in DrawFighter so both scale together.
-constexpr double kCharScale = 4.1;
+namespace kakuge {
+
+// Sized so an idle character stands ~497px tall in the 1280x720 virtual
+// canvas (per the user's refined spec: 460-500px height / ~64% of 720,
+// 120-160px headroom, 30-40px footroom - see OriginY in Draw.h for the
+// other half of that math). Shared by DrawHumanoid and the lying-down
+// Knockdown/Dead poses in DrawFighter so both scale together.
+constexpr double kCharScale = 4.6;
+
+namespace {
+
+// Real character-render art for Attack/Block frames (see data/images/) -
+// each file is pre-trimmed to its opaque bounding box. anchorXFrac locates
+// the character's grounded support foot (or, for symmetric stances, the
+// stance's horizontal center) as a fraction of image width, so the sprite
+// plants at the fighter's actual world position instead of at its own
+// bounding-box center - important for the kick pose, whose swinging leg
+// pulls the box far off to one side.
+struct AttackSprite {
+    std::unique_ptr<Gdiplus::Image> image;
+    bool ok = false;
+    double anchorXFrac = 0.5;
+};
+
+const AttackSprite& GetAttackSprite(const wchar_t* fileName, double anchorXFrac) {
+    static std::map<std::wstring, AttackSprite> cache;
+    auto it = cache.find(fileName);
+    if (it != cache.end()) return it->second;
+    AttackSprite s;
+    s.anchorXFrac = anchorXFrac;
+    std::filesystem::path p = g_ImagesDir / fileName;
+    s.image = std::make_unique<Gdiplus::Image>(p.wstring().c_str());
+    s.ok = (s.image && s.image->GetLastStatus() == Ok && s.image->GetWidth() > 0);
+    auto res = cache.emplace(fileName, std::move(s));
+    return res.first->second;
+}
+
+// All three renders share one pixel-to-world scale, derived from the
+// standing punch pose's ~1404px trimmed height mapping to kCharScale's
+// ~497px standing height. The kick pose's taller bounding box (from its
+// raised leg) renders correspondingly taller under that same scale, which
+// is correct - not an inconsistency to normalize away.
+constexpr double kSourceStandHeight = 1404.0;
+
+// Draws a real sprite anchored to the fighter's ground position (sx, sy),
+// mirrored about that same anchor when facing left. Returns false (leaving
+// the frame untouched) if the art file isn't present, so callers can fall
+// back to the line-art humanoid - the shipped install always has these
+// files, but a from-source build without data/images/ shouldn't crash.
+bool DrawAttackSprite(Graphics& g, double sx, double sy, int facing, const wchar_t* fileName, double anchorXFrac) {
+    const AttackSprite& sprite = GetAttackSprite(fileName, anchorXFrac);
+    if (!sprite.ok) return false;
+    Image* img = sprite.image.get();
+    double srcW = img->GetWidth();
+    double srcH = img->GetHeight();
+
+    double scale = (kCharScale * 108.0) / kSourceStandHeight;
+    double drawW = srcW * scale;
+    double drawH = srcH * scale;
+    double anchorX = srcW * sprite.anchorXFrac * scale;
+
+    GraphicsState state = g.Save();
+    g.TranslateTransform(static_cast<REAL>(sx), static_cast<REAL>(sy));
+    if (facing < 0) g.ScaleTransform(-1.0f, 1.0f);
+    g.DrawImage(img, static_cast<REAL>(-anchorX), static_cast<REAL>(-drawH), static_cast<REAL>(drawW), static_cast<REAL>(drawH));
+    g.Restore(state);
+    return true;
+}
+
+} // namespace
 
 std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return L"";
@@ -94,6 +165,50 @@ void AddRoundedRect(GraphicsPath& path, const RectF& rect, float radius) {
     path.AddArc(rect.X + rect.Width - d, rect.Y + rect.Height - d, d, d, 0, 90);
     path.AddArc(rect.X, rect.Y + rect.Height - d, d, d, 90, 90);
     path.CloseFigure();
+}
+
+void DrawHardShadow(Graphics& g, const RectF& panelRect) {
+    // "10px 10px 0 rgba(32,30,29,.25)" - a flat offset rectangle behind the
+    // panel, never blurred. Caller draws this first, then the panel fill on
+    // top, so the shadow only peeks out on the right/bottom edges.
+    const auto& pal = GetPalette();
+    SolidBrush shadowBrush(pal.RuleSoft);
+    RectF shadow(panelRect.X + 10.0f, panelRect.Y + 10.0f, panelRect.Width, panelRect.Height);
+    g.FillRectangle(&shadowBrush, shadow);
+}
+
+void DrawGlossCap(Graphics& g, const RectF& rect) {
+    // White-to-transparent gradient over the top ~45% of a solid red block.
+    float capH = rect.Height * 0.45f;
+    if (capH < 1.0f) return;
+    RectF capRect(rect.X, rect.Y, rect.Width, capH);
+    LinearGradientBrush brush(capRect, Color(115, 255, 255, 255), Color(0, 255, 255, 255),
+                               LinearGradientModeVertical);
+    g.FillRectangle(&brush, capRect);
+}
+
+void DrawDiagonalShine(Graphics& g, const RectF& rect) {
+    // ~18-degree translucent white stripe, clipped to rect. Reserved for
+    // large red blocks only (VS badge, primary title button, title mark).
+    Region oldClip;
+    g.GetClip(&oldClip);
+    g.SetClip(rect);
+
+    GraphicsState state = g.Save();
+    float cx = rect.X + rect.Width * 0.5f;
+    float cy = rect.Y + rect.Height * 0.5f;
+    g.TranslateTransform(cx, cy);
+    g.RotateTransform(18.0f);
+    g.TranslateTransform(-cx, -cy);
+
+    float stripeW = rect.Width * 0.22f;
+    float stripeX = rect.X + rect.Width * 0.58f;
+    float pad = rect.Width + rect.Height;
+    SolidBrush stripeBrush(Color(46, 255, 255, 255));
+    g.FillRectangle(&stripeBrush, RectF(stripeX, cy - pad, stripeW, pad * 2.0f));
+
+    g.Restore(state);
+    g.SetClip(&oldClip);
 }
 
 Color TagColor(const std::string& tag) {
@@ -230,6 +345,7 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             DrawHumanoid(g, sx, sy, bodyColor, {0.72, facing});
             break;
         case CharState::Block:
+            if (DrawAttackSprite(g, sx, sy, facing, L"fighter_guard.png", 0.55)) break;
             DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), {1.0, facing, 0, 0, 0, 10});
             break;
         case CharState::Hitstun:
@@ -246,8 +362,13 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             break;
         }
         case CharState::Attack: {
+            std::string btn = fighter.CurrentMoveData ? fighter.CurrentMoveData->Button : std::string();
+            bool isKick = !btn.empty() && btn.back() == 'K';
+            bool isPunch = !btn.empty() && btn.back() == 'P';
+            if (isKick && DrawAttackSprite(g, sx, sy, facing, L"fighter_kick.png", 0.083)) break;
+            if (isPunch && DrawAttackSprite(g, sx, sy, facing, L"fighter_punch.png", 0.5)) break;
+
             Color tint = MoveTint(fighter);
-            bool isKick = (fighter.CurrentMoveData != nullptr && fighter.CurrentMoveData->HasTag(Constants::TagHeavy));
             if (isKick) DrawHumanoid(g, sx, sy, tint, {1.0, facing, 0, 34, 0, 0});
             else DrawHumanoid(g, sx, sy, tint, {1.0, facing, 34, 0, 0, 0});
             break;
@@ -296,7 +417,7 @@ void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Colo
     ratio = std::max(0.0, std::min(1.0, ratio));
     RectF rect(x, y, w, h);
     GraphicsPath path;
-    AddRoundedRect(path, rect, h / 2.0f);
+    AddRoundedRect(path, rect, 0.0f); // hard-edged bar, no rounding, no glow (spec)
 
     SolidBrush bg(emptyColor);
     g.FillPath(&bg, &path);
@@ -346,9 +467,12 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     float boxX = (VirtualW - boxW) / 2.0f;
     RectF boxRect(boxX, 12, boxW, boxH);
     GraphicsPath boxPath;
-    AddRoundedRect(boxPath, boxRect, 10);
+    AddRoundedRect(boxPath, boxRect, 0.0f);
     SolidBrush accentBrush(pal.Accent);
     g.FillPath(&accentBrush, &boxPath);
+    DrawGlossCap(g, boxRect);
+    Pen boxBorder(pal.Ink, 2.0f);
+    g.DrawPath(&boxBorder, &boxPath);
     DrawTextCentered(g, timerText, timerFont, boxRect, pal.White);
     RectF roundLabelRect(VirtualW / 2.0f - 60, 74, 120, 20);
     DrawTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", labelFont, roundLabelRect, pal.TextGray);
@@ -363,7 +487,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
             RectF cbRect(onRight ? VirtualW - 300.0f : 100.0f, 100, 200, 34);
             SolidBrush bg(Color(static_cast<BYTE>(std::min(220, alpha)), pal.Accent.GetR(), pal.Accent.GetG(), pal.Accent.GetB()));
             GraphicsPath cbPath;
-            AddRoundedRect(cbPath, cbRect, 8);
+            AddRoundedRect(cbPath, cbRect, 0.0f);
             g.FillPath(&bg, &cbPath);
             DrawTextCentered(g, comboText, comboFont, cbRect, Color(static_cast<BYTE>(alpha), 255, 255, 255));
         }
@@ -391,9 +515,13 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
             const RectBox& hb = f->ActiveHitboxRect;
             g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(hb.Width), static_cast<REAL>(hb.Height));
         }
+        // Fixed HUD position (under each player's name/HP bar) rather than
+        // tracking the character around the stage - easier to keep an eye
+        // on while also watching the actual on-stage action.
+        bool isP1 = (f == &bs.Player1);
+        double tx = isP1 ? 24.0 : (VirtualW - 444.0);
+        double ty = 110.0;
         auto info = f->DebugInfo();
-        double tx = ToScreenX(f->PositionX) - 90;
-        double ty = ToScreenY(f->PositionY) - 200;
         std::wstring line1 = L"state=" + Utf8ToWide(info.state) + L" move=" + Utf8ToWide(info.move) + L" frame=" + std::to_wstring(info.frame);
         g.DrawString(line1.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty)), &brush);
         std::wstring line2 = L"hp=" + std::to_wstring(info.hp) + L" gauge=" + std::to_wstring(static_cast<int>(info.gauge));

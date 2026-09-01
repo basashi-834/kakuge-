@@ -18,6 +18,7 @@ using namespace kakuge;
 namespace kakuge {
 int g_RoundTimeSeconds = 99;
 fs::path g_AudioDir;
+fs::path g_ImagesDir;
 
 // Sound playback: same convention as the earlier WinForms edition's
 // AudioHelper.ps1 - no .wav files ship by default, and playback silently
@@ -121,6 +122,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     fs::path userDir = UserAppDataDir();
     LoadMatchRules(dataDir);
     g_AudioDir = ExeDir() / "Audio";
+    g_ImagesDir = dataDir / "Images";
 
     App app;
     g_App = &app;

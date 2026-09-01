@@ -142,7 +142,9 @@ void App::OnKeyDown(int vk) {
             InvalidateRect(Hwnd, nullptr, FALSE);
             return;
         }
-        if (vk == VK_F1) {
+        if (vk == VK_F1 && IsTrainingMode) {
+            // Debug display is a practice-mode tool only (not shown in a
+            // real Versus match), so F1 is simply inert there.
             DebugVisible = !DebugVisible;
             InvalidateRect(Hwnd, nullptr, FALSE);
             return;
