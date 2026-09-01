@@ -12,14 +12,14 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 138.0,
-   "offsetY": -506.0,
-   "width": 230.0,
-   "height": 322.0
+   "offsetX": 39.0,
+   "offsetY": -143.0,
+   "width": 65.0,
+   "height": 91.0
   }
  ],
- "knockbackX": 144.0,
- "knockbackY": 936.0,
+ "knockbackX": 40.7,
+ "knockbackY": 264.52,
  "hitOutcome": "HardKnockdown",
  "meterGain": 15,
  "meterCost": 0,
@@ -41,5 +41,5 @@
  "input": "623",
  "button": "AnyP",
  "stance": "stand",
- "effectiveRange": 690.0
+ "effectiveRange": 195.0
 }

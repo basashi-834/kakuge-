@@ -1,6 +1,6 @@
 {
  "id": "jump_light_kick",
- "name": "ジャンプ弱キック",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u5f31\u30ad\u30c3\u30af",
  "startup": 4,
  "active": 5,
  "recovery": 8,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 120.0,
-   "offsetY": -110.0,
-   "width": 165.6,
-   "height": 119.6
+   "offsetX": 33.91,
+   "offsetY": -31.09,
+   "width": 46.8,
+   "height": 33.8
   }
  ],
- "knockbackX": 198.0,
+ "knockbackX": 55.96,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 5,

@@ -2,106 +2,129 @@
 #include "Draw.h"
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
-#include <map>
 
 using namespace Gdiplus;
 
 namespace kakuge {
-// Defined in WinMain.cpp, alongside the identical g_AudioDir convention -
-// set once at startup to Data/Images next to the .exe.
-extern std::filesystem::path g_ImagesDir;
-}
 
-namespace kakuge {
-
-// Sized so an idle character stands ~497px tall in the 1280x720 virtual
-// canvas (per the user's refined spec: 460-500px height / ~64% of 720,
-// 120-160px headroom, 30-40px footroom - see OriginY in Draw.h for the
-// other half of that math). Shared by DrawHumanoid and the lying-down
-// Knockdown/Dead poses in DrawFighter so both scale together.
-constexpr double kCharScale = 4.6;
+// Sized so an idle character stands ~140px tall in the 384x224 virtual
+// canvas (see OriginY in Draw.h for the other half of that math, and
+// engine/Boxes.h's HurtboxSet comment for the matching hurtbox geometry).
+// Shared by DrawHumanoid and the lying-down Knockdown/Dead poses in
+// DrawFighter so both scale together. Every character is drawn with this
+// same vector line-art path now - the earlier round's photo-sprite renders
+// (data/images/fighter_*.png) were removed per the user's explicit request
+// to express everything as pixel art, and the low-res-buffer +
+// nearest-neighbor pipeline (see App::OnPaint) is what turns this line art
+// into genuine chunky pixels rather than smooth vector strokes.
+constexpr double kCharScale = 1.3;
 
 namespace {
 
-// Real character-render art for Attack/Block frames (see data/images/) -
-// each file is pre-trimmed to its opaque bounding box. anchorXFrac locates
-// the character's grounded support foot (or, for symmetric stances, the
-// stance's horizontal center) as a fraction of image width, so the sprite
-// plants at the fighter's actual world position instead of at its own
-// bounding-box center - important for the kick pose, whose swinging leg
-// pulls the box far off to one side.
-struct AttackSprite {
-    std::unique_ptr<Gdiplus::Image> image;
-    bool ok = false;
-    double anchorXFrac = 0.5;
+// 5x7 dot-matrix glyphs, one 5-char row per string ('#' = lit, '.' = off).
+// Covers uppercase A-Z, 0-9, space, and the punctuation actually used
+// across the low-res screens (see DrawPixelText's comment in Draw.h).
+struct PixelGlyphEntry { wchar_t ch; const char* rows[7]; };
+
+const PixelGlyphEntry kGlyphTable[] = {
+    {L' ', {".....", ".....", ".....", ".....", ".....", ".....", "....."}},
+    {L'0', {".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."}},
+    {L'1', {"..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."}},
+    {L'2', {".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"}},
+    {L'3', {".###.", "#...#", "....#", "..##.", "....#", "#...#", ".###."}},
+    {L'4', {"...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."}},
+    {L'5', {"#####", "#....", "####.", "....#", "....#", "#...#", ".###."}},
+    {L'6', {"..##.", ".#...", "#....", "####.", "#...#", "#...#", ".###."}},
+    {L'7', {"#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."}},
+    {L'8', {".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."}},
+    {L'9', {".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."}},
+    {L'A', {"..#..", ".#.#.", "#...#", "#...#", "#####", "#...#", "#...#"}},
+    {L'B', {"####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."}},
+    {L'C', {".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."}},
+    {L'D', {"####.", "#...#", "#...#", "#...#", "#...#", "#...#", "####."}},
+    {L'E', {"#####", "#....", "#....", "####.", "#....", "#....", "#####"}},
+    {L'F', {"#####", "#....", "#....", "####.", "#....", "#....", "#...."}},
+    {L'G', {".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."}},
+    {L'H', {"#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"}},
+    {L'I', {".###.", "..#..", "..#..", "..#..", "..#..", "..#..", ".###."}},
+    {L'J', {"..###", "...#.", "...#.", "...#.", "...#.", "#..#.", ".##.."}},
+    {L'K', {"#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"}},
+    {L'L', {"#....", "#....", "#....", "#....", "#....", "#....", "#####"}},
+    {L'M', {"#...#", "##.##", "#.#.#", "#...#", "#...#", "#...#", "#...#"}},
+    {L'N', {"#...#", "##..#", "#.#.#", "#.#.#", "#..##", "#...#", "#...#"}},
+    {L'O', {".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."}},
+    {L'P', {"####.", "#...#", "#...#", "####.", "#....", "#....", "#...."}},
+    {L'Q', {".###.", "#...#", "#...#", "#...#", "#.#.#", "#..#.", ".##.#"}},
+    {L'R', {"####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"}},
+    {L'S', {".####", "#....", "#....", ".###.", "....#", "....#", "####."}},
+    {L'T', {"#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."}},
+    {L'U', {"#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."}},
+    {L'V', {"#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."}},
+    {L'W', {"#...#", "#...#", "#...#", "#.#.#", "#.#.#", "##.##", "#...#"}},
+    {L'X', {"#...#", "#...#", ".#.#.", "..#..", ".#.#.", "#...#", "#...#"}},
+    {L'Y', {"#...#", "#...#", ".#.#.", "..#..", "..#..", "..#..", "..#.."}},
+    {L'Z', {"#####", "....#", "...#.", "..#..", ".#...", "#....", "#####"}},
+    {L'-', {".....", ".....", ".....", "#####", ".....", ".....", "....."}},
+    {L'.', {".....", ".....", ".....", ".....", ".....", ".##..", ".##.."}},
+    {L':', {".....", ".##..", ".##..", ".....", ".##..", ".##..", "....."}},
+    {L'+', {".....", "..#..", "..#..", "#####", "..#..", "..#..", "....."}},
+    {L'(', {"...#.", "..#..", ".#...", ".#...", ".#...", "..#..", "...#."}},
+    {L')', {".#...", "..#..", "...#.", "...#.", "...#.", "..#..", ".#..."}},
+    {L',', {".....", ".....", ".....", ".....", ".....", ".##..", ".#..."}},
+    {L'=', {".....", ".....", "#####", ".....", "#####", ".....", "....."}},
+    {L'>', {"#....", ".#...", "..#..", "...#.", "..#..", ".#...", "#...."}},
+    {L'/', {"....#", "...#.", "...#.", "..#..", ".#...", ".#...", "#...."}},
+    {L'!', {"..#..", "..#..", "..#..", "..#..", "..#..", ".....", "..#.."}},
+    {L'?', {".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."}},
 };
 
-const AttackSprite& GetAttackSprite(const wchar_t* fileName, double anchorXFrac) {
-    static std::map<std::wstring, AttackSprite> cache;
-    auto it = cache.find(fileName);
-    if (it != cache.end()) return it->second;
-    AttackSprite s;
-    s.anchorXFrac = anchorXFrac;
-    std::filesystem::path p = g_ImagesDir / fileName;
-    s.image = std::make_unique<Gdiplus::Image>(p.wstring().c_str());
-    s.ok = (s.image && s.image->GetLastStatus() == Ok && s.image->GetWidth() > 0);
-    auto res = cache.emplace(fileName, std::move(s));
-    return res.first->second;
+const char* const* FindGlyph(wchar_t c) {
+    if (c >= L'a' && c <= L'z') c = static_cast<wchar_t>(c - 32);
+    for (const auto& entry : kGlyphTable) {
+        if (entry.ch == c) return entry.rows;
+    }
+    return nullptr;
 }
 
-// All three renders share one pixel-to-world scale, derived from the
-// standing punch pose's ~1404px trimmed height mapping to kCharScale's
-// ~497px standing height. The kick pose's taller bounding box (from its
-// raised leg) renders correspondingly taller under that same scale, which
-// is correct - not an inconsistency to normalize away.
-constexpr double kSourceStandHeight = 1404.0;
-
-// Draws a real sprite anchored to the fighter's ground position (sx, sy),
-// mirrored about that same anchor when facing left. Returns false (leaving
-// the frame untouched) if the art file isn't present, so callers can fall
-// back to the line-art humanoid - the shipped install always has these
-// files, but a from-source build without data/images/ shouldn't crash.
-bool DrawAttackSprite(Graphics& g, double sx, double sy, int facing, const wchar_t* fileName, double anchorXFrac) {
-    const AttackSprite& sprite = GetAttackSprite(fileName, anchorXFrac);
-    if (!sprite.ok) return false;
-    Image* img = sprite.image.get();
-    double srcW = img->GetWidth();
-    double srcH = img->GetHeight();
-
-    double scale = (kCharScale * 108.0) / kSourceStandHeight;
-    double drawW = srcW * scale;
-    double drawH = srcH * scale;
-    double anchorX = srcW * sprite.anchorXFrac * scale;
-
-    GraphicsState state = g.Save();
-    g.TranslateTransform(static_cast<REAL>(sx), static_cast<REAL>(sy));
-    if (facing < 0) g.ScaleTransform(-1.0f, 1.0f);
-    g.DrawImage(img, static_cast<REAL>(-anchorX), static_cast<REAL>(-drawH), static_cast<REAL>(drawW), static_cast<REAL>(drawH));
-    g.Restore(state);
-    return true;
-}
+constexpr int kGlyphCols = 5, kGlyphRows = 7, kGlyphAdvanceCols = 6;
 
 } // namespace
 
-bool DrawSpriteFit(Graphics& g, const wchar_t* fileName, const RectF& rect, float paddingFrac) {
-    const AttackSprite& sprite = GetAttackSprite(fileName, 0.5);
-    if (!sprite.ok) return false;
-    Image* img = sprite.image.get();
-    double srcW = img->GetWidth();
-    double srcH = img->GetHeight();
-    if (srcW <= 0 || srcH <= 0) return false;
+float PixelTextWidth(const std::wstring& text, float dot) {
+    if (text.empty()) return 0.0f;
+    return static_cast<float>(text.size()) * kGlyphAdvanceCols * dot - dot;
+}
 
-    float pad = std::min(rect.Width, rect.Height) * paddingFrac;
-    float availW = rect.Width - pad * 2.0f, availH = rect.Height - pad * 2.0f;
-    double scale = std::min(availW / srcW, availH / srcH);
-    double drawW = srcW * scale, drawH = srcH * scale;
-    // Standing renders read best anchored to the panel's bottom (feet on
-    // the "ground"), horizontally centered, rather than vertically centered.
-    double drawX = rect.X + (rect.Width - drawW) / 2.0;
-    double drawY = rect.Y + rect.Height - pad - drawH;
-    g.DrawImage(img, static_cast<REAL>(drawX), static_cast<REAL>(drawY), static_cast<REAL>(drawW), static_cast<REAL>(drawH));
-    return true;
+void DrawPixelText(Graphics& g, const std::wstring& text, float x, float y, float dot, Color color) {
+    if (dot <= 0.0f) return;
+    SolidBrush brush(color);
+    float cursorX = x;
+    for (wchar_t c : text) {
+        const char* const* rows = FindGlyph(c);
+        if (rows) {
+            for (int r = 0; r < kGlyphRows; r++) {
+                for (int col = 0; col < kGlyphCols; col++) {
+                    if (rows[r][col] == '#') {
+                        g.FillRectangle(&brush, cursorX + col * dot, y + r * dot, dot, dot);
+                    }
+                }
+            }
+        }
+        cursorX += kGlyphAdvanceCols * dot;
+    }
+}
+
+void DrawPixelTextCentered(Graphics& g, const std::wstring& text, const RectF& rect, float dot, Color color) {
+    float w = PixelTextWidth(text, dot);
+    float h = kGlyphRows * dot;
+    float x = rect.X + (rect.Width - w) / 2.0f;
+    float y = rect.Y + (rect.Height - h) / 2.0f;
+    DrawPixelText(g, text, x, y, dot, color);
+}
+
+void DrawPixelTextRight(Graphics& g, const std::wstring& text, float rightX, float y, float dot, Color color) {
+    float w = PixelTextWidth(text, dot);
+    DrawPixelText(g, text, rightX - w, y, dot, color);
 }
 
 std::wstring Utf8ToWide(const std::string& s) {
@@ -386,10 +409,6 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
         case CharState::Attack: {
             std::string btn = fighter.CurrentMoveData ? fighter.CurrentMoveData->Button : std::string();
             bool isKick = !btn.empty() && btn.back() == 'K';
-            bool isPunch = !btn.empty() && btn.back() == 'P';
-            if (isKick && DrawAttackSprite(g, sx, sy, facing, L"fighter_kick.png", 0.083)) break;
-            if (isPunch && DrawAttackSprite(g, sx, sy, facing, L"fighter_punch.png", 0.5)) break;
-
             Color tint = MoveTint(fighter);
             if (isKick) DrawHumanoid(g, sx, sy, tint, {1.0, facing, 0, 34, 0, 0});
             else DrawHumanoid(g, sx, sy, tint, {1.0, facing, 34, 0, 0, 0});
@@ -401,9 +420,7 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             break;
         }
         default:
-            // Idle/standing - the user-provided "1P Stand" render, falling
-            // back to the line-art humanoid if the art file is missing.
-            if (DrawAttackSprite(g, sx, sy, facing, L"fighter_stand.png", 0.55)) break;
+            // Idle/standing.
             DrawHumanoid(g, sx, sy, bodyColor, {1.0, facing});
             break;
     }
@@ -438,19 +455,28 @@ void DrawEffect(Graphics& g, const LiveEffect& fx) {
     double sx = ToScreenX(fx.x), sy = ToScreenY(fx.y);
     SolidBrush brush(Color(static_cast<BYTE>(alpha), style.color.GetR(), style.color.GetG(), style.color.GetB()));
     g.FillEllipse(&brush, static_cast<REAL>(sx - r), static_cast<REAL>(sy - r), static_cast<REAL>(r * 2), static_cast<REAL>(r * 2));
+    // Counter / Effective Counter's text label is drawn separately, pinned
+    // to the scoring player's screen edge - see DrawCounterEdgeLabel.
+}
 
-    // Counter / Effective Counter get a bold label too - a plain flash
-    // reads as an ordinary hit spark otherwise, and the whole point is to
-    // tell the two tiers apart.
-    if (fx.kind == "counter" || fx.kind == "effective_counter") {
-        bool effective = (fx.kind == "effective_counter");
-        std::wstring label = effective ? L"EFFECTIVE COUNTER" : L"COUNTER";
-        REAL size = effective ? 22.0f : 16.0f;
-        Font font(UiFontFamily(), size, FontStyleBold, UnitPixel);
-        Color textColor(static_cast<BYTE>(alpha), style.color.GetR(), style.color.GetG(), style.color.GetB());
-        RectF labelRect(static_cast<REAL>(sx - 200), static_cast<REAL>(sy - 320.0 - t * 30.0), 400.0f, 34.0f);
-        DrawTextCentered(g, label, font, labelRect, textColor);
-    }
+void DrawCounterEdgeLabel(Graphics& g, const LiveEffect& fx) {
+    bool effective = (fx.kind == "effective_counter");
+    if (!effective && fx.kind != "counter") return;
+    EffectStyle style = GetEffectStyle(fx.kind);
+    double t = std::min(1.0, fx.age / style.duration);
+    int alpha = static_cast<int>(255 * (1.0 - t));
+    if (alpha <= 0) return;
+
+    std::wstring label = effective ? L"E.COUNTER" : L"COUNTER";
+    float dot = effective ? 1.5f : 1.0f;
+    Color textColor(static_cast<BYTE>(alpha), style.color.GetR(), style.color.GetG(), style.color.GetB());
+
+    float labelW = 72.0f, labelH = 12.0f;
+    bool leftEdge = (fx.side == 0);
+    float x = leftEdge ? 2.0f : (VirtualW - 2.0f - labelW);
+    float y = (VirtualH - labelH) / 2.0f;
+    RectF labelRect(x, y, labelW, labelH);
+    DrawPixelTextCentered(g, label, labelRect, dot, textColor);
 }
 
 void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Color fillColor, Color emptyColor, bool mirror, Color borderColor) {
@@ -488,112 +514,91 @@ void DrawGaugeBar(Graphics& g, float x, float y, float w, float h, double ratio,
     DrawBar(g, x, y, w, h, ratio, pal.Gauge, pal.GaugeEmpty, mirror, borderColor);
 }
 
-// Small dark name tag + 3 round-win pips, sitting at the bottom-left (or,
-// mirrored, bottom-right) corner of a player's HP bar - matches the
-// reference "Screen 03" HUD's tag placement. This build doesn't play best-
-// of-N rounds yet, so the pips are decorative: the first one lit shows
-// "round in progress" rather than a real win count.
+// Player name, drawn as a tiny caption directly under their HP bar - the
+// old design's boxed tag + round-win pips didn't fit inside the 384x224
+// canvas' ~8px-tall HUD row budget, so this is deliberately bare.
 static void DrawNameTag(Graphics& g, float barX, float barBottom, float barW, const std::wstring& name, bool mirror) {
     const auto& pal = GetPalette();
-    Font nameFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
-    float tagH = 22.0f;
-    RectF bbox;
-    Font measureFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
-    g.MeasureString(name.c_str(), -1, &measureFont, PointF(0, 0), &bbox);
-    float tagW = bbox.Width + 16.0f;
-    float tagX = mirror ? (barX + barW - tagW) : barX;
-    RectF tagRect(tagX, barBottom - 2.0f, tagW, tagH);
-    SolidBrush tagBg(pal.ArenaPanel);
-    g.FillRectangle(&tagBg, tagRect);
-    Pen tagBorder(pal.ArenaLine, 1.5f);
-    g.DrawRectangle(&tagBorder, tagRect);
-    DrawTextCentered(g, name, nameFont, tagRect, pal.ArenaLine);
-
-    float pipSize = 10.0f, pipGap = 4.0f;
-    float pipsX = mirror ? (tagX - pipGap - pipSize) : (tagX + tagW + pipGap);
-    for (int i = 0; i < 3; i++) {
-        float px = mirror ? (pipsX - i * (pipSize + pipGap)) : (pipsX + i * (pipSize + pipGap));
-        RectF pipRect(px, barBottom + (tagH - pipSize) / 2.0f - 2.0f, pipSize, pipSize);
-        SolidBrush pipBrush(i == 0 ? pal.Accent : pal.EmptyBar);
-        g.FillRectangle(&pipBrush, pipRect);
-        Pen pipBorder(pal.ArenaLine, 1.0f);
-        g.DrawRectangle(&pipBorder, pipRect);
-    }
+    if (mirror) DrawPixelTextRight(g, name, barX + barW, barBottom, 1.0f, pal.ArenaLine);
+    else DrawPixelText(g, name, barX, barBottom, 1.0f, pal.ArenaLine);
 }
 
 void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade) {
     const auto& pal = GetPalette();
-    Font labelFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
-    Font timerFont(UiFontFamily(), 32, FontStyleBold, UnitPixel);
-    Font comboFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
 
-    float barY = 34.0f, barH = 26.0f;
-    float p1BarX = 24.0f, barW = 420.0f;
-    float p2BarX = VirtualW - 444.0f;
+    float barY = 3.0f, barH = 8.0f;
+    float p1BarX = 3.0f, barW = 140.0f;
+    float p2BarX = VirtualW - 3.0f - barW;
     DrawHPBar(g, p1BarX, barY, barW, barH, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false, pal.ArenaLine);
     DrawHPBar(g, p2BarX, barY, barW, barH, bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP), true, pal.ArenaLine);
-    DrawNameTag(g, p1BarX, barY + barH, barW, Utf8ToWide(bs.Player1.Stats.Name), false);
-    DrawNameTag(g, p2BarX, barY + barH, barW, Utf8ToWide(bs.Player2.Stats.Name), true);
+    DrawNameTag(g, p1BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player1.Stats.Name), false);
+    DrawNameTag(g, p2BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player2.Stats.Name), true);
 
-    // Round timer: bold red rounded box. Training mode never runs out, so
-    // it shows an infinity symbol instead of a counting-down number.
-    std::wstring timerText = bs.TrainingMode ? L"∞" : std::to_wstring(static_cast<int>(std::ceil(bs.FramesLeft / 60.0)));
-    float boxW = 90, boxH = 58;
+    // Round timer: bold red box. Training mode never runs out, so it shows
+    // an infinity symbol instead of a counting-down number.
+    // "--" rather than an infinity glyph: at this tiny pixel-art scale (and
+    // under some font fallback situations) "∞" doesn't render cleanly.
+    std::wstring timerText = bs.TrainingMode ? L"--" : std::to_wstring(static_cast<int>(std::ceil(bs.FramesLeft / 60.0)));
+    // A couple of px of padding around the digits (rather than an exact
+    // fit) keeps the box border from touching the glyphs - at this tiny a
+    // scale a border pixel flush against a digit reads as part of the
+    // digit and makes it illegible.
+    float boxW = 28, boxH = 20;
     float boxX = (VirtualW - boxW) / 2.0f;
-    RectF boxRect(boxX, 12, boxW, boxH);
+    RectF boxRect(boxX, 2, boxW, boxH);
     GraphicsPath boxPath;
     AddRoundedRect(boxPath, boxRect, 0.0f);
     SolidBrush accentBrush(pal.Accent);
     g.FillPath(&accentBrush, &boxPath);
-    DrawGlossCap(g, boxRect);
-    Pen boxBorder(pal.ArenaLine, 2.0f);
+    Pen boxBorder(pal.ArenaLine, 1.0f);
     g.DrawPath(&boxBorder, &boxPath);
-    DrawTextCentered(g, timerText, timerFont, boxRect, pal.White);
-    RectF roundLabelRect(VirtualW / 2.0f - 60, 74, 120, 20);
-    DrawTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", labelFont, roundLabelRect, pal.ArenaTextDim);
+    DrawPixelTextCentered(g, timerText, boxRect, 2.0f, pal.White);
+    RectF roundLabelRect(VirtualW / 2.0f - 30, 23, 60, 8);
+    DrawPixelTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", roundLabelRect, 1.0f, pal.ArenaTextDim);
 
-    // "FIGHT" banner - a brief flash right as the match starts (Screen 03's
-    // "FIGHT / 勝負" panel), fading out over its last ~15 frames.
+    // "FIGHT" banner - a brief flash right as the match starts, fading out
+    // over its last ~15 frames. (Dropped the Japanese "/ 勝負" - the
+    // hand-authored pixel font only covers Latin glyphs, and kanji isn't
+    // legible as dot-matrix at this tiny a scale anyway.)
     if (bs.RoundStartFlashFrames > 0) {
         double t = bs.RoundStartFlashFrames / static_cast<double>(BattleSystem::RoundStartFlashDuration);
         int alpha = t > 0.3 ? 255 : static_cast<int>(255 * (t / 0.3));
-        RectF fightRect(VirtualW / 2.0f - 130, 190, 260, 46);
+        RectF fightRect(VirtualW / 2.0f - 60, 62, 120, 16);
         GraphicsPath fp;
         AddRoundedRect(fp, fightRect, 0.0f);
         SolidBrush fightBg(Color(static_cast<BYTE>(alpha), 20, 19, 18));
         g.FillPath(&fightBg, &fp);
-        Font fightFont(UiFontFamily(), 24, FontStyleBold, UnitPixel);
-        DrawTextCentered(g, L"FIGHT / 勝負", fightFont, fightRect, Color(static_cast<BYTE>(alpha), 255, 255, 255));
+        DrawPixelTextCentered(g, L"FIGHT", fightRect, 2.0f, Color(static_cast<BYTE>(alpha), 255, 255, 255));
     }
 
-    // Combo counter (matches the reference HUD's "COMBO / N HIT" box).
+    // Combo counter.
     if (comboFade > 0.01) {
         int alpha = static_cast<int>(255 * comboFade);
         int shownCombo = p1ComboDisplay > 0 ? p1ComboDisplay : p2ComboDisplay;
         bool onRight = p2ComboDisplay > 0;
         if (shownCombo >= 2) {
             std::wstring comboText = std::to_wstring(shownCombo) + L" HIT COMBO";
-            RectF cbRect(onRight ? VirtualW - 300.0f : 100.0f, 100, 200, 34);
+            RectF cbRect(onRight ? VirtualW - 82.0f : 12.0f, 28, 70, 10);
             SolidBrush bg(Color(static_cast<BYTE>(std::min(220, alpha)), pal.Accent.GetR(), pal.Accent.GetG(), pal.Accent.GetB()));
             GraphicsPath cbPath;
             AddRoundedRect(cbPath, cbRect, 0.0f);
             g.FillPath(&bg, &cbPath);
-            DrawTextCentered(g, comboText, comboFont, cbRect, Color(static_cast<BYTE>(alpha), 255, 255, 255));
+            DrawPixelTextCentered(g, comboText, cbRect, 1.0f, Color(static_cast<BYTE>(alpha), 255, 255, 255));
         }
     }
 
-    DrawGaugeBar(g, 24, 682, 320, 14, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false, pal.ArenaLine);
-    DrawGaugeBar(g, VirtualW - 344.0f, 682, 320, 14, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true, pal.ArenaLine);
-    DrawTextLeft(g, L"GAUGE", labelFont, 24, 663, pal.ArenaTextDim);
-    DrawTextRight(g, L"GAUGE", labelFont, VirtualW - 24.0f, 663, pal.ArenaTextDim);
+    float gaugeW = 90.0f, gaugeH = 6.0f, gaugeY = static_cast<float>(VirtualH) - gaugeH - 2.0f;
+    DrawGaugeBar(g, 3, gaugeY, gaugeW, gaugeH, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false, pal.ArenaLine);
+    DrawGaugeBar(g, VirtualW - 3.0f - gaugeW, gaugeY, gaugeW, gaugeH, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true, pal.ArenaLine);
+    DrawPixelText(g, L"SP", 3, gaugeY - 7, 1.0f, pal.ArenaTextDim);
+    DrawPixelTextRight(g, L"SP", VirtualW - 3.0f, gaugeY - 7, 1.0f, pal.ArenaTextDim);
 }
 
 void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
-    Pen pushPen(Color(255, 40, 200, 40), 2.0f);
-    Pen hurtPen(Color(255, 50, 110, 230), 2.0f);
-    Pen hitPen(Color(255, 230, 30, 30), 3.0f);
-    Font font(MonospaceFontFamily(), 12, FontStyleRegular, UnitPixel);
-    SolidBrush brush(GetPalette().ArenaLine); // the arena ground is dark now - needs a light-on-dark color
+    Pen pushPen(Color(255, 40, 200, 40), 1.0f);
+    Pen hurtPen(Color(255, 50, 110, 230), 1.0f);
+    Pen hitPen(Color(255, 230, 30, 30), 1.5f);
+    Color textColor = GetPalette().ArenaLine; // the arena ground is dark now - needs a light-on-dark color
 
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
         RectBox push = f->PushboxRect();
@@ -604,23 +609,22 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
             const RectBox& hb = f->ActiveHitboxRect;
             g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(hb.Width), static_cast<REAL>(hb.Height));
         }
-        // Fixed HUD position (under each player's name/HP bar) rather than
-        // tracking the character around the stage - easier to keep an eye
-        // on while also watching the actual on-stage action.
+        // Fixed HUD position (top corner, below the HP bar/name) rather
+        // than tracking the character around the stage.
         bool isP1 = (f == &bs.Player1);
-        double tx = isP1 ? 24.0 : (VirtualW - 444.0);
-        double ty = 110.0;
+        float tx = isP1 ? 2.0f : (VirtualW - 190.0f);
+        float ty = 28.0f;
         auto info = f->DebugInfo();
-        std::wstring line1 = L"state=" + Utf8ToWide(info.state) + L" move=" + Utf8ToWide(info.move) + L" frame=" + std::to_wstring(info.frame);
-        g.DrawString(line1.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty)), &brush);
-        std::wstring line2 = L"hp=" + std::to_wstring(info.hp) + L" gauge=" + std::to_wstring(static_cast<int>(info.gauge));
-        g.DrawString(line2.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 16)), &brush);
+        std::wstring line1 = L"st=" + Utf8ToWide(info.state) + L" mv=" + Utf8ToWide(info.move) + L" f=" + std::to_wstring(info.frame);
+        DrawPixelText(g, line1, tx, ty, 1.0f, textColor);
+        std::wstring line2 = L"hp=" + std::to_wstring(info.hp) + L" sp=" + std::to_wstring(static_cast<int>(info.gauge));
+        DrawPixelText(g, line2, tx, ty + 7, 1.0f, textColor);
         std::wstring line3 = L"vel=(" + std::to_wstring(static_cast<int>(info.velocityX)) + L"," + std::to_wstring(static_cast<int>(info.velocityY)) + L")";
-        g.DrawString(line3.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 32)), &brush);
-        std::wstring line4 = L"hitstun=" + std::to_wstring(info.hitstun) + L" blockstun=" + std::to_wstring(info.blockstun) + L" hitstop=" + std::to_wstring(info.hitstop);
-        g.DrawString(line4.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 48)), &brush);
+        DrawPixelText(g, line3, tx, ty + 14, 1.0f, textColor);
+        std::wstring line4 = L"hs=" + std::to_wstring(info.hitstun) + L" bs=" + std::to_wstring(info.blockstun) + L" hp0=" + std::to_wstring(info.hitstop);
+        DrawPixelText(g, line4, tx, ty + 21, 1.0f, textColor);
         std::wstring line5 = L"pos=(" + std::to_wstring(static_cast<int>(info.positionX)) + L"," + std::to_wstring(static_cast<int>(info.positionY)) + L")";
-        g.DrawString(line5.c_str(), -1, &font, PointF(static_cast<REAL>(tx), static_cast<REAL>(ty + 64)), &brush);
+        DrawPixelText(g, line5, tx, ty + 28, 1.0f, textColor);
     }
 }
 

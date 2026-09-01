@@ -1,6 +1,6 @@
 {
  "id": "jump_heavy_punch",
- "name": "ジャンプ強パンチ",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u5f37\u30d1\u30f3\u30c1",
  "startup": 6,
  "active": 7,
  "recovery": 12,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 156.4,
-   "offsetY": -147.2,
-   "width": 211.6,
-   "height": 165.6
+   "offsetX": 44.2,
+   "offsetY": -41.6,
+   "width": 59.8,
+   "height": 46.8
   }
  ],
- "knockbackX": 306.0,
+ "knockbackX": 86.48,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 10,

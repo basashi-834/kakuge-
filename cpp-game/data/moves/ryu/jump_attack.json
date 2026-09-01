@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 138.0,
-   "offsetY": -138.0,
-   "width": 202.4,
-   "height": 156.4
+   "offsetX": 39.0,
+   "offsetY": -39.0,
+   "width": 57.2,
+   "height": 44.2
   }
  ],
- "knockbackX": 252.0,
+ "knockbackX": 71.22,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 8,

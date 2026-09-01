@@ -53,6 +53,9 @@ public:
     // Timer-driven redraws every ~15ms started hitting real hardware).
     std::unique_ptr<Gdiplus::Bitmap> BackBuffer;
     int BackBufferW = 0, BackBufferH = 0;
+    // Fixed 384x224 pixel-art canvas every non-Editor screen actually draws
+    // into (see App::OnPaint) - never resized, unlike BackBuffer.
+    std::unique_ptr<Gdiplus::Bitmap> LowResBuffer;
 
     // ---- Mode (set from Title before entering CharacterSelect) ----
     // Training mode: unlimited round timer, neither KO ends the match, and
@@ -132,8 +135,14 @@ public:
     bool EditorDragging = false, EditorDragResizing = false;
     int EditorDragStartMouseX = 0, EditorDragStartMouseY = 0;
     double EditorDragStartCenterX = 0, EditorDragStartCenterY = 0, EditorDragStartW = 0, EditorDragStartH = 0;
-    Gdiplus::RectF EditorPreviewRect{700.0f, 440.0f, 300.0f, 300.0f};
-    double EditorPreviewScale = 0.42; // world px -> preview px
+    Gdiplus::RectF EditorPreviewRect{800.0f, 116.0f, 520.0f, 520.0f}; // overwritten to match by CreateEditorControls
+    // world px -> preview px. Recalibrated (0.6 / 0.282609) for the 384x224
+    // pixel-art rearchitecture's world-space shrink (kCharScale 4.6 -> 1.3,
+    // see platform/Draw.cpp) so the Editor's preview panel - real window
+    // pixels, independent of the low-res pipeline - keeps drawing the
+    // character and hitbox/hurtbox boxes at the same on-screen size as
+    // before, despite their world-unit values now being ~3.5x smaller.
+    double EditorPreviewScale = 2.1231;
 
     void SyncHitboxFieldsFromDraft();
     void ApplyHitboxFieldsToDraft();

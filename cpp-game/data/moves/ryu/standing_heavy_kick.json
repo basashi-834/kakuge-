@@ -1,6 +1,6 @@
 {
  "id": "standing_heavy_kick",
- "name": "立ち強キック",
+ "name": "\u7acb\u3061\u5f37\u30ad\u30c3\u30af",
  "startup": 11,
  "active": 4,
  "recovery": 19,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 211.6,
-   "offsetY": -198.0,
-   "width": 220.8,
-   "height": 119.6
+   "offsetX": 59.8,
+   "offsetY": -55.96,
+   "width": 62.4,
+   "height": 33.8
   }
  ],
- "knockbackX": 414.0,
+ "knockbackX": 117.0,
  "knockbackY": 0.0,
  "hitOutcome": "Knockdown",
  "meterGain": 12,

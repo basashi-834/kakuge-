@@ -1,6 +1,6 @@
 {
  "id": "jump_heavy_kick",
- "name": "ジャンプ強キック",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u5f37\u30ad\u30c3\u30af",
  "startup": 6,
  "active": 7,
  "recovery": 12,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 165.6,
-   "offsetY": -129.0,
-   "width": 220.8,
-   "height": 175.0
+   "offsetX": 46.8,
+   "offsetY": -36.46,
+   "width": 62.4,
+   "height": 49.46
   }
  ],
- "knockbackX": 306.0,
+ "knockbackX": 86.48,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 10,

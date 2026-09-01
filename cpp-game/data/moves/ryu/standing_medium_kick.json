@@ -1,6 +1,6 @@
 {
  "id": "standing_medium_kick",
- "name": "立ち中キック",
+ "name": "\u7acb\u3061\u4e2d\u30ad\u30c3\u30af",
  "startup": 8,
  "active": 3,
  "recovery": 12,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 193.2,
-   "offsetY": -207.0,
-   "width": 193.2,
-   "height": 110.4
+   "offsetX": 54.6,
+   "offsetY": -58.5,
+   "width": 54.6,
+   "height": 31.2
   }
  ],
- "knockbackX": 300.0,
+ "knockbackX": 84.78,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 8,

@@ -11,7 +11,7 @@
  "guardType": "High",
  "chipDamagePercent": 0.05,
  "hitbox": [],
- "knockbackX": 270.0,
+ "knockbackX": 76.3,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 10,
@@ -34,12 +34,12 @@
  "button": "AnyP",
  "stance": "stand",
  "projectile": {
-  "speed": 520,
+  "speed": 146.96,
   "lifetime": 100,
-  "width": 147.2,
-  "height": 147.2,
-  "spawnOffsetX": 230.0,
-  "spawnOffsetY": -276.0
+  "width": 41.6,
+  "height": 41.6,
+  "spawnOffsetX": 65.0,
+  "spawnOffsetY": -78.0
  },
- "effectiveRange": 4140.0
+ "effectiveRange": 1170.0
 }

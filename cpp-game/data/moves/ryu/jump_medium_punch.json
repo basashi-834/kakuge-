@@ -1,6 +1,6 @@
 {
  "id": "jump_medium_punch",
- "name": "ジャンプ中パンチ",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u4e2d\u30d1\u30f3\u30c1",
  "startup": 5,
  "active": 6,
  "recovery": 10,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 138.0,
-   "offsetY": -138.0,
-   "width": 184.0,
-   "height": 147.2
+   "offsetX": 39.0,
+   "offsetY": -39.0,
+   "width": 52.0,
+   "height": 41.6
   }
  ],
- "knockbackX": 252.0,
+ "knockbackX": 71.22,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 8,

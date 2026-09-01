@@ -1,6 +1,6 @@
 {
  "id": "jump_light_punch",
- "name": "ジャンプ弱パンチ",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u5f31\u30d1\u30f3\u30c1",
  "startup": 4,
  "active": 5,
  "recovery": 8,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 110.0,
-   "offsetY": -120.0,
-   "width": 156.4,
-   "height": 129.0
+   "offsetX": 31.09,
+   "offsetY": -33.91,
+   "width": 44.2,
+   "height": 36.46
   }
  ],
- "knockbackX": 198.0,
+ "knockbackX": 55.96,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 5,

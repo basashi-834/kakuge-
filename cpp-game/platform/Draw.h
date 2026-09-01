@@ -16,13 +16,12 @@
 namespace kakuge {
 
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
-constexpr double OriginX = 640.0;
-// Ground line's Y in the 1280x720 virtual canvas. Tuned so an idle
-// character (~497px tall, see kCharScale in Draw.cpp) leaves ~150px of
-// headroom above their head and ~35px of footroom before the HUD gauge
-// bars start at y=682 (both within the user's specified 120-160px /
-// 30-40px ranges).
-constexpr double OriginY = 647.0;
+constexpr double OriginX = VirtualW / 2.0;
+// Ground line's Y in the 384x224 virtual canvas. Tuned so an idle
+// character (~140px tall, see kCharScale in Draw.cpp) leaves ~54px of
+// headroom above their head (below the top HUD row) and ~30px of footroom
+// before the HUD gauge bars at the bottom of the canvas.
+constexpr double OriginY = 194.0;
 
 inline double ToScreenX(double worldX) { return OriginX + worldX; }
 inline double ToScreenY(double worldY) { return OriginY + worldY; }
@@ -43,13 +42,6 @@ void AddRoundedRect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& rect, flo
 void DrawHardShadow(Gdiplus::Graphics& g, const Gdiplus::RectF& panelRect);
 void DrawGlossCap(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
 void DrawDiagonalShine(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
-
-// Draws one of the data/images/*.png character renders scaled to fit
-// (preserving aspect ratio) inside rect, bottom-anchored and horizontally
-// centered - for "key visual" panels (Title, Character Select, Result)
-// rather than the in-battle ground-anchored DrawFighter path. Returns
-// false (draws nothing) if the file isn't present.
-bool DrawSpriteFit(Gdiplus::Graphics& g, const wchar_t* fileName, const Gdiplus::RectF& rect, float paddingFrac = 0.06f);
 
 Gdiplus::Color TagColor(const std::string& tag);
 Gdiplus::Color MoveTint(const Fighter& fighter);
@@ -73,8 +65,17 @@ void DrawProjectile(Gdiplus::Graphics& g, const Projectile& proj);
 struct EffectStyle { Gdiplus::Color color; double radius; double duration; };
 EffectStyle GetEffectStyle(const std::string& kind);
 
-struct LiveEffect { std::string kind; double x, y, age; };
+// side: 0 = the effect was scored by Player1 (shown at the left screen
+// edge), 1 = scored by Player2 (right screen edge) - see EffectEvent::side
+// in engine/Fighter.h.
+struct LiveEffect { std::string kind; double x, y, age; int side = 0; };
 void DrawEffect(Gdiplus::Graphics& g, const LiveEffect& fx);
+
+// Counter / Effective Counter info, pinned to the screen edge belonging to
+// the player who scored it (1P = left edge, 2P = right edge, per the
+// user's spec), vertically centered - rather than floating at the hit
+// location, which get too cramped to read on the 384x224 canvas.
+void DrawCounterEdgeLabel(Gdiplus::Graphics& g, const LiveEffect& fx);
 
 void DrawBar(Gdiplus::Graphics& g, float x, float y, float w, float h, double ratio,
              Gdiplus::Color fillColor, Gdiplus::Color emptyColor, bool mirror,
@@ -92,12 +93,34 @@ void DrawDebugOverlay(Gdiplus::Graphics& g, const BattleSystem& bs);
 
 // Small text helpers built on StringFormat centering (avoids re-deriving
 // MeasureString math for every call site, unlike the PowerShell edition).
+// Used only by the Character Editor (platform/Editor.cpp, App.cpp's Editor
+// header bar), which draws at real window-pixel scale with normal-sized
+// system fonts and reads fine as-is - NOT used by the 384x224 low-res
+// pipeline screens any more (see DrawPixelText* below).
 void DrawTextCentered(Gdiplus::Graphics& g, const std::wstring& text, Gdiplus::Font& font,
                        const Gdiplus::RectF& rect, Gdiplus::Color color);
 void DrawTextLeft(Gdiplus::Graphics& g, const std::wstring& text, Gdiplus::Font& font,
                    float x, float y, Gdiplus::Color color);
 void DrawTextRight(Gdiplus::Graphics& g, const std::wstring& text, Gdiplus::Font& font,
                     float rightX, float y, Gdiplus::Color color);
+
+// Hand-authored 5x7 dot-matrix "pixel font", genuinely built from square
+// blocks (no anti-aliasing, no hinting) - used for every text draw inside
+// the 384x224 low-res pipeline (Draw.cpp's HUD/effects/debug overlay,
+// every screen in Screens.cpp), where a normal TrueType/system font
+// (UiFontFamily) turned out illegible at the tiny sizes those screens
+// need. `dot` is the size in virtual-canvas pixels of one font "pixel" -
+// each glyph is 5 dots wide x 7 dots tall, advancing by 6 dots (5 + 1 gap)
+// per character. Input is case-folded to uppercase internally (the font
+// has no lowercase forms, matching the rest of the UI's all-caps style);
+// a character with no glyph (e.g. an unsupported symbol, or non-Latin
+// text like a user-renamed character's Japanese name) is skipped - drawn
+// blank rather than crashing or drawing tofu - but still advances the
+// cursor so surrounding text stays aligned.
+float PixelTextWidth(const std::wstring& text, float dot);
+void DrawPixelText(Gdiplus::Graphics& g, const std::wstring& text, float x, float y, float dot, Gdiplus::Color color);
+void DrawPixelTextCentered(Gdiplus::Graphics& g, const std::wstring& text, const Gdiplus::RectF& rect, float dot, Gdiplus::Color color);
+void DrawPixelTextRight(Gdiplus::Graphics& g, const std::wstring& text, float rightX, float y, float dot, Gdiplus::Color color);
 
 std::wstring Utf8ToWide(const std::string& s);
 std::string WideToUtf8(const std::wstring& s);

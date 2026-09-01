@@ -1,6 +1,6 @@
 {
  "id": "crouch_heavy_punch",
- "name": "しゃがみ強パンチ",
+ "name": "\u3057\u3083\u304c\u307f\u5f37\u30d1\u30f3\u30c1",
  "startup": 9,
  "active": 4,
  "recovery": 17,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 175.0,
-   "offsetY": -166.0,
-   "width": 202.4,
-   "height": 110.4
+   "offsetX": 49.46,
+   "offsetY": -46.91,
+   "width": 57.2,
+   "height": 31.2
   }
  ],
- "knockbackX": 342.0,
+ "knockbackX": 96.65,
  "knockbackY": 0.0,
  "hitOutcome": "Knockdown",
  "meterGain": 12,

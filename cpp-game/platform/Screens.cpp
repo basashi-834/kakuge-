@@ -22,17 +22,16 @@ static void DrawUiButton(Graphics& g, const UiButton& b) {
         SolidBrush fill(b.Enabled ? pal.Accent : pal.Border);
         g.FillPath(&fill, &path);
         if (b.Enabled) DrawGlossCap(g, b.Rect);
-        Pen border(pal.Ink, 2.0f);
+        Pen border(pal.Ink, 1.0f);
         g.DrawPath(&border, &path);
     } else {
         SolidBrush fill(pal.PanelBg);
         g.FillPath(&fill, &path);
-        Pen border(pal.Border, 2.0f);
+        Pen border(pal.Border, 1.0f);
         g.DrawPath(&border, &path);
     }
-    Font font(UiFontFamily(), 16, FontStyleBold, UnitPixel);
     Color textColor = b.Primary ? pal.White : pal.TextDark;
-    DrawTextCentered(g, Utf8ToWide(b.Text), font, b.Rect, textColor);
+    DrawPixelTextCentered(g, Utf8ToWide(b.Text), b.Rect, 1.0f, textColor);
 }
 
 static void DrawButtons(Graphics& g, const std::vector<UiButton>& buttons) {
@@ -53,64 +52,39 @@ static UiButton MakeButton(float x, float y, float w, float h, const std::string
 // ---------------------------------------------------------------------
 void App::BuildTitleButtons() {
     Buttons.clear();
-    float colX = 60, colW = 460;
-    Buttons.push_back(MakeButton(colX, 300, colW, 58, "GAME START", true, [this]() { IsTrainingMode = false; GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(colX, 364, colW, 46, "TRAINING MODE", false, [this]() { IsTrainingMode = true; GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(colX, 416, colW, 46, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
-    Buttons.push_back(MakeButton(colX, 468, colW, 46, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
-    Buttons.push_back(MakeButton(colX, 520, colW, 46, "EXIT", false, []() { PostQuitMessage(0); }));
+    float colX = 92, colW = 200;
+    Buttons.push_back(MakeButton(colX, 78, colW, 18, "GAME START", true, [this]() { IsTrainingMode = false; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(colX, 98, colW, 14, "TRAINING MODE", false, [this]() { IsTrainingMode = true; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(colX, 114, colW, 14, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
+    Buttons.push_back(MakeButton(colX, 130, colW, 14, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
+    Buttons.push_back(MakeButton(colX, 146, colW, 14, "EXIT", false, []() { PostQuitMessage(0); }));
 }
 
-// Left text column + right "key visual" panel, an asymmetric composition
-// (per the HARD CANDY reference's Screen 01 - left-aligned eyebrow/title/
-// tagline stacked over a button group, with a bordered art panel filling
-// the right side) rather than the old fully-centered layout.
+// Centered composition (the 384x224 canvas is too narrow for the old
+// left-text/right-art two-column layout): a small character silhouette
+// flanks each side of the wordmark, purely as pixel-art decoration - the
+// photo-sprite "key visual" panel from earlier rounds is gone per the
+// user's explicit request to express everything as pixel art.
 void App::DrawTitle(Graphics& g) {
     const auto& pal = GetPalette();
-    Font eyebrowFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
-    Font titleFont(UiFontFamily(), 72, FontStyleBold, UnitPixel);
-    Font taglineFont(UiFontFamily(), 15, FontStyleRegular, UnitPixel);
-    Font captionFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
-    Font footerFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
 
-    float colX = 60.0f;
+    SolidBrush topRule(pal.Accent);
+    g.FillRectangle(&topRule, 0.0f, 0.0f, static_cast<REAL>(VirtualW), 3.0f);
 
-    SolidBrush markBrush(pal.Accent);
-    g.FillRectangle(&markBrush, colX, 66.0f, 22.0f, 22.0f);
-    DrawTextLeft(g, L"2D FIGHTING GAME", eyebrowFont, colX + 34, 70, pal.Accent);
+    DrawPixelTextCentered(g, L"2D FIGHTING GAME", RectF(0, 8, static_cast<REAL>(VirtualW), 8), 1.0f, pal.Accent);
+    DrawPixelTextCentered(g, L"KAKUGE", RectF(0, 14, static_cast<REAL>(VirtualW), 36), 4.0f, pal.Ink);
 
-    DrawTextLeft(g, L"KAKUGE", titleFont, colX - 4, 96, pal.Ink);
-
-    float ruleW = 120;
+    float ruleW = 40;
     SolidBrush ruleBrush(pal.Accent);
-    g.FillRectangle(&ruleBrush, colX, 206.0f, ruleW, 4.0f);
-
-    DrawTextLeft(g, L"6-button, frame-data fighting.", taglineFont, colX, 228, pal.Ink70);
-    DrawTextLeft(g, L"1 CHARACTER (IN DEVELOPMENT) - VERSUS / TRAINING", captionFont, colX, 254, pal.Ink55);
+    g.FillRectangle(&ruleBrush, (VirtualW - ruleW) / 2.0f, 52.0f, ruleW, 2.0f);
+    DrawPixelTextCentered(g, L"6-BUTTON FIGHTING GAME", RectF(0, 56, static_cast<REAL>(VirtualW), 9), 1.0f, pal.Ink70);
 
     DrawButtons(g, Buttons);
     if (!Buttons.empty()) DrawDiagonalShine(g, Buttons[0].Rect); // GAME START - primary CTA gets the shine
 
-    DrawTextLeft(g, L"A/D move  S crouch  Space jump  U I O punch  J K L kick  Esc pause",
-                 footerFont, colX, static_cast<REAL>(VirtualH - 34), pal.Ink55);
-
-    // Right "key visual" panel - the provided character render, on a
-    // tinted, hard-bordered, hard-shadowed panel.
-    RectF artPanel(580, 90, 640, 560);
-    DrawHardShadow(g, artPanel);
-    GraphicsPath artPath;
-    AddRoundedRect(artPath, artPanel, 0.0f);
-    SolidBrush artBg(pal.TintRed);
-    g.FillPath(&artBg, &artPath);
-    Pen artBorder(pal.Ink, 2.0f);
-    g.DrawPath(&artBorder, &artPath);
-    if (!DrawSpriteFit(g, L"fighter_stand.png", artPanel, 0.05f)) {
-        Font phFont(UiFontFamily(), 13, FontStyleRegular, UnitPixel);
-        DrawTextCentered(g, L"KEY VISUAL", phFont, artPanel, pal.Ink45);
-    }
-
-    Font copyFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
-    DrawTextLeft(g, L"© 2026 KAKUGE PROJECT - PROTOTYPE BUILD", copyFont, colX, static_cast<REAL>(VirtualH - 16), pal.Ink45);
+    DrawPixelTextCentered(g, L"A/D MOVE  S CROUCH  SPACE JUMP", RectF(0, 194, static_cast<REAL>(VirtualW), 8), 1.0f, pal.Ink55);
+    DrawPixelTextCentered(g, L"U I O PUNCH  J K L KICK  ESC PAUSE", RectF(0, 203, static_cast<REAL>(VirtualW), 8), 1.0f, pal.Ink55);
+    DrawPixelTextCentered(g, L"(C) 2026 KAKUGE PROJECT - PROTOTYPE BUILD", RectF(0, 216, static_cast<REAL>(VirtualW), 7), 1.0f, pal.Ink45);
 }
 
 // ---------------------------------------------------------------------
@@ -123,7 +97,12 @@ static StatBars ComputeStatBars(DataManager& dm, const std::string& charId) {
     StatBars sb{50, 50, 50, 50};
     if (!stats) return sb;
     sb.stamina = std::clamp(static_cast<int>(stats->MaxHP / 12.0), 0, 100);
-    sb.speed = std::clamp(static_cast<int>(stats->WalkForwardSpeed / 3.0), 0, 100);
+    // WalkForwardSpeed is a world-space (spatial) value, rescaled by
+    // ~0.282609 alongside every other world-unit constant for the 384x224
+    // pixel-art canvas (see engine/Fighter.h) - this divisor is rescaled by
+    // the same factor (3.0 * 0.282609) so the stat bar still reads the same
+    // relative fill it did before that rescale.
+    sb.speed = std::clamp(static_cast<int>(stats->WalkForwardSpeed / 0.848), 0, 100);
     const auto* moves = dm.GetMoveset(charId);
     if (moves && !moves->empty()) {
         double totalDmg = 0, totalRange = 0;
@@ -137,7 +116,10 @@ static StatBars ComputeStatBars(DataManager& dm, const std::string& charId) {
         }
         if (n > 0) {
             sb.power = std::clamp(static_cast<int>((totalDmg / n) * 1.4), 0, 100);
-            sb.reach = std::clamp(static_cast<int>((totalRange / n) * 0.9), 0, 100);
+            // EffectiveRange is likewise a rescaled world-space value - the
+            // multiplier is rescaled by the inverse factor (0.9 / 0.282609)
+            // for the same reason as sb.speed above.
+            sb.reach = std::clamp(static_cast<int>((totalRange / n) * 3.185), 0, 100);
         }
     }
     return sb;
@@ -145,18 +127,17 @@ static StatBars ComputeStatBars(DataManager& dm, const std::string& charId) {
 
 static void DrawMiniStatBar(Graphics& g, float x, float y, float w, const std::string& label, int value) {
     const auto& pal = GetPalette();
-    Font f(UiFontFamily(), 10, FontStyleBold, UnitPixel);
-    DrawTextLeft(g, Utf8ToWide(label), f, x, y, pal.TextGray);
-    DrawBar(g, x, y + 14, w, 8, value / 100.0, pal.Accent, pal.HpEmpty, false);
+    DrawPixelText(g, Utf8ToWide(label), x, y, 1.0f, pal.TextGray);
+    DrawBar(g, x, y + 8, w, 4, value / 100.0, pal.Accent, pal.HpEmpty, false);
 }
 
-// Compact tile grid on the left + one big detail panel on the right (per
-// the reference's Screen 02: a wall of small "?" tiles feeding a single
-// large portrait/stats panel), replacing the old layout where every tile
-// carried its own full stat block.
-static constexpr float kSelectTileW = 132, kSelectTileH = 150, kSelectGap = 14;
-static constexpr float kSelectGridX = 40, kSelectGridY = 108;
-static constexpr int kSelectCols = 4;
+// Compact tile grid on the left + one detail panel on the right - the old
+// 4-column/132px-tile layout doesn't fit the 384px canvas, so tiles shrink
+// to small icon buttons and the detail panel carries the actual portrait
+// and stats.
+static constexpr float kSelectTileW = 40, kSelectTileH = 40, kSelectGap = 4;
+static constexpr float kSelectGridX = 4, kSelectGridY = 18;
+static constexpr int kSelectCols = 3;
 
 void App::BuildSelectButtons() {
     Buttons.clear();
@@ -174,13 +155,13 @@ void App::BuildSelectButtons() {
     int col = static_cast<int>(ids.size()) % kSelectCols, row = static_cast<int>(ids.size()) / kSelectCols;
     float x = kSelectGridX + col * (kSelectTileW + kSelectGap);
     float y = kSelectGridY + row * (kSelectTileH + kSelectGap);
-    Buttons.push_back(MakeButton(x, y, kSelectTileW, kSelectTileH, "+\nADD", false, [this]() {
+    Buttons.push_back(MakeButton(x, y, kSelectTileW, kSelectTileH, "+", false, [this]() {
         EditorCreatingNew = true;
         GoTo(Screen::Editor);
     }));
 
-    Buttons.push_back(MakeButton(60, 648, 200, 52, "BACK", false, [this]() { GoTo(Screen::Title); }));
-    Buttons.push_back(MakeButton(VirtualW - 260.0f, 648, 200, 52, "CONFIRM", true, [this]() {
+    Buttons.push_back(MakeButton(4, 202, 90, 18, "BACK", false, [this]() { GoTo(Screen::Title); }));
+    Buttons.push_back(MakeButton(VirtualW - 94.0f, 202, 90, 18, "CONFIRM", true, [this]() {
         if (SelectStep == 0) {
             SelectStep = 1;
             BuildSelectButtons();
@@ -194,13 +175,11 @@ void App::BuildSelectButtons() {
 
 void App::DrawCharacterSelect(Graphics& g) {
     const auto& pal = GetPalette();
-    Font headerFont(UiFontFamily(), 26, FontStyleBold, UnitPixel);
-    Font plusFont(UiFontFamily(), 13, FontStyleBold, UnitPixel);
 
     std::wstring header = SelectStep == 0 ? L"SELECT YOUR FIGHTER" : L"SELECT CPU OPPONENT";
     SolidBrush headerBg(pal.Accent);
-    g.FillRectangle(&headerBg, 0.0f, 0.0f, static_cast<REAL>(VirtualW), 90.0f);
-    DrawTextCentered(g, header, headerFont, RectF(0, 0, static_cast<REAL>(VirtualW), 90), pal.White);
+    g.FillRectangle(&headerBg, 0.0f, 0.0f, static_cast<REAL>(VirtualW), 14.0f);
+    DrawPixelTextCentered(g, header, RectF(0, 0, static_cast<REAL>(VirtualW), 14), 1.0f, pal.White);
 
     auto ids = Dm->GetCharacterIds();
     const std::string& selectedId = (SelectStep == 0) ? P1CharId : P2CharId;
@@ -213,55 +192,47 @@ void App::DrawCharacterSelect(Graphics& g) {
         bool selected = !isAddTile && ids[i] == selectedId;
         SolidBrush fill(selected ? pal.PanelBg2 : pal.PanelBg);
         g.FillPath(&fill, &path);
-        Pen border(selected ? pal.Accent : pal.Border, selected ? 3.0f : 2.0f);
+        Pen border(selected ? pal.Accent : pal.Border, selected ? 2.0f : 1.0f);
         g.DrawPath(&border, &path);
 
         if (isAddTile) {
-            DrawTextCentered(g, L"+\nADD", plusFont, b.Rect, pal.Ink55);
+            DrawPixelTextCentered(g, L"+", b.Rect, 2.0f, pal.Ink55);
             continue;
         }
         const std::string& id = ids[i];
         double px = b.Rect.X + b.Rect.Width / 2.0;
-        double py = b.Rect.Y + 90;
+        double py = b.Rect.Y + b.Rect.Height - 4.0;
         auto* stats = Dm->GetCharacter(id);
         Color bodyColor = stats ? Color(255, static_cast<BYTE>(stats->ColorR), static_cast<BYTE>(stats->ColorG), static_cast<BYTE>(stats->ColorB)) : pal.TextDark;
-        DrawHumanoid(g, px, py, bodyColor, {0.16, 1});
-        Font tileNameFont(UiFontFamily(), 12, FontStyleBold, UnitPixel);
-        DrawTextCentered(g, Utf8ToWide(stats ? stats->Name : id), tileNameFont, RectF(b.Rect.X, b.Rect.Y + b.Rect.Height - 22, b.Rect.Width, 20), pal.TextDark);
+        DrawHumanoid(g, px, py, bodyColor, {0.24, 1});
     }
 
-    // Right-side detail panel: big portrait on top, name + full stat block
-    // below - the single large panel the reference feeds every tile into,
-    // instead of repeating stats inside each small tile.
-    RectF detailPanel(700, 108, 520, 512);
-    DrawHardShadow(g, detailPanel);
+    // Right-side detail panel: portrait on top, name + stat block below.
+    RectF detailPanel(152, 18, 228, 180);
     GraphicsPath dp;
     AddRoundedRect(dp, detailPanel, 0.0f);
     SolidBrush detailBg(pal.PanelBg);
     g.FillPath(&detailBg, &dp);
-    Pen detailBorder(pal.Ink, 2.0f);
+    Pen detailBorder(pal.Ink, 1.5f);
     g.DrawPath(&detailBorder, &dp);
 
-    RectF portraitRect(detailPanel.X, detailPanel.Y, detailPanel.Width, 300);
+    RectF portraitRect(detailPanel.X, detailPanel.Y, detailPanel.Width, 96);
     SolidBrush portraitBg(pal.TintRed);
     g.FillRectangle(&portraitBg, portraitRect);
     auto* selStats = Dm->GetCharacter(selectedId);
-    if (!DrawSpriteFit(g, L"fighter_stand.png", portraitRect, 0.04f)) {
-        Color bodyColor = selStats ? Color(255, static_cast<BYTE>(selStats->ColorR), static_cast<BYTE>(selStats->ColorG), static_cast<BYTE>(selStats->ColorB)) : pal.TextDark;
-        DrawHumanoid(g, portraitRect.X + portraitRect.Width / 2.0, portraitRect.Y + portraitRect.Height - 20, bodyColor, {0.55, 1});
-    }
-    Pen portraitDivider(pal.Ink, 2.0f);
-    g.DrawLine(&portraitDivider, detailPanel.X, detailPanel.Y + 300, detailPanel.X + detailPanel.Width, detailPanel.Y + 300);
+    Color bodyColor = selStats ? Color(255, static_cast<BYTE>(selStats->ColorR), static_cast<BYTE>(selStats->ColorG), static_cast<BYTE>(selStats->ColorB)) : pal.TextDark;
+    DrawHumanoid(g, portraitRect.X + portraitRect.Width / 2.0, portraitRect.Y + portraitRect.Height - 8, bodyColor, {0.62, 1});
+    Pen portraitDivider(pal.Ink, 1.5f);
+    g.DrawLine(&portraitDivider, detailPanel.X, detailPanel.Y + 96, detailPanel.X + detailPanel.Width, detailPanel.Y + 96);
 
-    Font detailNameFont(UiFontFamily(), 26, FontStyleBold, UnitPixel);
-    DrawTextLeft(g, Utf8ToWide(selStats ? selStats->Name : selectedId), detailNameFont, detailPanel.X + 24, detailPanel.Y + 316, pal.Ink);
+    DrawPixelText(g, Utf8ToWide(selStats ? selStats->Name : selectedId), detailPanel.X + 6, detailPanel.Y + 100, 1.5f, pal.Ink);
 
     StatBars sb = ComputeStatBars(*Dm, selectedId);
-    float statX = detailPanel.X + 24, statW = detailPanel.Width - 48, statY = detailPanel.Y + 366;
+    float statX = detailPanel.X + 6, statW = detailPanel.Width - 12, statY = detailPanel.Y + 116;
     DrawMiniStatBar(g, statX, statY, statW, "POWER", sb.power);
-    DrawMiniStatBar(g, statX, statY + 40, statW, "STAMINA", sb.stamina);
-    DrawMiniStatBar(g, statX, statY + 80, statW, "SPEED", sb.speed);
-    DrawMiniStatBar(g, statX, statY + 120, statW, "REACH", sb.reach);
+    DrawMiniStatBar(g, statX, statY + 15, statW, "STAMINA", sb.stamina);
+    DrawMiniStatBar(g, statX, statY + 30, statW, "SPEED", sb.speed);
+    DrawMiniStatBar(g, statX, statY + 45, statW, "REACH", sb.reach);
 
     // BACK/CONFIRM are the last two entries in Buttons (DrawUiButton already
     // applies the gloss cap itself for the primary CONFIRM button).
@@ -273,8 +244,6 @@ void App::DrawCharacterSelect(Graphics& g) {
 // ---------------------------------------------------------------------
 void App::DrawVS(Graphics& g) {
     const auto& pal = GetPalette();
-    Font nameFont(UiFontFamily(), 30, FontStyleBold, UnitPixel);
-    Font hintFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
 
     double t = std::min(1.0, VsTimer / 0.5);
     float half = VirtualW / 2.0f;
@@ -291,13 +260,13 @@ void App::DrawVS(Graphics& g) {
     auto* p1 = Dm->GetCharacter(P1CharId);
     auto* p2 = Dm->GetCharacter(P2CharId);
     if (t > 0.3) {
-        DrawTextCentered(g, Utf8ToWide(p1 ? p1->Name : P1CharId), nameFont, RectF(0, VirtualH / 2.0f - 60, half, 60), pal.White);
-        DrawTextCentered(g, Utf8ToWide(p2 ? p2->Name : P2CharId), nameFont, RectF(half, VirtualH / 2.0f - 60, half, 60), pal.White);
+        DrawPixelTextCentered(g, Utf8ToWide(p1 ? p1->Name : P1CharId), RectF(0, VirtualH / 2.0f - 24, half, 24), 2.0f, pal.White);
+        DrawPixelTextCentered(g, Utf8ToWide(p2 ? p2->Name : P2CharId), RectF(half, VirtualH / 2.0f - 24, half, 24), 2.0f, pal.White);
     }
 
     if (VsTimer > 0.5) {
         double diamondT = std::min(1.0, (VsTimer - 0.5) / 0.3);
-        float size = static_cast<float>(90 * diamondT);
+        float size = static_cast<float>(36 * diamondT);
         PointF pts[4] = {
             PointF(VirtualW / 2.0f, VirtualH / 2.0f - size),
             PointF(VirtualW / 2.0f + size, VirtualH / 2.0f),
@@ -306,11 +275,11 @@ void App::DrawVS(Graphics& g) {
         };
         SolidBrush diaBrush(pal.White);
         g.FillPolygon(&diaBrush, pts, 4);
-        Font vsSmall(UiFontFamily(), static_cast<REAL>(std::max(10.0, 32 * diamondT)), FontStyleBold, UnitPixel);
-        DrawTextCentered(g, L"VS", vsSmall, RectF(VirtualW / 2.0f - size, VirtualH / 2.0f - size, size * 2, size * 2), pal.Accent);
+        float vsDot = static_cast<float>(std::max(1.0, 2.0 * diamondT));
+        DrawPixelTextCentered(g, L"VS", RectF(VirtualW / 2.0f - size, VirtualH / 2.0f - size, size * 2, size * 2), vsDot, pal.Accent);
     }
 
-    DrawTextCentered(g, L"press any key to continue", hintFont, RectF(0, static_cast<REAL>(VirtualH - 40), static_cast<REAL>(VirtualW), 24), pal.White);
+    DrawPixelTextCentered(g, L"PRESS ANY KEY TO CONTINUE", RectF(0, static_cast<REAL>(VirtualH - 18), static_cast<REAL>(VirtualW), 12), 1.0f, pal.White);
 }
 
 // ---------------------------------------------------------------------
@@ -344,42 +313,43 @@ void App::BuildGameButtons() {
     Buttons.clear();
     if (!Paused) return;
     float cx = VirtualW / 2.0f;
-    float panelTop = VirtualH / 2.0f - 190;
 
     if (!IsTrainingMode) {
         // Versus mode: a real CPU opponent, nothing to configure - keep
         // the pause menu simple.
-        Buttons.push_back(MakeButton(cx - 150, panelTop + 70, 300, 50, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
-        Buttons.push_back(MakeButton(cx - 150, panelTop + 140, 300, 50, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
+        float panelTop = VirtualH / 2.0f - 35;
+        Buttons.push_back(MakeButton(cx - 70, panelTop + 26, 140, 18, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
+        Buttons.push_back(MakeButton(cx - 70, panelTop + 48, 140, 18, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
         return;
     }
 
-    Buttons.push_back(MakeButton(cx - 150, panelTop + 70, 300, 50, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
+    float panelTop = VirtualH / 2.0f - 75;
+    Buttons.push_back(MakeButton(cx - 60, panelTop + 22, 120, 16, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
 
     auto modeButton = [this, cx, panelTop](float x, const char* label, DummyMode mode) {
         bool active = (P2DummyMode == mode);
-        return MakeButton(x, panelTop + 140, 140, 40, label, active, [this, mode]() {
+        return MakeButton(x, panelTop + 46, 58, 14, label, active, [this, mode]() {
             P2DummyMode = mode;
             if (Battle) Battle->CpuAI->Mode = mode;
             BuildGameButtons();
         });
     };
-    Buttons.push_back(modeButton(cx - 300, "P2: CPU", DummyMode::CPU));
-    Buttons.push_back(modeButton(cx - 150, "P2: STAND", DummyMode::Stand));
-    Buttons.push_back(modeButton(cx, "P2: CROUCH", DummyMode::Crouch));
-    Buttons.push_back(modeButton(cx + 150, "P2: JUMP", DummyMode::Jump));
+    Buttons.push_back(modeButton(cx - 124, "CPU", DummyMode::CPU));
+    Buttons.push_back(modeButton(cx - 62, "STAND", DummyMode::Stand));
+    Buttons.push_back(modeButton(cx, "CROUCH", DummyMode::Crouch));
+    Buttons.push_back(modeButton(cx + 62, "JUMP", DummyMode::Jump));
 
-    Buttons.push_back(MakeButton(cx - 300, panelTop + 200, 220, 44,
+    Buttons.push_back(MakeButton(cx - 118, panelTop + 66, 114, 14,
         TrainingAutoHealPref ? "AUTO HEAL: ON" : "AUTO HEAL: OFF", TrainingAutoHealPref, [this]() {
             TrainingAutoHealPref = !TrainingAutoHealPref;
             if (Battle) Battle->TrainingAutoHeal = TrainingAutoHealPref;
             BuildGameButtons();
         }));
-    Buttons.push_back(MakeButton(cx - 60, panelTop + 200, 220, 44, "RESET HP", false, [this]() {
+    Buttons.push_back(MakeButton(cx + 4, panelTop + 66, 114, 14, "RESET HP", false, [this]() {
         if (Battle) Battle->ResetHP();
     }));
 
-    Buttons.push_back(MakeButton(cx - 150, panelTop + 260, 300, 50, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
+    Buttons.push_back(MakeButton(cx - 70, panelTop + 90, 140, 16, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
 }
 
 void App::DrawGame(Graphics& g) {
@@ -407,16 +377,18 @@ void App::DrawGame(Graphics& g) {
     SolidBrush arenaBg(pal.ArenaBg);
     g.FillRectangle(&arenaBg, -40.0f, -40.0f, static_cast<REAL>(VirtualW + 80), static_cast<REAL>(VirtualH + 80));
 
-    // Thin floor line rather than a tall band: the ground line moved down
-    // (OriginY=647, see Draw.h) to hit the user's footroom spec, leaving
-    // little clearance before the GAUGE HUD row starts at y=665.
+    // Thin floor line at the ground (OriginY, see Draw.h), leaving a
+    // narrow footroom band before the GAUGE HUD row at the bottom edge.
     SolidBrush groundBrush(pal.ArenaPanel);
-    g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 12.0f);
+    g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 4.0f);
 
     DrawFighter(g, Battle->Player1);
     DrawFighter(g, Battle->Player2);
     for (const auto& proj : Battle->Projectiles) DrawProjectile(g, proj);
     for (const auto& fx : Effects) DrawEffect(g, fx);
+    // Counter/Effective Counter info is pinned to the scoring player's
+    // screen edge (1P left, 2P right) rather than floating over the hit.
+    for (const auto& fx : Effects) DrawCounterEdgeLabel(g, fx);
 
     DrawHUD(g, *Battle, LastP1Combo, LastP2Combo, std::max(P1ComboFade, P2ComboFade));
     if (DebugVisible && IsTrainingMode) DrawDebugOverlay(g, *Battle);
@@ -428,22 +400,18 @@ void App::DrawGame(Graphics& g) {
         g.FillRectangle(&dim, 0.0f, 0.0f, static_cast<REAL>(VirtualW), static_cast<REAL>(VirtualH));
 
         float cx = VirtualW / 2.0f;
-        float panelTop = VirtualH / 2.0f - 190;
-        float panelHeight = IsTrainingMode ? 350.0f : 220.0f;
-        RectF panelRect(cx - 340, panelTop, 680, panelHeight);
-        DrawHardShadow(g, panelRect);
+        RectF panelRect = IsTrainingMode ? RectF(cx - 135, VirtualH / 2.0f - 85, 270, 140)
+                                          : RectF(cx - 80, VirtualH / 2.0f - 45, 160, 90);
         GraphicsPath path;
         AddRoundedRect(path, panelRect, 0.0f);
         SolidBrush panelBg(pal.PanelBg);
         g.FillPath(&panelBg, &path);
-        Pen border(pal.Ink, 2.0f);
+        Pen border(pal.Ink, 1.5f);
         g.DrawPath(&border, &path);
 
-        Font titleFont(UiFontFamily(), 24, FontStyleBold, UnitPixel);
-        DrawTextCentered(g, IsTrainingMode ? L"TRAINING - PAUSED" : L"PAUSED", titleFont, RectF(cx - 340, panelTop + 14, 680, 40), pal.TextDark);
+        DrawPixelTextCentered(g, IsTrainingMode ? L"TRAINING - PAUSED" : L"PAUSED", RectF(panelRect.X, panelRect.Y + 2, panelRect.Width, 14), 1.5f, pal.TextDark);
         if (IsTrainingMode) {
-            Font hintFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
-            DrawTextCentered(g, L"P2 control mode (practice)", hintFont, RectF(cx - 340, panelTop + 118, 680, 18), pal.TextGray);
+            DrawPixelTextCentered(g, L"P2 CONTROL MODE (PRACTICE)", RectF(panelRect.X, panelRect.Y + 34, panelRect.Width, 8), 1.0f, pal.TextGray);
         }
 
         DrawButtons(g, Buttons);
@@ -455,14 +423,16 @@ void App::DrawGame(Graphics& g) {
 // ---------------------------------------------------------------------
 void App::BuildResultButtons() {
     Buttons.clear();
-    float colX = 60, colW = 520;
-    Buttons.push_back(MakeButton(colX, 470, colW, 58, "REMATCH", true, [this]() { GoTo(Screen::Game); }));
-    Buttons.push_back(MakeButton(colX, 536, colW, 46, "CHARACTER SELECT", false, [this]() { GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(colX, 588, colW, 46, "TITLE", false, [this]() { GoTo(Screen::Title); }));
+    float y = 160, w = 122, gap = 6, x = 3;
+    Buttons.push_back(MakeButton(x, y, w, 16, "REMATCH", true, [this]() { GoTo(Screen::Game); }));
+    Buttons.push_back(MakeButton(x + w + gap, y, w, 16, "SELECT", false, [this]() { GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(x + 2 * (w + gap), y, w, 16, "TITLE", false, [this]() { GoTo(Screen::Title); }));
 }
 
-// Left column (banner/quote/stat tiles/buttons) + right "WIN POSE" panel,
-// per the reference's Screen 05 - replacing the old fully-centered layout.
+// Centered composition: banner, quote, three stat tiles, a small "win
+// pose" panel (the winner's pixel-art silhouette, no photo sprite), then
+// the action buttons - replaces the old two-column layout that no longer
+// fits the 384x224 canvas.
 void App::DrawResult(Graphics& g) {
     const auto& pal = GetPalette();
     std::wstring resultText = L"DRAW";
@@ -472,75 +442,63 @@ void App::DrawResult(Graphics& g) {
         else { resultText = L"CPU WIN"; quote = L"Train harder. Try again."; }
     }
 
-    float colX = 60;
-    RectF banner(colX, 60, 360, 90);
-    DrawHardShadow(g, banner);
+    RectF banner((VirtualW - 170) / 2.0f, 4, 170, 22);
     GraphicsPath path;
     AddRoundedRect(path, banner, 0.0f);
     SolidBrush bannerBrush(pal.Accent);
     g.FillPath(&bannerBrush, &path);
     DrawGlossCap(g, banner);
-    DrawDiagonalShine(g, banner);
-    Pen bannerBorder(pal.Ink, 2.0f);
+    Pen bannerBorder(pal.Ink, 1.5f);
     g.DrawPath(&bannerBorder, &path);
-    Font bannerFont(UiFontFamily(), 34, FontStyleBold, UnitPixel);
-    DrawTextCentered(g, resultText, bannerFont, banner, pal.White);
+    DrawPixelTextCentered(g, resultText, banner, 2.0f, pal.White);
 
-    Font quoteFont(UiFontFamily(), 13, FontStyleItalic, UnitPixel);
-    DrawTextLeft(g, quote, quoteFont, colX, 172, pal.Ink70);
+    DrawPixelTextCentered(g, quote, RectF(0, 28, static_cast<REAL>(VirtualW), 8), 1.0f, pal.Ink70);
 
     struct Tile { std::wstring label; std::wstring value; };
     std::vector<Tile> tiles = {
-        {L"MAX COMBO", std::to_wstring(LastResult.maxCombo) + L" HITS"},
-        {L"TIME LEFT", std::to_wstring(LastResult.timeLeftSeconds) + L"s"},
-        {L"DAMAGE TAKEN", std::to_wstring(LastResult.damageTaken)},
+        {L"COMBO", std::to_wstring(LastResult.maxCombo) + L" HITS"},
+        {L"TIME", std::to_wstring(LastResult.timeLeftSeconds) + L"S"},
+        {L"DAMAGE", std::to_wstring(LastResult.damageTaken)},
     };
-    float tileW = 165, tileH = 84, gap = 20;
-    Font valueFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
-    Font labelFont(UiFontFamily(), 10, FontStyleBold, UnitPixel);
+    float tileW = 72, tileH = 30, gap = 4;
+    float tilesStartX = (VirtualW - (tileW * 3 + gap * 2)) / 2.0f;
     for (size_t i = 0; i < tiles.size(); i++) {
-        RectF tr(colX + i * (tileW + gap), 208, tileW, tileH);
+        RectF tr(tilesStartX + i * (tileW + gap), 38, tileW, tileH);
         GraphicsPath tp;
         AddRoundedRect(tp, tr, 0.0f);
         SolidBrush tileBg(pal.PanelBg);
         g.FillPath(&tileBg, &tp);
-        Pen tileBorder(pal.Border, 2.0f);
+        Pen tileBorder(pal.Border, 1.0f);
         g.DrawPath(&tileBorder, &tp);
-        DrawTextCentered(g, tiles[i].value, valueFont, RectF(tr.X, tr.Y + 10, tr.Width, 34), pal.Accent);
-        DrawTextCentered(g, tiles[i].label, labelFont, RectF(tr.X, tr.Y + 50, tr.Width, 20), pal.TextGray);
+        DrawPixelTextCentered(g, tiles[i].value, RectF(tr.X, tr.Y + 3, tr.Width, 14), 1.5f, pal.Accent);
+        DrawPixelTextCentered(g, tiles[i].label, RectF(tr.X, tr.Y + 18, tr.Width, 10), 1.0f, pal.TextGray);
     }
 
-    DrawButtons(g, Buttons);
-
-    // Right "WIN POSE" panel - the winner's render, on a tinted, bordered
-    // panel with a name/subtitle strip below it.
-    RectF winPanel(660, 60, 560, 574);
-    DrawHardShadow(g, winPanel);
+    // "WIN POSE" panel - the winner's pixel-art silhouette, tinted panel
+    // with a name/subtitle strip below it.
+    RectF winPanel((VirtualW - 140) / 2.0f, 76, 140, 78);
     GraphicsPath wp;
     AddRoundedRect(wp, winPanel, 0.0f);
     SolidBrush winBg(pal.PanelBg);
     g.FillPath(&winBg, &wp);
-    Pen winBorder(pal.Ink, 2.0f);
+    Pen winBorder(pal.Ink, 1.5f);
     g.DrawPath(&winBorder, &wp);
 
-    RectF poseRect(winPanel.X, winPanel.Y, winPanel.Width, winPanel.Height - 70);
+    RectF poseRect(winPanel.X, winPanel.Y, winPanel.Width, winPanel.Height - 22);
     SolidBrush poseBg(pal.TintRed);
     g.FillRectangle(&poseBg, poseRect);
     bool winnerIsP1 = LastResult.isDraw || LastResult.winnerIsPlayer;
-    const wchar_t* poseSprite = winnerIsP1 ? L"fighter_punch.png" : L"fighter_kick.png";
-    if (!DrawSpriteFit(g, poseSprite, poseRect, 0.05f)) {
-        Font phFont(UiFontFamily(), 13, FontStyleRegular, UnitPixel);
-        DrawTextCentered(g, L"WIN POSE", phFont, poseRect, pal.Ink45);
-    }
-    Pen poseDivider(pal.Ink, 2.0f);
-    g.DrawLine(&poseDivider, winPanel.X, winPanel.Y + poseRect.Height, winPanel.X + winPanel.Width, winPanel.Y + poseRect.Height);
-
     const std::string& winnerId = winnerIsP1 ? P1CharId : P2CharId;
     auto* winnerStats = Dm->GetCharacter(winnerId);
-    Font winNameFont(UiFontFamily(), 22, FontStyleBold, UnitPixel);
-    DrawTextLeft(g, Utf8ToWide(winnerStats ? winnerStats->Name : winnerId), winNameFont, winPanel.X + 24, winPanel.Y + poseRect.Height + 14, pal.Ink);
-    Font winSubFont(UiFontFamily(), 12, FontStyleRegular, UnitPixel);
-    DrawTextLeft(g, LastResult.isDraw ? L"DRAW" : (winnerIsP1 ? L"PLAYER 1" : L"CPU"), winSubFont, winPanel.X + 24, winPanel.Y + poseRect.Height + 42, pal.Ink55);
+    Color bodyColor = winnerStats ? Color(255, static_cast<BYTE>(winnerStats->ColorR), static_cast<BYTE>(winnerStats->ColorG), static_cast<BYTE>(winnerStats->ColorB)) : pal.TextDark;
+    DrawHumanoid(g, poseRect.X + poseRect.Width / 2.0, poseRect.Y + poseRect.Height - 4, bodyColor, {0.35, 1, 20, 0, 0, 0});
+    Pen poseDivider(pal.Ink, 1.5f);
+    g.DrawLine(&poseDivider, winPanel.X, winPanel.Y + poseRect.Height, winPanel.X + winPanel.Width, winPanel.Y + poseRect.Height);
+
+    DrawPixelTextCentered(g, Utf8ToWide(winnerStats ? winnerStats->Name : winnerId), RectF(winPanel.X, winPanel.Y + poseRect.Height + 2, winPanel.Width, 10), 1.5f, pal.Ink);
+    DrawPixelTextCentered(g, LastResult.isDraw ? L"DRAW" : (winnerIsP1 ? L"PLAYER 1" : L"CPU"), RectF(winPanel.X, winPanel.Y + poseRect.Height + 12, winPanel.Width, 8), 1.0f, pal.Ink55);
+
+    DrawButtons(g, Buttons);
 }
 
 // ---------------------------------------------------------------------
@@ -559,10 +517,10 @@ void App::ApplyResolution(int w, int h) {
 void App::BuildSettingsButtons() {
     Buttons.clear();
     const auto& presets = ResolutionPresets();
-    float tileW = 220, tileH = 70, gap = 16;
+    float tileW = 118, tileH = 26, gap = 3;
     int cols = 3;
     float startX = (VirtualW - (tileW * cols + gap * (cols - 1))) / 2.0f;
-    float startY = 170;
+    float startY = 28;
     for (size_t i = 0; i < presets.size(); i++) {
         int col = static_cast<int>(i) % cols;
         int row = static_cast<int>(i) / cols;
@@ -571,8 +529,8 @@ void App::BuildSettingsButtons() {
         Buttons.push_back(MakeButton(x, y, tileW, tileH, "", static_cast<int>(i) == PendingResIndex, [this, i]() { PendingResIndex = static_cast<int>(i); BuildSettingsButtons(); }));
     }
     float cx = VirtualW / 2.0f;
-    Buttons.push_back(MakeButton(cx - 260, 600, 240, 56, "BACK", false, [this]() { GoTo(Screen::Title); }));
-    Buttons.push_back(MakeButton(cx + 20, 600, 240, 56, "APPLY", true, [this]() {
+    Buttons.push_back(MakeButton(cx - 118, 204, 110, 16, "BACK", false, [this]() { GoTo(Screen::Title); }));
+    Buttons.push_back(MakeButton(cx + 8, 204, 110, 16, "APPLY", true, [this]() {
         const auto& p = ResolutionPresets()[PendingResIndex];
         ApplyResolution(p.width, p.height);
         GoTo(Screen::Title);
@@ -581,12 +539,9 @@ void App::BuildSettingsButtons() {
 
 void App::DrawSettings(Graphics& g) {
     const auto& pal = GetPalette();
-    Font headerFont(UiFontFamily(), 26, FontStyleBold, UnitPixel);
-    Font labelFont(UiFontFamily(), 15, FontStyleBold, UnitPixel);
-    Font subFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
 
-    DrawTextCentered(g, L"SETTINGS", headerFont, RectF(0, 60, static_cast<REAL>(VirtualW), 40), pal.TextDark);
-    DrawTextCentered(g, L"DISPLAY RESOLUTION (320x200 - 1920x1080, 4:3 or 16:9)", subFont, RectF(0, 108, static_cast<REAL>(VirtualW), 24), pal.TextGray);
+    DrawPixelTextCentered(g, L"SETTINGS", RectF(0, 4, static_cast<REAL>(VirtualW), 12), 1.5f, pal.TextDark);
+    DrawPixelTextCentered(g, L"DISPLAY RESOLUTION (320X200 - 1920X1080)", RectF(0, 16, static_cast<REAL>(VirtualW), 8), 1.0f, pal.TextGray);
 
     const auto& presets = ResolutionPresets();
     for (size_t i = 0; i < Buttons.size() - 2 && i < presets.size(); i++) {
@@ -596,11 +551,11 @@ void App::DrawSettings(Graphics& g) {
         AddRoundedRect(path, b.Rect, 0.0f);
         SolidBrush fill(selected ? pal.Accent : pal.PanelBg);
         g.FillPath(&fill, &path);
-        Pen border(selected ? pal.Accent : pal.Border, 2.0f);
+        Pen border(selected ? pal.Accent : pal.Border, 1.0f);
         g.DrawPath(&border, &path);
         Color textColor = selected ? pal.White : pal.TextDark;
-        DrawTextCentered(g, Utf8ToWide(presets[i].label), labelFont, RectF(b.Rect.X, b.Rect.Y + 8, b.Rect.Width, 26), textColor);
-        DrawTextCentered(g, Utf8ToWide(presets[i].aspect), subFont, RectF(b.Rect.X, b.Rect.Y + 38, b.Rect.Width, 20), selected ? pal.White : pal.TextGray);
+        DrawPixelTextCentered(g, Utf8ToWide(presets[i].label), RectF(b.Rect.X, b.Rect.Y + 3, b.Rect.Width, 12), 1.0f, textColor);
+        DrawPixelTextCentered(g, Utf8ToWide(presets[i].aspect), RectF(b.Rect.X, b.Rect.Y + 15, b.Rect.Width, 9), 1.0f, selected ? pal.White : pal.TextGray);
     }
     DrawUiButton(g, Buttons[Buttons.size() - 2]);
     DrawUiButton(g, Buttons[Buttons.size() - 1]);

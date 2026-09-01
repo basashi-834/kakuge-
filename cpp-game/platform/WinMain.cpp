@@ -18,7 +18,6 @@ using namespace kakuge;
 namespace kakuge {
 int g_RoundTimeSeconds = 99;
 fs::path g_AudioDir;
-fs::path g_ImagesDir;
 
 // Sound playback: same convention as the earlier WinForms edition's
 // AudioHelper.ps1 - no .wav files ship by default, and playback silently
@@ -128,15 +127,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     fs::path userDir = UserAppDataDir();
     LoadMatchRules(dataDir);
     g_AudioDir = ExeDir() / "Audio";
-    g_ImagesDir = dataDir / "Images";
 
     App app;
     g_App = &app;
 
-    // Provisional window at the default 1280x720 (matches VirtualW/H) so
-    // App::Init (which needs a valid Hwnd for later resizing) has
-    // somewhere to attach to; resized to the saved Settings immediately
-    // after Init loads them.
+    // Provisional window at VirtualW/H (384x224) so App::Init (which needs
+    // a valid Hwnd for later resizing) has somewhere to attach to; resized
+    // to the saved Settings immediately after Init loads them.
     RECT rc{0, 0, VirtualW, VirtualH};
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX, FALSE);
     HWND hwnd = CreateWindowExW(0, kWindowClass, L"KAKUGE", (WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX),

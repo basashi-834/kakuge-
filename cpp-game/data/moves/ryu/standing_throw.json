@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 119.6,
-   "offsetY": -253.0,
-   "width": 138.0,
-   "height": 184.0
+   "offsetX": 33.8,
+   "offsetY": -71.5,
+   "width": 39.0,
+   "height": 52.0
   }
  ],
- "knockbackX": 468.0,
+ "knockbackX": 132.26,
  "knockbackY": 0.0,
  "hitOutcome": "Knockdown",
  "meterGain": 10,
@@ -38,5 +38,5 @@
  "input": "",
  "button": "Throw",
  "stance": "stand",
- "effectiveRange": 253.0
+ "effectiveRange": 71.5
 }

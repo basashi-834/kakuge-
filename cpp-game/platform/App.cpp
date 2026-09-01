@@ -81,24 +81,46 @@ void App::OnPaint() {
     g.FillRectangle(&winBg, 0, 0, w, h);
 
     if (Current != Screen::Editor) {
-        ViewTransform t = ViewTransform::Compute(w, h);
-        t.ApplyTo(g);
+        // Pixel-art pipeline: every custom-drawn screen renders into a
+        // genuine 384x224 low-res buffer first (crisp, AA off), which is
+        // then nearest-neighbor-scaled onto BackBuffer at the letterboxed
+        // size - this is what keeps the whole game reading as real pixel
+        // art instead of blurry stretched vector art at any output
+        // resolution. ScreenToVirtual (used for mouse hit-testing) still
+        // maps through the exact same ViewTransform math.
+        if (!LowResBuffer) {
+            LowResBuffer = std::make_unique<Bitmap>(VirtualW, VirtualH, PixelFormat32bppRGB);
+        }
+        Graphics lg(LowResBuffer.get());
+        lg.SetSmoothingMode(SmoothingModeNone);
+        lg.SetPixelOffsetMode(PixelOffsetModeHalf);
+        lg.SetTextRenderingHint(TextRenderingHintSingleBitPerPixelGridFit);
+        lg.SetInterpolationMode(InterpolationModeNearestNeighbor);
+
         SolidBrush canvasBg(pal.Bg);
-        g.FillRectangle(&canvasBg, 0.0f, 0.0f, static_cast<REAL>(VirtualW), static_cast<REAL>(VirtualH));
+        lg.FillRectangle(&canvasBg, 0, 0, VirtualW, VirtualH);
 
         switch (Current) {
-            case Screen::Title: DrawTitle(g); break;
-            case Screen::CharacterSelect: DrawCharacterSelect(g); break;
-            case Screen::VS: DrawVS(g); break;
-            case Screen::Game: DrawGame(g); break;
-            case Screen::Result: DrawResult(g); break;
-            case Screen::Settings: DrawSettings(g); break;
+            case Screen::Title: DrawTitle(lg); break;
+            case Screen::CharacterSelect: DrawCharacterSelect(lg); break;
+            case Screen::VS: DrawVS(lg); break;
+            case Screen::Game: DrawGame(lg); break;
+            case Screen::Result: DrawResult(lg); break;
+            case Screen::Settings: DrawSettings(lg); break;
             default: break;
         }
+
+        ViewTransform t = ViewTransform::Compute(w, h);
+        g.SetInterpolationMode(InterpolationModeNearestNeighbor);
+        g.SetSmoothingMode(SmoothingModeNone);
+        g.SetPixelOffsetMode(PixelOffsetModeHalf);
+        RectF destRect(static_cast<REAL>(t.offsetX), static_cast<REAL>(t.offsetY),
+                        static_cast<REAL>(VirtualW * t.scale), static_cast<REAL>(VirtualH * t.scale));
+        g.DrawImage(LowResBuffer.get(), destRect, 0, 0, static_cast<REAL>(VirtualW), static_cast<REAL>(VirtualH), UnitPixel);
     } else {
         // Editor: native controls own the form area below, but the header
         // bar itself is drawn with GDI+ (in real window pixels, not the
-        // virtual-canvas transform, since it sits alongside native
+        // low-res pixel-art pipeline, since it sits alongside native
         // controls that use real pixel coordinates) so the screen reads as
         // part of the same app instead of a bare Win32 dialog.
         SolidBrush headerBg(pal.Accent);
@@ -272,7 +294,7 @@ void App::OnTimer() {
             Battle->Update(FixedDt, p1);
             extern void PlaySoundEvent(const std::string&);
             for (const auto& snd : Battle->AllSounds) PlaySoundEvent(snd);
-            for (const auto& fx : Battle->AllEffects) Effects.push_back({fx.kind, fx.x, fx.y, 0.0});
+            for (const auto& fx : Battle->AllEffects) Effects.push_back({fx.kind, fx.x, fx.y, 0.0, fx.side});
             Accumulator -= FixedDt;
             steps++;
         }

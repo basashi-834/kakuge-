@@ -25,7 +25,12 @@
 
 namespace kakuge {
 
-struct EffectEvent { std::string kind; double x = 0, y = 0; };
+// side: 0 = this effect belongs to Player1 (drawn at the screen's left
+// edge), 1 = Player2 (right edge) - see BattleSystem::ResolveCombat, which
+// is the only place that knows attacker identity when a Counter/Effective
+// Counter fires. Effects pushed straight from Fighter::PendingEffects (hit
+// sparks, guard flashes) don't use this field, so it defaults harmlessly.
+struct EffectEvent { std::string kind; double x = 0, y = 0; int side = 0; };
 
 struct ProjectileRequest {
     const MoveData* move = nullptr;
@@ -57,8 +62,8 @@ public:
     bool IsDead = false;
     Fighter* Opponent = nullptr;
 
-    double StageMinX = -460.0;
-    double StageMaxX = 460.0;
+    double StageMinX = -130.0;
+    double StageMaxX = 130.0;
 
     double PositionX = 0.0, PositionY = 0.0;
     double VelocityX = 0.0, VelocityY = 0.0;
@@ -74,7 +79,7 @@ public:
     // Scaled to match the renderer's ~440px-tall humanoid (platform/Draw.cpp's
     // kCharScale) so two fighters visually stop shoulder-to-shoulder instead
     // of overlapping/passing through each other.
-    double PushboxHalfWidth = 128.8, PushboxHalfHeight = 253.0;
+    double PushboxHalfWidth = 36.4, PushboxHalfHeight = 71.5;
     bool ActiveHitboxValid = false;
     RectBox ActiveHitboxRect;
     std::vector<Fighter*> AlreadyHit;
@@ -189,12 +194,12 @@ public:
             case CharState::Hitstun: {
                 HitstunTimer -= 1;
                 if (HitstunTimer <= 0) SM.ChangeState(CharState::Idle, "");
-                VelocityX = MoveToward(VelocityX, 0.0, 900.0 / Constants::Fps);
+                VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
                 break;
             }
             case CharState::Block: {
                 BlockstunTimer -= 1;
-                VelocityX = MoveToward(VelocityX, 0.0, 900.0 / Constants::Fps);
+                VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
                 if (BlockstunTimer <= 0) SM.ChangeState(CharState::Idle, "");
                 break;
             }
@@ -205,7 +210,7 @@ public:
             }
             case CharState::Knockdown: {
                 KnockdownTimer -= 1;
-                VelocityX = MoveToward(VelocityX, 0.0, 1200.0 / Constants::Fps);
+                VelocityX = MoveToward(VelocityX, 0.0, 339.1 / Constants::Fps);
                 if (KnockdownTimer <= 0) {
                     WakeupTimer = WakeupFrames;
                     SM.ChangeState(CharState::WakeUp, "");
@@ -357,7 +362,13 @@ public:
         }
         if (SM.CurrentState == CharState::Attack) {
             if (CurrentMoveData == nullptr) return false;
-            return MoveExecutor::CanCancel(*CurrentMoveData, SM.CurrentFrame) && CurrentMoveData->CanCancelInto(move.Id);
+            // Cancel timing (cancelStartFrame..cancelEndFrame) still gates
+            // WHEN you can act out of your current move, but not WHICH move
+            // you cancel into - combos aren't a fixed move-A-to-move-B
+            // whitelist, they fall out of timing: any move that hits before
+            // the opponent's hitstun ends is a combo (see
+            // BattleSystem::ResolveCombat's hitstun-based combo counter).
+            return MoveExecutor::CanCancel(*CurrentMoveData, SM.CurrentFrame);
         }
         return true;
     }
@@ -513,7 +524,14 @@ public:
     }
 
     void ApplyKnockback(const MoveData& move, const Fighter& attacker, bool isBlock) {
-        double dir = -attacker.Facing;
+        // Knockback pushes the defender AWAY from the attacker, i.e. in the
+        // direction the attacker is facing (they're facing toward the
+        // defender when the hit lands) - NOT the negation of it. The old
+        // `-attacker.Facing` pulled the defender back toward the attacker
+        // instead, which fought the pushbox-separation logic every single
+        // frame and dragged both fighters around unpredictably (reported
+        // as "the attacker moves forward when a hit connects").
+        double dir = attacker.Facing;
         double kx = move.KnockbackX;
         if (isBlock) kx *= 0.4;
         VelocityX = kx * dir;

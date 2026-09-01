@@ -1,6 +1,6 @@
 {
  "id": "standing_light_kick",
- "name": "立ち弱キック",
+ "name": "\u7acb\u3061\u5f31\u30ad\u30c3\u30af",
  "startup": 5,
  "active": 3,
  "recovery": 7,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 170.0,
-   "offsetY": -216.0,
-   "width": 165.6,
-   "height": 101.2
+   "offsetX": 48.04,
+   "offsetY": -61.04,
+   "width": 46.8,
+   "height": 28.6
   }
  ],
- "knockbackX": 216.0,
+ "knockbackX": 61.04,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 5,

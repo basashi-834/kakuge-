@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 174.8,
-   "offsetY": -184.0,
-   "width": 220.8,
-   "height": 165.6
+   "offsetX": 49.4,
+   "offsetY": -52.0,
+   "width": 62.4,
+   "height": 46.8
   }
  ],
- "knockbackX": 252.0,
+ "knockbackX": 71.22,
  "knockbackY": 0.0,
  "hitOutcome": "Knockdown",
  "meterGain": 12,
@@ -41,5 +41,5 @@
  "stance": "stand",
  "requiresAir": false,
  "projectile": {},
- "effectiveRange": 598.0
+ "effectiveRange": 169.0
 }

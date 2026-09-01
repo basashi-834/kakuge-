@@ -1,6 +1,6 @@
 {
  "id": "crouch_medium_punch",
- "name": "しゃがみ中パンチ",
+ "name": "\u3057\u3083\u304c\u307f\u4e2d\u30d1\u30f3\u30c1",
  "startup": 6,
  "active": 3,
  "recovery": 10,
@@ -12,13 +12,13 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 156.4,
-   "offsetY": -175.0,
-   "width": 175.0,
-   "height": 101.2
+   "offsetX": 44.2,
+   "offsetY": -49.46,
+   "width": 49.46,
+   "height": 28.6
   }
  ],
- "knockbackX": 252.0,
+ "knockbackX": 71.22,
  "knockbackY": 0.0,
  "hitOutcome": "Normal",
  "meterGain": 8,

@@ -77,8 +77,8 @@ public:
     // Tightened from the old +-560 now that characters are visually much
     // wider (~190px, see engine/Boxes.h) - keeps them from clipping off
     // the edge of the 1280px-wide canvas even at the stage boundary.
-    static constexpr double StageMinX = -460.0;
-    static constexpr double StageMaxX = 460.0;
+    static constexpr double StageMinX = -130.0;
+    static constexpr double StageMaxX = 130.0;
 
     void StartMatch(const CharacterStats& p1Stats, const std::unordered_map<std::string, MoveData>* p1Moves,
                      const CharacterStats& p2Stats, const std::unordered_map<std::string, MoveData>* p2Moves,
@@ -93,8 +93,8 @@ public:
             p->StageMinX = StageMinX;
             p->StageMaxX = StageMaxX;
         }
-        Player1.PositionX = -220.0; Player1.PositionY = 0.0;
-        Player2.PositionX = 220.0; Player2.PositionY = 0.0;
+        Player1.PositionX = -62.17; Player1.PositionY = 0.0;
+        Player2.PositionX = 62.17; Player2.PositionY = 0.0;
         Player1.Facing = Constants::FacingRight;
         Player2.Facing = Constants::FacingLeft;
 
@@ -204,14 +204,15 @@ public:
             *comboCount = wasAlreadyStunned ? (*comboCount + 1) : 1;
             *maxCombo = std::max(*maxCombo, *comboCount);
 
+            int side = (&attacker == &Player1) ? 0 : 1; // scored by attacker -> attacker's screen edge
             if (result.counter == CounterKind::Counter) {
                 ShakeFrames = 8;
                 ShakeMagnitude = 6.0;
-                AllEffects.push_back({"counter", defender.PositionX, defender.PositionY});
+                AllEffects.push_back({"counter", defender.PositionX, defender.PositionY, side});
             } else if (result.counter == CounterKind::EffectiveCounter) {
                 ShakeFrames = 18;
                 ShakeMagnitude = 18.0;
-                AllEffects.push_back({"effective_counter", defender.PositionX, defender.PositionY});
+                AllEffects.push_back({"effective_counter", defender.PositionX, defender.PositionY, side});
             }
         }
     }

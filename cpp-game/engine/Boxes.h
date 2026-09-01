@@ -33,12 +33,13 @@ struct RectBox {
 
 // Per-stance Hurtbox shapes (立ち/しゃがみ/ジャンプで形状変化). Y is measured
 // with 0 = ground, negative = up (matches the JSON hitbox offset convention).
-// Sized to match the renderer's ~497px-tall humanoid (platform/Draw.cpp's
-// kCharScale) so hits visually connect where they appear to.
+// Sized to match the renderer's ~140px-tall humanoid (platform/Draw.cpp's
+// kCharScale, tuned for the 384x224 pixel-art canvas) so hits visually
+// connect where they appear to.
 struct HurtboxSet {
-    RectBox Stand{0, -230.0, 211.6, 460.0};
-    RectBox Crouch{0, -142.6, 211.6, 285.2};
-    RectBox Air{0, -230.0, 211.6, 460.0};
+    RectBox Stand{0, -65.0, 59.8, 130.0};
+    RectBox Crouch{0, -40.3, 59.8, 80.6};
+    RectBox Air{0, -65.0, 59.8, 130.0};
 
     RectBox ForStance(const std::string& stance, double originX, double originY) const {
         const RectBox* src = &Stand;
