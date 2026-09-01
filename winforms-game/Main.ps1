@@ -23,6 +23,14 @@ try {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
+    # Both of these MUST run before ANY Control (including the main Form)
+    # is created on this thread - WinForms throws "cannot be changed once
+    # a control has been created" if called any later, which is exactly
+    # what happened when SetUnhandledExceptionMode used to sit right
+    # before Application.Run() instead of here.
+    [System.Windows.Forms.Application]::EnableVisualStyles()
+    [System.Windows.Forms.Application]::SetUnhandledExceptionMode([System.Windows.Forms.UnhandledExceptionMode]::CatchException)
+
     # ---- dot-source every module (order matters: a class referencing
     # another class's TYPE must have that type already defined) ----
     . (Join-Path $root "Data\JsonHelpers.ps1")
@@ -152,8 +160,8 @@ try {
     # a visible error dialog + log file instead of a silent crash or the
     # OS "stopped working" dialog - critical since this can't be debugged
     # interactively; the user reporting the exact message is how a fix
-    # happens. ----
-    [System.Windows.Forms.Application]::SetUnhandledExceptionMode([System.Windows.Forms.UnhandledExceptionMode]::CatchException)
+    # happens. (SetUnhandledExceptionMode itself was already called above,
+    # before the Form was created.) ----
     [System.Windows.Forms.Application]::add_ThreadException({
         param($sender, $e)
         $msg = "実行中にエラーが発生しました:`n`n$($e.Exception.Message)`n`n$($e.Exception.StackTrace)"
