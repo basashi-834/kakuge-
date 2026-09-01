@@ -1,27 +1,42 @@
 {
-	"id": "jump_attack",
-	"name": "ジャンプ攻撃",
-	"startup": 5,
-	"active": 6,
-	"recovery": 10,
-	"damage": 65,
-	"hitstun": 18,
-	"blockstun": 10,
-	"hitstop": 6,
-	"guardType": "Overhead",
-	"chipDamagePercent": 0.0,
-	"hitbox": [{"offsetX": 30, "offsetY": -30, "width": 44, "height": 34}],
-	"knockbackX": 140,
-	"knockbackY": 0,
-	"hitOutcome": "Normal",
-	"meterGain": 8,
-	"meterCost": 0,
-	"cancelRoutes": [],
-	"cancelStartFrame": 0,
-	"cancelEndFrame": 0,
-	"tags": ["Medium", "Normal", "Overhead"],
-	"invincibility": {"type": "None", "start_frame": 0, "end_frame": 0},
-	"input": "",
-	"button": "Medium",
-	"stance": "air"
+ "id": "jump_attack",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u653b\u6483",
+ "startup": 5,
+ "active": 6,
+ "recovery": 10,
+ "damage": 65,
+ "hitstun": 18,
+ "blockstun": 10,
+ "hitstop": 6,
+ "guardType": "Overhead",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 123.0,
+   "offsetY": -123.0,
+   "width": 180.4,
+   "height": 139.4
+  }
+ ],
+ "knockbackX": 252.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 8,
+ "meterCost": 0,
+ "cancelRoutes": [],
+ "cancelStartFrame": 0,
+ "cancelEndFrame": 0,
+ "tags": [
+  "Medium",
+  "Normal",
+  "Overhead"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "MK",
+ "stance": "air"
 }

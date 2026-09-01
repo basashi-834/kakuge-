@@ -1,27 +1,46 @@
 {
-	"id": "standing_medium",
-	"name": "立ち中攻撃",
-	"startup": 7,
-	"active": 3,
-	"recovery": 12,
-	"damage": 60,
-	"hitstun": 16,
-	"blockstun": 10,
-	"hitstop": 6,
-	"guardType": "High",
-	"chipDamagePercent": 0.0,
-	"hitbox": [{"offsetX": 40, "offsetY": -65, "width": 40, "height": 24}],
-	"knockbackX": 160,
-	"knockbackY": 0,
-	"hitOutcome": "Normal",
-	"meterGain": 8,
-	"meterCost": 0,
-	"cancelRoutes": ["standing_heavy", "fireball", "anti_air_special", "super_combo"],
-	"cancelStartFrame": 7,
-	"cancelEndFrame": 12,
-	"tags": ["Medium", "Normal"],
-	"invincibility": {"type": "None", "start_frame": 0, "end_frame": 0},
-	"input": "",
-	"button": "Medium",
-	"stance": "stand"
+ "id": "standing_medium",
+ "name": "\u7acb\u3061\u4e2d\u653b\u6483",
+ "startup": 7,
+ "active": 3,
+ "recovery": 12,
+ "damage": 60,
+ "hitstun": 16,
+ "blockstun": 10,
+ "hitstop": 6,
+ "guardType": "High",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 164.0,
+   "offsetY": -266.5,
+   "width": 164.0,
+   "height": 98.4
+  }
+ ],
+ "knockbackX": 288.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 8,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "standing_heavy",
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 7,
+ "cancelEndFrame": 12,
+ "tags": [
+  "Medium",
+  "Normal"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "MP",
+ "stance": "stand"
 }

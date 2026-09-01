@@ -41,8 +41,32 @@ public:
     int P1ComboCount = 0, P2ComboCount = 0;
     int P1MaxCombo = 0, P2MaxCombo = 0;
 
-    static constexpr double StageMinX = -560.0;
-    static constexpr double StageMaxX = 560.0;
+    // New: Training Mode (set by the caller right after StartMatch). The
+    // round timer never runs out and neither player's death ends the
+    // match, so the player can freely practice without interruption.
+    // TrainingAutoHeal continuously regenerates Player2 (the practice
+    // dummy) back to full HP - and revives them out of Dead/Knockdown -
+    // so combos can be repeated without a manual reset.
+    bool TrainingMode = false;
+    bool TrainingAutoHeal = true;
+    static constexpr int TrainingHealPerFrame = 6;
+
+    void ResetHP() {
+        for (Fighter* p : {&Player1, &Player2}) {
+            p->CurrentHP = p->Stats.MaxHP;
+            p->IsDead = false;
+            if (p->SM.CurrentState == CharState::Dead || p->SM.CurrentState == CharState::Knockdown ||
+                p->SM.CurrentState == CharState::WakeUp) {
+                p->SM.ChangeState(CharState::Idle, "");
+            }
+        }
+    }
+
+    // Tightened from the old +-560 now that characters are visually much
+    // wider (~190px, see engine/Boxes.h) - keeps them from clipping off
+    // the edge of the 1280px-wide canvas even at the stage boundary.
+    static constexpr double StageMinX = -460.0;
+    static constexpr double StageMaxX = 460.0;
 
     void StartMatch(const CharacterStats& p1Stats, const std::unordered_map<std::string, MoveData>* p1Moves,
                      const CharacterStats& p2Stats, const std::unordered_map<std::string, MoveData>* p2Moves,
@@ -92,6 +116,20 @@ public:
 
         DrainFighterEvents(Player1);
         DrainFighterEvents(Player2);
+
+        if (TrainingMode) {
+            if (TrainingAutoHeal) {
+                Fighter& dummy = Player2;
+                if (dummy.CurrentHP < dummy.Stats.MaxHP) {
+                    dummy.CurrentHP = std::min(dummy.Stats.MaxHP, dummy.CurrentHP + TrainingHealPerFrame);
+                }
+                if (dummy.IsDead && dummy.CurrentHP > 0) {
+                    dummy.IsDead = false;
+                    dummy.SM.ChangeState(CharState::Idle, "");
+                }
+            }
+            return; // no KO/timeout match-end while training
+        }
 
         if (Player1.IsDead || Player2.IsDead) {
             EndByKO();

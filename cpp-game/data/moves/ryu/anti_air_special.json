@@ -1,28 +1,45 @@
 {
-	"id": "anti_air_special",
-	"name": "昇龍拳 (Anti-Air Special)",
-	"startup": 4,
-	"active": 8,
-	"recovery": 28,
-	"damage": 120,
-	"hitstun": 45,
-	"blockstun": 14,
-	"hitstop": 10,
-	"guardType": "High",
-	"chipDamagePercent": 0.0,
-	"hitbox": [{"offsetX": 30, "offsetY": -110, "width": 50, "height": 70}],
-	"knockbackX": 80,
-	"knockbackY": 520,
-	"hitOutcome": "HardKnockdown",
-	"meterGain": 15,
-	"meterCost": 0,
-	"cancelRoutes": ["super_combo"],
-	"cancelStartFrame": 4,
-	"cancelEndFrame": 8,
-	"tags": ["Special", "AntiAir", "Reversal"],
-	"invincibility": {"type": "Strike", "start_frame": 1, "end_frame": 5},
-	"input": "623",
-	"button": "Special",
-	"stance": "stand",
-	"effectiveRange": 150
+ "id": "anti_air_special",
+ "name": "\u6607\u9f8d\u62f3 (Anti-Air Special)",
+ "startup": 4,
+ "active": 8,
+ "recovery": 28,
+ "damage": 120,
+ "hitstun": 45,
+ "blockstun": 14,
+ "hitstop": 10,
+ "guardType": "High",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 123.0,
+   "offsetY": -451.0,
+   "width": 205.0,
+   "height": 287.0
+  }
+ ],
+ "knockbackX": 144.0,
+ "knockbackY": 936.0,
+ "hitOutcome": "HardKnockdown",
+ "meterGain": 15,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "super_combo"
+ ],
+ "cancelStartFrame": 4,
+ "cancelEndFrame": 8,
+ "tags": [
+  "Special",
+  "AntiAir",
+  "Reversal"
+ ],
+ "invincibility": {
+  "type": "Strike",
+  "start_frame": 1,
+  "end_frame": 5
+ },
+ "input": "623",
+ "button": "AnyP",
+ "stance": "stand",
+ "effectiveRange": 615.0
 }

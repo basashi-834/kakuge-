@@ -94,6 +94,16 @@ void App::OnPaint() {
             case Screen::Settings: DrawSettings(g); break;
             default: break;
         }
+    } else {
+        // Editor: native controls own the form area below, but the header
+        // bar itself is drawn with GDI+ (in real window pixels, not the
+        // virtual-canvas transform, since it sits alongside native
+        // controls that use real pixel coordinates) so the screen reads as
+        // part of the same app instead of a bare Win32 dialog.
+        SolidBrush headerBg(pal.Accent);
+        g.FillRectangle(&headerBg, 0, 0, w, kEditorHeaderHeight);
+        Font headerFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
+        DrawTextCentered(g, L"CHARACTER EDITOR", headerFont, RectF(0, 0, static_cast<REAL>(w), static_cast<REAL>(kEditorHeaderHeight)), pal.White);
     }
 
     // Single blit of the fully-rendered frame onto the real window surface
@@ -153,11 +163,13 @@ RawInput App::CollectP1Input() const {
     input.Right = HeldKeys.count('D') > 0;
     input.Down = HeldKeys.count('S') > 0;
     input.Up = HeldKeys.count(VK_SPACE) > 0;
-    input.Buttons.Light = HeldKeys.count('J') > 0;
-    input.Buttons.Medium = HeldKeys.count('K') > 0;
-    input.Buttons.Heavy = HeldKeys.count('L') > 0;
-    input.Buttons.Special = HeldKeys.count('U') > 0;
-    input.Buttons.Super = HeldKeys.count('I') > 0;
+    // 6-button scheme: U/I/O = LP/MP/HP, J/K/L = LK/MK/HK.
+    input.Buttons.LP = HeldKeys.count('U') > 0;
+    input.Buttons.MP = HeldKeys.count('I') > 0;
+    input.Buttons.HP = HeldKeys.count('O') > 0;
+    input.Buttons.LK = HeldKeys.count('J') > 0;
+    input.Buttons.MK = HeldKeys.count('K') > 0;
+    input.Buttons.HK = HeldKeys.count('L') > 0;
     return input;
 }
 
@@ -220,6 +232,13 @@ void App::OnCommand(int controlId, int notifyCode, HWND ctrl) {
     if (Current == Screen::Editor) {
         extern void Editor_OnCommand(App&, int, int, HWND);
         Editor_OnCommand(*this, controlId, notifyCode, ctrl);
+    }
+}
+
+void App::OnDrawItem(DRAWITEMSTRUCT* dis) {
+    if (Current == Screen::Editor && dis->CtlType == ODT_BUTTON) {
+        extern void Editor_OnDrawItem(DRAWITEMSTRUCT*);
+        Editor_OnDrawItem(dis);
     }
 }
 

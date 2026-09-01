@@ -27,9 +27,15 @@ public:
 
     DummyMode Mode = DummyMode::CPU;
 
-    static constexpr double CloseRange = 80.0;   // tuned to sit inside normal-attack reach
-    static constexpr double MidRange = 420.0;
-    static constexpr double AntiAirRange = 260.0;
+    // Rescaled alongside the bigger hurtbox/pushbox/hitbox geometry (see
+    // engine/Boxes.h and Fighter::PushboxHalfWidth): two pushboxes now
+    // physically can't get closer than ~230 units apart, so CloseRange
+    // must sit above that floor while still being inside normal-attack
+    // reach, or the CPU would never consider itself "close enough" to
+    // attack at all.
+    static constexpr double CloseRange = 280.0;
+    static constexpr double MidRange = 600.0;
+    static constexpr double AntiAirRange = 320.0;
     static constexpr double LowHpRatio = 0.25;
 
     CPUAI(Fighter* self, Fighter* opp) : Self(self), Opp(opp) {}
@@ -53,7 +59,7 @@ public:
         double dist = std::abs(dx);
         int dirToOpp = dx < 0 ? -1 : 1;
 
-        if (Opp->SM.CurrentState == CharState::Attack && dist < 160.0 && Self->SM.IsActionable() && RandDouble() < 0.7) {
+        if (Opp->SM.CurrentState == CharState::Attack && dist < 300.0 && Self->SM.IsActionable() && RandDouble() < 0.7) {
             return HoldBack();
         }
 
@@ -80,7 +86,7 @@ public:
             if (antiAir) return UseMove(*antiAir);
         }
 
-        if (dist < 300.0 && RandDouble() < 0.5) {
+        if (dist < 500.0 && RandDouble() < 0.5) {
             const MoveData* superMove = FindMove([this](const MoveData& m) {
                 return m.HasTag(Constants::TagSuper) && Self->Gauge.CanSpend(m.MeterCost);
             });
@@ -155,10 +161,19 @@ public:
         return input;
     }
 
+    // move.Button is "AnyP"/"AnyK" for specials/supers (see
+    // CommandParser::ButtonSatisfies) - CPUAI still has to press one real
+    // button to actually trigger them, so pick a representative one.
+    static std::string ConcreteButton(const std::string& button) {
+        if (button == "AnyP") return "LP";
+        if (button == "AnyK") return "LK";
+        return button;
+    }
+
     RawInput UseMove(const MoveData& move) {
         if (move.InputCommand.empty()) {
             RawInput input;
-            input.Buttons.Set(move.Button, true);
+            input.Buttons.Set(ConcreteButton(move.Button), true);
             return input;
         }
         const auto& motions = CommandParser::Motions();
@@ -172,7 +187,7 @@ public:
             PendingSequence.push(raw);
         }
         RawInput finalRaw = DigitToRaw(digits.back(), Self->Facing);
-        finalRaw.Buttons.Set(move.Button, true);
+        finalRaw.Buttons.Set(ConcreteButton(move.Button), true);
         PendingSequence.push(finalRaw);
         PendingSequence.push(RawInput{});
         RawInput first = PendingSequence.front();

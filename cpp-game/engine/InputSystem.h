@@ -14,24 +14,32 @@
 
 namespace kakuge {
 
+// Classic 6-button scheme (LP/MP/HP/LK/MK/HK), plus a synthetic Throw
+// (pressed by holding LP+LK together - see Fighter::FrameStep) rather than
+// a dedicated key. Move data's "button" field names one of these six
+// directly for normals, or the sentinel "AnyP"/"AnyK" for specials/supers
+// that should fire off any punch or kick button (see
+// CommandParser::ButtonSatisfies).
 struct ButtonsHeld {
-    bool Light = false, Medium = false, Heavy = false, Special = false, Super = false, Throw = false;
+    bool LP = false, MP = false, HP = false, LK = false, MK = false, HK = false, Throw = false;
 
     bool Get(const std::string& name) const {
-        if (name == "Light") return Light;
-        if (name == "Medium") return Medium;
-        if (name == "Heavy") return Heavy;
-        if (name == "Special") return Special;
-        if (name == "Super") return Super;
+        if (name == "LP") return LP;
+        if (name == "MP") return MP;
+        if (name == "HP") return HP;
+        if (name == "LK") return LK;
+        if (name == "MK") return MK;
+        if (name == "HK") return HK;
         if (name == "Throw") return Throw;
         return false;
     }
     void Set(const std::string& name, bool v) {
-        if (name == "Light") Light = v;
-        else if (name == "Medium") Medium = v;
-        else if (name == "Heavy") Heavy = v;
-        else if (name == "Special") Special = v;
-        else if (name == "Super") Super = v;
+        if (name == "LP") LP = v;
+        else if (name == "MP") MP = v;
+        else if (name == "HP") HP = v;
+        else if (name == "LK") LK = v;
+        else if (name == "MK") MK = v;
+        else if (name == "HK") HK = v;
         else if (name == "Throw") Throw = v;
     }
 };
@@ -75,6 +83,16 @@ public:
 };
 
 struct CommandParser {
+    // "AnyP"/"AnyK" let a special/super move's motion+button requirement
+    // be satisfied by any of the three punch or kick buttons, matching how
+    // real fighting games let you throw a fireball with whichever punch
+    // strength you like rather than binding it to one exact button.
+    static bool ButtonSatisfies(const std::string& required, const std::string& pressed) {
+        if (required == "AnyP") return pressed == "LP" || pressed == "MP" || pressed == "HP";
+        if (required == "AnyK") return pressed == "LK" || pressed == "MK" || pressed == "HK";
+        return required == pressed;
+    }
+
     static const std::unordered_map<std::string, std::vector<int>>& Motions() {
         static const std::unordered_map<std::string, std::vector<int>> m = {
             {"236", {2, 3, 6}},
@@ -114,7 +132,7 @@ struct CommandParser {
         for (const auto* entry : relevant) {
             if (entry->frame >= matchFrame && (entry->frame - matchFrame) <= buttonGrace) {
                 for (const auto& b : entry->buttons) {
-                    if (b == button) return true;
+                    if (ButtonSatisfies(button, b)) return true;
                 }
             }
         }

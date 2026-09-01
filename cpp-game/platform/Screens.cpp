@@ -50,10 +50,11 @@ static UiButton MakeButton(float x, float y, float w, float h, const std::string
 void App::BuildTitleButtons() {
     Buttons.clear();
     float cx = VirtualW / 2.0f;
-    Buttons.push_back(MakeButton(cx - 170, 300, 340, 64, "GAME START", true, [this]() { GoTo(Screen::CharacterSelect); }));
-    Buttons.push_back(MakeButton(cx - 170, 384, 340, 56, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
-    Buttons.push_back(MakeButton(cx - 170, 454, 340, 56, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
-    Buttons.push_back(MakeButton(cx - 170, 524, 340, 56, "EXIT", false, []() { PostQuitMessage(0); }));
+    Buttons.push_back(MakeButton(cx - 170, 272, 340, 60, "GAME START", true, [this]() { IsTrainingMode = false; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(cx - 170, 340, 340, 52, "TRAINING MODE", false, [this]() { IsTrainingMode = true; GoTo(Screen::CharacterSelect); }));
+    Buttons.push_back(MakeButton(cx - 170, 402, 340, 52, "CHARACTER EDIT", false, [this]() { GoTo(Screen::Editor); }));
+    Buttons.push_back(MakeButton(cx - 170, 464, 340, 52, "SETTINGS", false, [this]() { GoTo(Screen::Settings); }));
+    Buttons.push_back(MakeButton(cx - 170, 526, 340, 52, "EXIT", false, []() { PostQuitMessage(0); }));
 }
 
 void App::DrawTitle(Graphics& g) {
@@ -71,7 +72,7 @@ void App::DrawTitle(Graphics& g) {
 
     DrawButtons(g, Buttons);
 
-    DrawTextCentered(g, L"A/D move  S crouch  Space jump  J K L attack  U special  I super  Esc pause",
+    DrawTextCentered(g, L"A/D move  S crouch  Space jump  U I O punch  J K L kick  Esc pause",
                       footerFont, RectF(0, static_cast<REAL>(VirtualH - 40), static_cast<REAL>(VirtualW), 24), pal.TextGray);
 }
 
@@ -139,6 +140,8 @@ void App::BuildSelectButtons() {
         if (SelectStep == 0) {
             SelectStep = 1;
             BuildSelectButtons();
+        } else if (IsTrainingMode) {
+            GoTo(Screen::Game); // skip the VS intro for a quicker practice setup
         } else {
             GoTo(Screen::VS);
         }
@@ -248,6 +251,12 @@ void App::StartMatch() {
     if (!p1s) p1s = Dm->GetCharacter(Dm->GetCharacterIds().front());
     if (!p2s) p2s = Dm->GetCharacter(Dm->GetCharacterIds().front());
     Battle->StartMatch(*p1s, Dm->GetMoveset(P1CharId), *p2s, Dm->GetMoveset(P2CharId), g_RoundTimeSeconds);
+    Battle->TrainingMode = IsTrainingMode;
+    Battle->TrainingAutoHeal = TrainingAutoHealPref;
+    // The dummy-mode toggle only lives in Training mode's pause menu now,
+    // so a Versus match always fights a real CPU regardless of whatever
+    // was left selected from a previous Training session.
+    if (!IsTrainingMode) P2DummyMode = DummyMode::CPU;
     Battle->CpuAI->Mode = P2DummyMode;
     HeldKeys.clear();
     Paused = false;
@@ -263,18 +272,41 @@ void App::BuildGameButtons() {
     if (!Paused) return;
     float cx = VirtualW / 2.0f;
     float panelTop = VirtualH / 2.0f - 190;
+
+    if (!IsTrainingMode) {
+        // Versus mode: a real CPU opponent, nothing to configure - keep
+        // the pause menu simple.
+        Buttons.push_back(MakeButton(cx - 150, panelTop + 70, 300, 50, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
+        Buttons.push_back(MakeButton(cx - 150, panelTop + 140, 300, 50, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
+        return;
+    }
+
     Buttons.push_back(MakeButton(cx - 150, panelTop + 70, 300, 50, "RESUME (Esc)", true, [this]() { Paused = false; BuildGameButtons(); }));
 
     auto modeButton = [this, cx, panelTop](float x, const char* label, DummyMode mode) {
         bool active = (P2DummyMode == mode);
-        return MakeButton(x, panelTop + 140, 140, 40, label, active, [this, mode]() { P2DummyMode = mode; BuildGameButtons(); });
+        return MakeButton(x, panelTop + 140, 140, 40, label, active, [this, mode]() {
+            P2DummyMode = mode;
+            if (Battle) Battle->CpuAI->Mode = mode;
+            BuildGameButtons();
+        });
     };
     Buttons.push_back(modeButton(cx - 300, "P2: CPU", DummyMode::CPU));
     Buttons.push_back(modeButton(cx - 150, "P2: STAND", DummyMode::Stand));
     Buttons.push_back(modeButton(cx, "P2: CROUCH", DummyMode::Crouch));
     Buttons.push_back(modeButton(cx + 150, "P2: JUMP", DummyMode::Jump));
 
-    Buttons.push_back(MakeButton(cx - 150, panelTop + 200, 300, 50, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
+    Buttons.push_back(MakeButton(cx - 300, panelTop + 200, 220, 44,
+        TrainingAutoHealPref ? "AUTO HEAL: ON" : "AUTO HEAL: OFF", TrainingAutoHealPref, [this]() {
+            TrainingAutoHealPref = !TrainingAutoHealPref;
+            if (Battle) Battle->TrainingAutoHeal = TrainingAutoHealPref;
+            BuildGameButtons();
+        }));
+    Buttons.push_back(MakeButton(cx - 60, panelTop + 200, 220, 44, "RESET HP", false, [this]() {
+        if (Battle) Battle->ResetHP();
+    }));
+
+    Buttons.push_back(MakeButton(cx - 150, panelTop + 260, 300, 50, "GIVE UP -> TITLE", false, [this]() { GoTo(Screen::Title); }));
 }
 
 void App::DrawGame(Graphics& g) {
@@ -296,7 +328,8 @@ void App::DrawGame(Graphics& g) {
 
         float cx = VirtualW / 2.0f;
         float panelTop = VirtualH / 2.0f - 190;
-        RectF panelRect(cx - 340, panelTop, 680, 280);
+        float panelHeight = IsTrainingMode ? 350.0f : 220.0f;
+        RectF panelRect(cx - 340, panelTop, 680, panelHeight);
         GraphicsPath path;
         AddRoundedRect(path, panelRect, 12);
         SolidBrush panelBg(pal.PanelBg);
@@ -305,9 +338,11 @@ void App::DrawGame(Graphics& g) {
         g.DrawPath(&border, &path);
 
         Font titleFont(UiFontFamily(), 24, FontStyleBold, UnitPixel);
-        DrawTextCentered(g, L"PAUSED", titleFont, RectF(cx - 340, panelTop + 14, 680, 40), pal.TextDark);
-        Font hintFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
-        DrawTextCentered(g, L"P2 control mode (practice)", hintFont, RectF(cx - 340, panelTop + 118, 680, 18), pal.TextGray);
+        DrawTextCentered(g, IsTrainingMode ? L"TRAINING - PAUSED" : L"PAUSED", titleFont, RectF(cx - 340, panelTop + 14, 680, 40), pal.TextDark);
+        if (IsTrainingMode) {
+            Font hintFont(UiFontFamily(), 11, FontStyleRegular, UnitPixel);
+            DrawTextCentered(g, L"P2 control mode (practice)", hintFont, RectF(cx - 340, panelTop + 118, 680, 18), pal.TextGray);
+        }
 
         DrawButtons(g, Buttons);
     }

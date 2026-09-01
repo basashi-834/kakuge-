@@ -50,8 +50,8 @@ public:
     bool IsDead = false;
     Fighter* Opponent = nullptr;
 
-    double StageMinX = -560.0;
-    double StageMaxX = 560.0;
+    double StageMinX = -460.0;
+    double StageMaxX = 460.0;
 
     double PositionX = 0.0, PositionY = 0.0;
     double VelocityX = 0.0, VelocityY = 0.0;
@@ -64,7 +64,10 @@ public:
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;
 
-    double PushboxHalfWidth = 28.0, PushboxHalfHeight = 55.0;
+    // Scaled to match the renderer's ~440px-tall humanoid (platform/Draw.cpp's
+    // kCharScale) so two fighters visually stop shoulder-to-shoulder instead
+    // of overlapping/passing through each other.
+    double PushboxHalfWidth = 114.8, PushboxHalfHeight = 225.5;
     bool ActiveHitboxValid = false;
     RectBox ActiveHitboxRect;
     std::vector<Fighter*> AlreadyHit;
@@ -124,10 +127,12 @@ public:
         FrameCounter += 1;
         int digit = InputBuffer::ComputeDigit(raw.Left, raw.Right, raw.Down, raw.Up, Facing);
         std::vector<std::string> pressed = NewlyPressedButtons(raw.Buttons);
-        bool pressedHasLight = std::find(pressed.begin(), pressed.end(), "Light") != pressed.end();
-        bool pressedHasMedium = std::find(pressed.begin(), pressed.end(), "Medium") != pressed.end();
+        // Synthetic Throw: LP+LK held together (no dedicated throw key in
+        // the 6-button control scheme).
+        bool pressedHasLP = std::find(pressed.begin(), pressed.end(), "LP") != pressed.end();
+        bool pressedHasLK = std::find(pressed.begin(), pressed.end(), "LK") != pressed.end();
         bool pressedHasThrow = std::find(pressed.begin(), pressed.end(), "Throw") != pressed.end();
-        if (raw.Buttons.Light && raw.Buttons.Medium && (pressedHasLight || pressedHasMedium) && !pressedHasThrow) {
+        if (raw.Buttons.LP && raw.Buttons.LK && (pressedHasLP || pressedHasLK) && !pressedHasThrow) {
             pressed.push_back("Throw");
         }
         InputBuf.RecordFrame(FrameCounter, digit, pressed);
@@ -146,7 +151,7 @@ public:
 
     std::vector<std::string> NewlyPressedButtons(const ButtonsHeld& held) {
         std::vector<std::string> result;
-        for (const char* key : {"Light", "Medium", "Heavy", "Special", "Super"}) {
+        for (const char* key : {"LP", "MP", "HP", "LK", "MK", "HK"}) {
             bool isHeld = held.Get(key);
             bool wasHeld = HeldButtonsPrev.Get(key);
             if (isHeld && !wasHeld) result.push_back(key);
@@ -338,6 +343,15 @@ public:
         CurrentMoveData = &move;
         ProjectileSpawnedThisActivation = false;
         FacingLocked = true;
+        // Grounded moves (fireball, dragon punch, normals, ...) should
+        // start from a dead stop even if the player walk-canceled or
+        // dash-canceled into them - otherwise whatever VelocityX was
+        // carried from the previous frame's movement keeps being applied
+        // every frame for the entire move (ApplyPhysics doesn't touch
+        // VelocityX during Attack), making the character visibly drift/
+        // slide forward through the whole animation. Airborne moves (jump
+        // attack) keep their momentum, matching normal jump-arc physics.
+        if (CurrentStance() != "air") VelocityX = 0.0;
         SM.ChangeState(CharState::Attack, move.Id);
         PendingSounds.push_back("attack");
     }

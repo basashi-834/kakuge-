@@ -25,6 +25,10 @@ namespace kakuge {
 
 enum class Screen { Title, CharacterSelect, VS, Game, Result, Settings, Editor };
 
+// Height of the Editor screen's red GDI+-drawn header bar (real window
+// pixels) - native controls are laid out starting below it.
+constexpr int kEditorHeaderHeight = 60;
+
 struct SelectSlotVisual {
     std::string id;
     bool isAddTile = false;
@@ -49,6 +53,13 @@ public:
     // Timer-driven redraws every ~15ms started hitting real hardware).
     std::unique_ptr<Gdiplus::Bitmap> BackBuffer;
     int BackBufferW = 0, BackBufferH = 0;
+
+    // ---- Mode (set from Title before entering CharacterSelect) ----
+    // Training mode: unlimited round timer, neither KO ends the match, and
+    // the CPU-behavior/auto-heal controls live in the pause menu instead
+    // of a normal Versus match's pause menu (which stays simple).
+    bool IsTrainingMode = false;
+    bool TrainingAutoHealPref = true; // remembered across rematches this session
 
     // ---- Character Select state ----
     int SelectStep = 0; // 0 = picking P1, 1 = picking P2 (CPU)
@@ -110,6 +121,7 @@ public:
     void OnKeyUp(int vk);
     void OnTimer();
     void OnCommand(int controlId, int notifyCode, HWND ctrl);
+    void OnDrawItem(DRAWITEMSTRUCT* dis);
 
     ViewTransform CurrentTransform() const;
     void GoTo(Screen s);

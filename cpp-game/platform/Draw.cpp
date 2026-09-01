@@ -7,6 +7,12 @@ using namespace Gdiplus;
 
 namespace kakuge {
 
+// Sized so an idle character stands ~440px tall in the 1280x720 virtual
+// canvas (per the SF6-style reference the user measured: ~400-470px,
+// ~430px baseline). Shared by DrawHumanoid and the lying-down Knockdown/
+// Dead poses in DrawFighter so both scale together.
+constexpr double kCharScale = 4.1;
+
 std::wstring Utf8ToWide(const std::string& s) {
     if (s.empty()) return L"";
     int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), static_cast<int>(s.size()), nullptr, 0);
@@ -112,7 +118,7 @@ Color MoveTint(const Fighter& fighter) {
 // Humanoid fighter - line art (head+headband, torso, two-segment limbs).
 // ---------------------------------------------------------------------
 void DrawHumanoid(Graphics& g, double sx, double sy, Color color, const HumanoidPose& pose) {
-    double s = pose.heightScale;
+    double s = pose.heightScale * kCharScale;
     double legH = 46.0 * s, torsoH = 38.0 * s, headR = 12.0 * s;
     double hipY = sy - legH;
     double shoulderY = hipY - torsoH;
@@ -212,9 +218,9 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
     switch (fighter.SM.CurrentState) {
         case CharState::Knockdown: {
             Color c(255, static_cast<BYTE>(std::max(0, bodyColor.GetR() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetG() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetB() - 60)));
-            Pen pen(c, 3.5f);
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44), static_cast<REAL>(sy - 6), static_cast<REAL>(sx + 44), static_cast<REAL>(sy - 6));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40), static_cast<REAL>(sy - 24), 20.0f, 20.0f);
+            Pen pen(c, static_cast<REAL>(3.5 * kCharScale));
+            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * kCharScale), static_cast<REAL>(sy - 6 * kCharScale), static_cast<REAL>(sx + 44 * kCharScale), static_cast<REAL>(sy - 6 * kCharScale));
+            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * kCharScale), static_cast<REAL>(sy - 24 * kCharScale), static_cast<REAL>(20 * kCharScale), static_cast<REAL>(20 * kCharScale));
             break;
         }
         case CharState::WakeUp:
@@ -234,9 +240,9 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
             break;
         case CharState::Dead: {
             Color c(255, 140, 140, 140);
-            Pen pen(c, 3.0f);
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44), static_cast<REAL>(sy - 4), static_cast<REAL>(sx + 44), static_cast<REAL>(sy - 4));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40), static_cast<REAL>(sy - 20), 18.0f, 18.0f);
+            Pen pen(c, static_cast<REAL>(3.0 * kCharScale));
+            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale), static_cast<REAL>(sx + 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale));
+            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * kCharScale), static_cast<REAL>(sy - 20 * kCharScale), static_cast<REAL>(18 * kCharScale), static_cast<REAL>(18 * kCharScale));
             break;
         }
         case CharState::Attack: {
@@ -333,9 +339,9 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     DrawTextLeft(g, Utf8ToWide(bs.Player1.Stats.Name), nameFont, 24, 12, pal.TextDark);
     DrawTextRight(g, Utf8ToWide(bs.Player2.Stats.Name), nameFont, VirtualW - 24.0f, 12, pal.TextDark);
 
-    // Round timer: bold red rounded box.
-    int seconds = static_cast<int>(std::ceil(bs.FramesLeft / 60.0));
-    std::wstring timerText = std::to_wstring(seconds);
+    // Round timer: bold red rounded box. Training mode never runs out, so
+    // it shows an infinity symbol instead of a counting-down number.
+    std::wstring timerText = bs.TrainingMode ? L"∞" : std::to_wstring(static_cast<int>(std::ceil(bs.FramesLeft / 60.0)));
     float boxW = 90, boxH = 58;
     float boxX = (VirtualW - boxW) / 2.0f;
     RectF boxRect(boxX, 12, boxW, boxH);
@@ -345,7 +351,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     g.FillPath(&accentBrush, &boxPath);
     DrawTextCentered(g, timerText, timerFont, boxRect, pal.White);
     RectF roundLabelRect(VirtualW / 2.0f - 60, 74, 120, 20);
-    DrawTextCentered(g, L"ROUND 1", labelFont, roundLabelRect, pal.TextGray);
+    DrawTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", labelFont, roundLabelRect, pal.TextGray);
 
     // Combo counter (new - matches the reference HUD's "COMBO / N HIT" box).
     if (comboFade > 0.01) {

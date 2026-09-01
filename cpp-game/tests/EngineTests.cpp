@@ -75,7 +75,7 @@ int main() {
     std::cout << "=== DataManager load ===\n";
     Check("loaded character 'ryu'", dm.GetCharacter("ryu") != nullptr);
     const auto* ryuMoves = dm.GetMoveset("ryu");
-    Check("loaded 11 ryu moves", ryuMoves != nullptr && ryuMoves->size() == 11);
+    Check("loaded 12 ryu moves", ryuMoves != nullptr && ryuMoves->size() == 12);
 
     // -----------------------------------------------------------------
     // 1) Full simulated match
@@ -138,15 +138,15 @@ int main() {
     fighter.Setup(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"));
     fighter.Opponent = &fighter;
     RawInput neutral2;
-    RawInput lightInput; lightInput.Buttons.Light = true;
+    RawInput lightInput; lightInput.Buttons.LP = true;
     fighter.FrameStep(dt, lightInput);
-    Check("Light press starts standing_light", fighter.SM.CurrentMove == "standing_light");
+    Check("LP press starts standing_light", fighter.SM.CurrentMove == "standing_light");
 
     for (int i = 0; i < 4; i++) fighter.FrameStep(dt, neutral2);
     Check("still in standing_light at cancel window open, frame=" + std::to_string(fighter.SM.CurrentFrame),
           fighter.SM.CurrentMove == "standing_light" && fighter.SM.CurrentFrame == 4);
 
-    RawInput heavyInput; heavyInput.Buttons.Heavy = true;
+    RawInput heavyInput; heavyInput.Buttons.HP = true;
     fighter.FrameStep(dt, heavyInput);
     Check("Heavy cancels standing_light into standing_heavy inside the window",
           fighter.SM.CurrentMove == "standing_heavy" && fighter.SM.CurrentFrame == 0);
@@ -180,7 +180,7 @@ int main() {
     Check("CreateCharacter succeeded", created);
     Check("new character is immediately gettable", dm.GetCharacter("ken") != nullptr);
     const auto* kenMoves = dm.GetMoveset("ken");
-    Check("new character cloned the template's moveset", kenMoves != nullptr && kenMoves->size() == 11);
+    Check("new character cloned the template's moveset", kenMoves != nullptr && kenMoves->size() == 12);
     bool dupRejected = !dm.CreateCharacter("ken", "KEN2", "ryu");
     Check("duplicate id is rejected", dupRejected);
 

@@ -91,6 +91,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_COMMAND:
             if (g_App) g_App->OnCommand(LOWORD(wParam), HIWORD(wParam), reinterpret_cast<HWND>(lParam));
             return 0;
+        case WM_DRAWITEM:
+            if (g_App) g_App->OnDrawItem(reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
+            return TRUE;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;

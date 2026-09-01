@@ -12,6 +12,6 @@
 		"standing_light", "standing_medium", "standing_heavy",
 		"crouch_light", "crouch_medium", "crouch_heavy",
 		"jump_attack", "standing_throw",
-		"fireball", "anti_air_special", "super_combo"
+		"fireball", "anti_air_special", "hurricane_kick", "super_combo"
 	]
 }

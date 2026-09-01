@@ -70,8 +70,12 @@ HWND MakeEdit(HWND parent, HINSTANCE hInst, int id, int x, int y, int w, int h) 
     return CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
                             x, y, w, h, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInst, nullptr);
 }
+// BS_OWNERDRAW + WM_DRAWITEM (see Editor_OnDrawItem below) so these read
+// as the same red/white rounded buttons used on the custom-drawn screens,
+// instead of a plain system button - this is what "keep it looking like
+// the play screen" ends up meaning for a native-control-based form.
 HWND MakeButton(HWND parent, HINSTANCE hInst, int id, int x, int y, int w, int h, const std::wstring& text) {
-    return CreateWindowExW(0, L"BUTTON", text.c_str(), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    return CreateWindowExW(0, L"BUTTON", text.c_str(), WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
                             x, y, w, h, parent, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), hInst, nullptr);
 }
 HWND MakeCombo(HWND parent, HINSTANCE hInst, int id, int x, int y, int w, int h) {
@@ -104,7 +108,7 @@ void App::EnterEditor() {
 
     GetWindowRect(Hwnd, &PreEditorWindowRect);
     EditorSizeSaved = true;
-    RECT rc{0, 0, 1040, 760};
+    RECT rc{0, 0, 1040, 830};
     AdjustWindowRect(&rc, static_cast<DWORD>(GetWindowLongPtr(Hwnd, GWL_STYLE)), FALSE);
     SetWindowPos(Hwnd, nullptr, 0, 0, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
 
@@ -143,70 +147,70 @@ void App::CreateEditorControls() {
     // (which reuses this same screen region) doesn't leave stray label
     // text showing through underneath it.
     HWND lbl;
-    lbl = MakeLabel(Hwnd, hInst, 20, 16, 200, 20, L"CHARACTER"); g_NormalModeControls.push_back(lbl);
-    ComboCharacter = MakeCombo(Hwnd, hInst, ID_COMBO_CHARACTER, 20, 36, 260, 200);
-    lbl = MakeLabel(Hwnd, hInst, 20, 68, 200, 20, L"NAME"); g_NormalModeControls.push_back(lbl);
-    EditCharName = MakeEdit(Hwnd, hInst, ID_EDIT_CHAR_NAME, 20, 88, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 120, 200, 20, L"MAX HP"); g_NormalModeControls.push_back(lbl);
-    EditMaxHp = MakeEdit(Hwnd, hInst, ID_EDIT_MAX_HP, 20, 140, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 172, 200, 20, L"WALK FORWARD SPEED"); g_NormalModeControls.push_back(lbl);
-    EditWalkFwd = MakeEdit(Hwnd, hInst, ID_EDIT_WALK_FWD, 20, 192, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 224, 200, 20, L"WALK BACKWARD SPEED"); g_NormalModeControls.push_back(lbl);
-    EditWalkBack = MakeEdit(Hwnd, hInst, ID_EDIT_WALK_BACK, 20, 244, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 276, 200, 20, L"DASH SPEED"); g_NormalModeControls.push_back(lbl);
-    EditDash = MakeEdit(Hwnd, hInst, ID_EDIT_DASH, 20, 296, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 328, 200, 20, L"JUMP VELOCITY (negative = up)"); g_NormalModeControls.push_back(lbl);
-    EditJumpVel = MakeEdit(Hwnd, hInst, ID_EDIT_JUMP_VEL, 20, 348, 260, 24);
-    lbl = MakeLabel(Hwnd, hInst, 20, 380, 200, 20, L"GRAVITY"); g_NormalModeControls.push_back(lbl);
-    EditGravity = MakeEdit(Hwnd, hInst, ID_EDIT_GRAVITY, 20, 400, 260, 24);
-    BtnSave = MakeButton(Hwnd, hInst, ID_BTN_SAVE, 20, 440, 260, 36, L"SAVE CHARACTER");
-    BtnNewCharacter = MakeButton(Hwnd, hInst, ID_BTN_NEW_CHARACTER, 20, 484, 260, 36, L"+ NEW CHARACTER");
+    lbl = MakeLabel(Hwnd, hInst, 20, 76, 200, 20, L"CHARACTER"); g_NormalModeControls.push_back(lbl);
+    ComboCharacter = MakeCombo(Hwnd, hInst, ID_COMBO_CHARACTER, 20, 96, 260, 200);
+    lbl = MakeLabel(Hwnd, hInst, 20, 128, 200, 20, L"NAME"); g_NormalModeControls.push_back(lbl);
+    EditCharName = MakeEdit(Hwnd, hInst, ID_EDIT_CHAR_NAME, 20, 148, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 180, 200, 20, L"MAX HP"); g_NormalModeControls.push_back(lbl);
+    EditMaxHp = MakeEdit(Hwnd, hInst, ID_EDIT_MAX_HP, 20, 200, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 232, 200, 20, L"WALK FORWARD SPEED"); g_NormalModeControls.push_back(lbl);
+    EditWalkFwd = MakeEdit(Hwnd, hInst, ID_EDIT_WALK_FWD, 20, 252, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 284, 200, 20, L"WALK BACKWARD SPEED"); g_NormalModeControls.push_back(lbl);
+    EditWalkBack = MakeEdit(Hwnd, hInst, ID_EDIT_WALK_BACK, 20, 304, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 336, 200, 20, L"DASH SPEED"); g_NormalModeControls.push_back(lbl);
+    EditDash = MakeEdit(Hwnd, hInst, ID_EDIT_DASH, 20, 356, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 388, 200, 20, L"JUMP VELOCITY (negative = up)"); g_NormalModeControls.push_back(lbl);
+    EditJumpVel = MakeEdit(Hwnd, hInst, ID_EDIT_JUMP_VEL, 20, 408, 260, 24);
+    lbl = MakeLabel(Hwnd, hInst, 20, 440, 200, 20, L"GRAVITY"); g_NormalModeControls.push_back(lbl);
+    EditGravity = MakeEdit(Hwnd, hInst, ID_EDIT_GRAVITY, 20, 460, 260, 24);
+    BtnSave = MakeButton(Hwnd, hInst, ID_BTN_SAVE, 20, 500, 260, 36, L"SAVE CHARACTER");
+    BtnNewCharacter = MakeButton(Hwnd, hInst, ID_BTN_NEW_CHARACTER, 20, 544, 260, 36, L"+ NEW CHARACTER");
 
     for (HWND h : {ComboCharacter, EditCharName, EditMaxHp, EditWalkFwd, EditWalkBack, EditDash, EditJumpVel, EditGravity, BtnSave, BtnNewCharacter}) {
         g_NormalModeControls.push_back(h);
     }
 
     // ---- Create-new-character overlay (shares the left column) ----
-    g_LblCreateId = MakeLabel(Hwnd, hInst, 20, 16, 260, 20, L"NEW CHARACTER ID (e.g. ken)");
-    EditCharId = MakeEdit(Hwnd, hInst, ID_EDIT_NEW_ID, 20, 36, 260, 24);
-    g_LblCreateName = MakeLabel(Hwnd, hInst, 20, 68, 260, 20, L"DISPLAY NAME");
+    g_LblCreateId = MakeLabel(Hwnd, hInst, 20, 76, 260, 20, L"NEW CHARACTER ID (e.g. ken)");
+    EditCharId = MakeEdit(Hwnd, hInst, ID_EDIT_NEW_ID, 20, 96, 260, 24);
+    g_LblCreateName = MakeLabel(Hwnd, hInst, 20, 128, 260, 20, L"DISPLAY NAME");
     // reuse EditCharName isn't safe here since it's shared with normal mode; make a dedicated one.
-    HWND editNewName = MakeEdit(Hwnd, hInst, ID_EDIT_NEW_NAME, 20, 88, 260, 24);
-    g_LblCreateTemplate = MakeLabel(Hwnd, hInst, 20, 120, 260, 20, L"CLONE MOVESET FROM");
-    ComboTemplate = MakeCombo(Hwnd, hInst, ID_COMBO_TEMPLATE, 20, 140, 260, 200);
-    BtnCreateConfirm = MakeButton(Hwnd, hInst, ID_BTN_CREATE_CONFIRM, 20, 180, 260, 36, L"CREATE");
-    BtnCreateCancel = MakeButton(Hwnd, hInst, ID_BTN_CREATE_CANCEL, 20, 224, 260, 36, L"CANCEL");
+    HWND editNewName = MakeEdit(Hwnd, hInst, ID_EDIT_NEW_NAME, 20, 148, 260, 24);
+    g_LblCreateTemplate = MakeLabel(Hwnd, hInst, 20, 180, 260, 20, L"CLONE MOVESET FROM");
+    ComboTemplate = MakeCombo(Hwnd, hInst, ID_COMBO_TEMPLATE, 20, 200, 260, 200);
+    BtnCreateConfirm = MakeButton(Hwnd, hInst, ID_BTN_CREATE_CONFIRM, 20, 240, 260, 36, L"CREATE");
+    BtnCreateCancel = MakeButton(Hwnd, hInst, ID_BTN_CREATE_CANCEL, 20, 284, 260, 36, L"CANCEL");
     for (HWND h : {g_LblCreateId, EditCharId, g_LblCreateName, editNewName, g_LblCreateTemplate, ComboTemplate, BtnCreateConfirm, BtnCreateCancel}) {
         g_CreateModeControls.push_back(h);
     }
 
     // ---- Right column: move editor ----
     int rx = 340;
-    lbl = MakeLabel(Hwnd, hInst, rx, 16, 260, 20, L"MOVE"); g_NormalModeControls.push_back(lbl);
-    ComboMove = MakeCombo(Hwnd, hInst, ID_COMBO_MOVE, rx, 36, 300, 300);
-    lbl = MakeLabel(Hwnd, hInst, rx, 68, 260, 20, L"DISPLAY NAME"); g_NormalModeControls.push_back(lbl);
-    EditMoveName = MakeEdit(Hwnd, hInst, ID_EDIT_MOVE_NAME, rx, 88, 300, 24);
-    lbl = MakeLabel(Hwnd, hInst, rx, 120, 90, 20, L"STARTUP"); g_NormalModeControls.push_back(lbl);
-    lbl = MakeLabel(Hwnd, hInst, rx + 100, 120, 90, 20, L"ACTIVE"); g_NormalModeControls.push_back(lbl);
-    lbl = MakeLabel(Hwnd, hInst, rx + 200, 120, 90, 20, L"RECOVERY"); g_NormalModeControls.push_back(lbl);
-    EditStartup = MakeEdit(Hwnd, hInst, ID_EDIT_STARTUP, rx, 140, 90, 24);
-    EditActive = MakeEdit(Hwnd, hInst, ID_EDIT_ACTIVE, rx + 100, 140, 90, 24);
-    EditRecovery = MakeEdit(Hwnd, hInst, ID_EDIT_RECOVERY, rx + 200, 140, 90, 24);
-    lbl = MakeLabel(Hwnd, hInst, rx, 172, 260, 20, L"DAMAGE"); g_NormalModeControls.push_back(lbl);
-    EditDamage = MakeEdit(Hwnd, hInst, ID_EDIT_DAMAGE, rx, 192, 300, 24);
-    lbl = MakeLabel(Hwnd, hInst, rx, 224, 90, 20, L"HITSTUN"); g_NormalModeControls.push_back(lbl);
-    lbl = MakeLabel(Hwnd, hInst, rx + 100, 224, 90, 20, L"BLOCKSTUN"); g_NormalModeControls.push_back(lbl);
-    lbl = MakeLabel(Hwnd, hInst, rx + 200, 224, 90, 20, L"HITSTOP"); g_NormalModeControls.push_back(lbl);
-    EditHitstun = MakeEdit(Hwnd, hInst, ID_EDIT_HITSTUN, rx, 244, 90, 24);
-    EditBlockstun = MakeEdit(Hwnd, hInst, ID_EDIT_BLOCKSTUN, rx + 100, 244, 90, 24);
-    EditHitstop = MakeEdit(Hwnd, hInst, ID_EDIT_HITSTOP, rx + 200, 244, 90, 24);
-    LabelAdvantage = MakeLabel(Hwnd, hInst, rx, 280, 300, 40, L"On-hit: -  On-block: -");
-    HWND btnSaveMove = MakeButton(Hwnd, hInst, ID_BTN_SAVE_MOVE, rx, 330, 300, 36, L"SAVE MOVE");
+    lbl = MakeLabel(Hwnd, hInst, rx, 76, 260, 20, L"MOVE"); g_NormalModeControls.push_back(lbl);
+    ComboMove = MakeCombo(Hwnd, hInst, ID_COMBO_MOVE, rx, 96, 300, 300);
+    lbl = MakeLabel(Hwnd, hInst, rx, 128, 260, 20, L"DISPLAY NAME"); g_NormalModeControls.push_back(lbl);
+    EditMoveName = MakeEdit(Hwnd, hInst, ID_EDIT_MOVE_NAME, rx, 148, 300, 24);
+    lbl = MakeLabel(Hwnd, hInst, rx, 180, 90, 20, L"STARTUP"); g_NormalModeControls.push_back(lbl);
+    lbl = MakeLabel(Hwnd, hInst, rx + 100, 180, 90, 20, L"ACTIVE"); g_NormalModeControls.push_back(lbl);
+    lbl = MakeLabel(Hwnd, hInst, rx + 200, 180, 90, 20, L"RECOVERY"); g_NormalModeControls.push_back(lbl);
+    EditStartup = MakeEdit(Hwnd, hInst, ID_EDIT_STARTUP, rx, 200, 90, 24);
+    EditActive = MakeEdit(Hwnd, hInst, ID_EDIT_ACTIVE, rx + 100, 200, 90, 24);
+    EditRecovery = MakeEdit(Hwnd, hInst, ID_EDIT_RECOVERY, rx + 200, 200, 90, 24);
+    lbl = MakeLabel(Hwnd, hInst, rx, 232, 260, 20, L"DAMAGE"); g_NormalModeControls.push_back(lbl);
+    EditDamage = MakeEdit(Hwnd, hInst, ID_EDIT_DAMAGE, rx, 252, 300, 24);
+    lbl = MakeLabel(Hwnd, hInst, rx, 284, 90, 20, L"HITSTUN"); g_NormalModeControls.push_back(lbl);
+    lbl = MakeLabel(Hwnd, hInst, rx + 100, 284, 90, 20, L"BLOCKSTUN"); g_NormalModeControls.push_back(lbl);
+    lbl = MakeLabel(Hwnd, hInst, rx + 200, 284, 90, 20, L"HITSTOP"); g_NormalModeControls.push_back(lbl);
+    EditHitstun = MakeEdit(Hwnd, hInst, ID_EDIT_HITSTUN, rx, 304, 90, 24);
+    EditBlockstun = MakeEdit(Hwnd, hInst, ID_EDIT_BLOCKSTUN, rx + 100, 304, 90, 24);
+    EditHitstop = MakeEdit(Hwnd, hInst, ID_EDIT_HITSTOP, rx + 200, 304, 90, 24);
+    LabelAdvantage = MakeLabel(Hwnd, hInst, rx, 340, 300, 40, L"On-hit: -  On-block: -");
+    HWND btnSaveMove = MakeButton(Hwnd, hInst, ID_BTN_SAVE_MOVE, rx, 390, 300, 36, L"SAVE MOVE");
     for (HWND h : {ComboMove, EditMoveName, EditStartup, EditActive, EditRecovery, EditDamage, EditHitstun, EditBlockstun, EditHitstop, LabelAdvantage, btnSaveMove}) {
         g_NormalModeControls.push_back(h);
     }
 
-    BtnBack = MakeButton(Hwnd, hInst, ID_BTN_BACK, 20, 700, 260, 36, L"BACK TO TITLE");
+    BtnBack = MakeButton(Hwnd, hInst, ID_BTN_BACK, 20, 760, 260, 36, L"BACK TO TITLE");
 }
 
 void App::DestroyEditorControls() {
@@ -366,6 +370,42 @@ void App::ShowCreateCharacterPrompt() {
 void App::HideCreateCharacterPrompt() {
     for (HWND h : g_CreateModeControls) ShowWindow(h, SW_HIDE);
     for (HWND h : g_NormalModeControls) ShowWindow(h, SW_SHOW);
+}
+
+// Owner-draw for the editor's buttons (BS_OWNERDRAW, see MakeButton above)
+// so they read as the same red/white rounded buttons as every other
+// screen instead of a plain system button. SAVE CHARACTER/SAVE MOVE/
+// CREATE are the primary (red) action in their respective forms; the rest
+// are secondary (outlined).
+void Editor_OnDrawItem(DRAWITEMSTRUCT* dis) {
+    bool primary = (dis->CtlID == ID_BTN_SAVE || dis->CtlID == ID_BTN_SAVE_MOVE || dis->CtlID == ID_BTN_CREATE_CONFIRM);
+    bool pressed = (dis->itemState & ODS_SELECTED) != 0;
+
+    wchar_t text[128];
+    GetWindowTextW(dis->hwndItem, text, 128);
+
+    Gdiplus::Graphics g(dis->hDC);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+
+    const auto& pal = GetPalette();
+    Gdiplus::RectF rect(0.0f, 0.0f, static_cast<Gdiplus::REAL>(dis->rcItem.right - dis->rcItem.left),
+                         static_cast<Gdiplus::REAL>(dis->rcItem.bottom - dis->rcItem.top));
+    Gdiplus::GraphicsPath path;
+    AddRoundedRect(path, rect, 6);
+
+    if (primary) {
+        Gdiplus::SolidBrush fill(pressed ? pal.AccentDark : pal.Accent);
+        g.FillPath(&fill, &path);
+    } else {
+        Gdiplus::SolidBrush fill(pressed ? pal.PanelBg2 : pal.PanelBg);
+        g.FillPath(&fill, &path);
+        Gdiplus::Pen border(pal.Border, 2.0f);
+        g.DrawPath(&border, &path);
+    }
+
+    Gdiplus::Font font(UiFontFamily(), 13, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+    DrawTextCentered(g, text, font, rect, primary ? pal.White : pal.TextDark);
 }
 
 void Editor_OnCommand(App& app, int controlId, int notifyCode, HWND ctrl) {

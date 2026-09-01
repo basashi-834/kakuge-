@@ -17,7 +17,11 @@ namespace kakuge {
 
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
 constexpr double OriginX = 640.0;
-constexpr double OriginY = 560.0;
+// Ground line's Y in the 1280x720 virtual canvas. Tuned so an idle
+// character (~440px tall, see kCharScale in Draw.cpp) leaves roughly
+// 100-120px of headroom above their head, matching the tighter classic-
+// arcade framing the user asked for (as opposed to a taller ~150px gap).
+constexpr double OriginY = 550.0;
 
 inline double ToScreenX(double worldX) { return OriginX + worldX; }
 inline double ToScreenY(double worldY) { return OriginY + worldY; }

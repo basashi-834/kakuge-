@@ -1,0 +1,45 @@
+{
+ "id": "hurricane_kick",
+ "name": "竜巻旋風腳 (Hurricane Kick)",
+ "startup": 9,
+ "active": 16,
+ "recovery": 20,
+ "damage": 75,
+ "hitstun": 22,
+ "blockstun": 12,
+ "hitstop": 7,
+ "guardType": "High",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 155.8,
+   "offsetY": -164.0,
+   "width": 196.8,
+   "height": 147.6
+  }
+ ],
+ "knockbackX": 252.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Knockdown",
+ "meterGain": 12,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "super_combo"
+ ],
+ "cancelStartFrame": 9,
+ "cancelEndFrame": 16,
+ "tags": [
+  "Special"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "214",
+ "button": "AnyK",
+ "stance": "stand",
+ "requiresAir": false,
+ "projectile": {},
+ "effectiveRange": 533.0
+}

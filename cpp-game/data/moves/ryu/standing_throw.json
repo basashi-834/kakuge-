@@ -1,28 +1,42 @@
 {
-	"id": "standing_throw",
-	"name": "投げ",
-	"startup": 3,
-	"active": 2,
-	"recovery": 22,
-	"damage": 140,
-	"hitstun": 40,
-	"blockstun": 0,
-	"hitstop": 10,
-	"guardType": "Throw",
-	"chipDamagePercent": 0.0,
-	"hitbox": [{"offsetX": 26, "offsetY": -55, "width": 30, "height": 40}],
-	"knockbackX": 260,
-	"knockbackY": 0,
-	"hitOutcome": "Knockdown",
-	"meterGain": 10,
-	"meterCost": 0,
-	"cancelRoutes": [],
-	"cancelStartFrame": 0,
-	"cancelEndFrame": 0,
-	"tags": ["Normal", "Throw"],
-	"invincibility": {"type": "None", "start_frame": 0, "end_frame": 0},
-	"input": "",
-	"button": "Throw",
-	"stance": "stand",
-	"effectiveRange": 55
+ "id": "standing_throw",
+ "name": "\u6295\u3052",
+ "startup": 3,
+ "active": 2,
+ "recovery": 22,
+ "damage": 140,
+ "hitstun": 40,
+ "blockstun": 0,
+ "hitstop": 10,
+ "guardType": "Throw",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 106.6,
+   "offsetY": -225.5,
+   "width": 123.0,
+   "height": 164.0
+  }
+ ],
+ "knockbackX": 468.0,
+ "knockbackY": 0.0,
+ "hitOutcome": "Knockdown",
+ "meterGain": 10,
+ "meterCost": 0,
+ "cancelRoutes": [],
+ "cancelStartFrame": 0,
+ "cancelEndFrame": 0,
+ "tags": [
+  "Normal",
+  "Throw"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "Throw",
+ "stance": "stand",
+ "effectiveRange": 225.5
 }
