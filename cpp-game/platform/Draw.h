@@ -17,14 +17,14 @@ namespace kakuge {
 
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
 constexpr double OriginX = VirtualW / 2.0;
-// Ground line's Y in the 384x224 virtual canvas - 85.2% of canvas height,
-// matching the user's 1920x1080-proportioned spec (ground at y=920 of
-// 1080, see StageConstants::RefGroundY in engine/Constants.h). Tuned so
-// an idle character (~156px tall at zoom 1.0, see kCharScale in Draw.cpp)
-// leaves ~35px of headroom above their head (below the top HUD row) and
-// ~25px of footroom before the HUD gauge bars at the bottom of the
-// canvas.
-constexpr double OriginY = 191.0;
+// Ground line's Y in the 384x224 virtual canvas. Nudged down from the
+// 1920x1080 spec's literal 85.2%-of-height ratio (191) to 89.3% (200) per
+// user feedback that the round-start gap above the character's head felt
+// too tight - leaves an idle character (~156px tall at zoom 1.0, see
+// kCharScale in Draw.cpp) ~44px of headroom (was ~35px) above their head,
+// and still ~9px of footroom before the HUD's "SP" gauge label at the
+// bottom of the canvas.
+constexpr double OriginY = 200.0;
 
 // Dynamic camera (auto-zoom): follows the midpoint between the two
 // fighters and zooms in/out based on the distance between them - closer

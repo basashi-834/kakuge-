@@ -64,21 +64,40 @@ double CameraTargetZoom(double distance) {
     double zoom = (desiredWidth > 1.0) ? (VirtualW / desiredWidth) : kCameraMaxZoom;
     return std::clamp(zoom, kCameraMinZoom, kCameraMaxZoom);
 }
+
+// Keeps the camera's visible window inside the stage: the raw midpoint of
+// the two fighters stays within [StageMinX, StageMaxX] on its own, but the
+// visible WINDOW around that midpoint (width = VirtualW/zoom) doesn't -
+// pin against a fighter cornered near a wall and it still centers with a
+// wide gap of empty stage past them, instead of the tight, wall-close
+// framing a real corner shot should have (this is what a fighting-game
+// camera cornering someone actually looks like - the camera stops
+// following the midpoint and pins to the wall instead). Falls back to
+// centering on the stage when the view is wider than the stage itself
+// (only possible right at kCameraMinZoom, which is sized to guarantee
+// that case still shows both fighters - see kCameraMinZoom's comment).
+double ClampCameraCenter(double centerX, double zoom) {
+    double halfVisible = VirtualW / (2.0 * zoom);
+    double minCenter = StageConstants::StageMinX + halfVisible;
+    double maxCenter = StageConstants::StageMaxX - halfVisible;
+    if (minCenter > maxCenter) return (StageConstants::StageMinX + StageConstants::StageMaxX) / 2.0;
+    return std::clamp(centerX, minCenter, maxCenter);
+}
 } // namespace
 
 GameCamera& GetCamera() { return g_Camera; }
 
 void UpdateCamera(double p1x, double p2x, double dt) {
-    double targetCenter = (p1x + p2x) / 2.0;
     double targetZoom = CameraTargetZoom(std::abs(p1x - p2x));
+    double targetCenter = ClampCameraCenter((p1x + p2x) / 2.0, targetZoom);
     double t = std::clamp(kCameraLerpSpeed * dt, 0.0, 1.0);
     g_Camera.CenterX += (targetCenter - g_Camera.CenterX) * t;
     g_Camera.Zoom += (targetZoom - g_Camera.Zoom) * t;
 }
 
 void ResetCamera(double p1x, double p2x) {
-    g_Camera.CenterX = (p1x + p2x) / 2.0;
     g_Camera.Zoom = CameraTargetZoom(std::abs(p1x - p2x));
+    g_Camera.CenterX = ClampCameraCenter((p1x + p2x) / 2.0, g_Camera.Zoom);
 }
 
 namespace {
