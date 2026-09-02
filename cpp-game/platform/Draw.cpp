@@ -681,7 +681,12 @@ static void DrawNameTag(Graphics& g, float barX, float barBottom, float barW, co
 void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade) {
     const auto& pal = GetPalette();
 
-    float barY = 3.0f, barH = 8.0f;
+    // Nudged down from the top edge (was barY=3, barH=8) and a touch
+    // thicker, per the user's classic-Capcom-HUD reference screenshots -
+    // those show a visible gap above the HP bars rather than sitting
+    // flush against the top, and a bolder bar than this project's
+    // previous flat/thin default.
+    float barY = 9.0f, barH = 10.0f;
     float p1BarX = 3.0f, barW = 140.0f;
     float p2BarX = VirtualW - 3.0f - barW;
     DrawHPBar(g, p1BarX, barY, barW, barH, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false, pal.ArenaLine);
@@ -700,7 +705,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     // digit and makes it illegible.
     float boxW = 28, boxH = 20;
     float boxX = (VirtualW - boxW) / 2.0f;
-    RectF boxRect(boxX, 2, boxW, boxH);
+    RectF boxRect(boxX, 8, boxW, boxH); // shifted down 6px alongside the HP bars above
     GraphicsPath boxPath;
     AddRoundedRect(boxPath, boxRect, 0.0f);
     SolidBrush accentBrush(pal.Accent);
@@ -708,7 +713,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     Pen boxBorder(pal.ArenaLine, 1.0f);
     g.DrawPath(&boxBorder, &boxPath);
     DrawPixelTextCentered(g, timerText, boxRect, 2.0f, pal.White);
-    RectF roundLabelRect(VirtualW / 2.0f - 30, 23, 60, 8);
+    RectF roundLabelRect(VirtualW / 2.0f - 30, 29, 60, 8);
     DrawPixelTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", roundLabelRect, 1.0f, pal.ArenaTextDim);
 
     // "FIGHT" banner - a brief flash right as the match starts, fading out
@@ -733,7 +738,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
         bool onRight = p2ComboDisplay > 0;
         if (shownCombo >= 2) {
             std::wstring comboText = std::to_wstring(shownCombo) + L" HIT COMBO";
-            RectF cbRect(onRight ? VirtualW - 82.0f : 12.0f, 28, 70, 10);
+            RectF cbRect(onRight ? VirtualW - 82.0f : 12.0f, 34, 70, 10);
             SolidBrush bg(Color(static_cast<BYTE>(std::min(220, alpha)), pal.Accent.GetR(), pal.Accent.GetG(), pal.Accent.GetB()));
             GraphicsPath cbPath;
             AddRoundedRect(cbPath, cbRect, 0.0f);
