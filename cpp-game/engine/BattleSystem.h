@@ -157,24 +157,39 @@ public:
         if (FramesLeft <= 0) EndByTimeout();
     }
 
+    // Pushbox-vs-pushbox separation (the ONLY thing pushboxes are for).
+    // Overlap is split half/half by default; a fighter already against
+    // their stage edge doesn't move and the other absorbs the whole
+    // separation instead (the spec's "画面端側のキャラクターを動かさず" rule -
+    // stage edge == screen edge here, since the camera clamps to the
+    // stage). A crouching/blocking fighter also holds their ground (an
+    // earlier user request, kept), so a walked-into guard doesn't drift.
     void ResolvePushboxes() {
         RectBox r1 = Player1.PushboxRect();
         RectBox r2 = Player2.PushboxRect();
         if (!r1.Intersects(r2)) return;
         double overlapX = std::min(r1.Right(), r2.Right()) - std::max(r1.Left(), r2.Left());
         if (overlapX <= 0) return;
-        double dir = 1.0;
-        if (Player1.PositionX < Player2.PositionX) dir = -1.0;
+        // dir = the direction Player1 gets pushed (+1 right / -1 left);
+        // Player2 is pushed the opposite way.
+        double dir = (Player1.PositionX < Player2.PositionX) ? -1.0 : 1.0;
 
-        // A crouching or blocking fighter holds their ground - the other
-        // fighter absorbs the full separation instead of splitting it, so
-        // "planted" never drifts backward just because the opponent walked
-        // into them.
         bool p1Planted = Player1.IsPlanted();
         bool p2Planted = Player2.IsPlanted();
         double push1 = overlapX / 2.0, push2 = overlapX / 2.0;
         if (p1Planted && !p2Planted) { push1 = 0.0; push2 = overlapX; }
         else if (p2Planted && !p1Planted) { push2 = 0.0; push1 = overlapX; }
+
+        // Room each fighter has left before their own wall, in the
+        // direction they'd be pushed; any push that wouldn't fit is handed
+        // to the other fighter so the full overlap still gets resolved
+        // this frame instead of leaking through ClampToStage.
+        double room1 = (dir > 0) ? (Player1.StageMaxX - Player1.PositionX) : (Player1.PositionX - Player1.StageMinX);
+        double room2 = (dir > 0) ? (Player2.PositionX - Player2.StageMinX) : (Player2.StageMaxX - Player2.PositionX);
+        room1 = std::max(0.0, room1);
+        room2 = std::max(0.0, room2);
+        if (push1 > room1) { push2 += push1 - room1; push1 = room1; }
+        if (push2 > room2) { push1 = std::min(room1, push1 + (push2 - room2)); push2 = room2; }
 
         Player1.PositionX += push1 * dir;
         Player2.PositionX -= push2 * dir;
@@ -182,22 +197,45 @@ public:
         Player2.ClampToStage();
     }
 
+    // Throw connect check (spec: center-to-center distance, not a hitbox).
+    // Attacker must be grounded, in the throw's Active window, and facing
+    // the defender; the defender must be grounded and throwable
+    // (Fighter::IsThrowable). Throw invincibility is ReceiveHit's job.
+    static bool ThrowInRange(const Fighter& attacker, const Fighter& defender) {
+        const MoveData* move = attacker.CurrentMoveData;
+        if (move == nullptr || attacker.SM.CurrentState != CharState::Attack) return false;
+        if (MoveExecutor::GetPhase(*move, attacker.SM.CurrentFrame) != MovePhase::Active) return false;
+        if (attacker.Stance() == "air" || !defender.IsThrowable()) return false;
+        double dx = std::round(defender.PositionX) - std::round(attacker.PositionX);
+        if (dx * attacker.Facing < 0) return false; // opponent is behind
+        return std::abs(dx) <= move->ThrowRange;
+    }
+
+    // Attacker Hitbox vs defender Hurtbox (never hitbox-vs-hitbox, never
+    // hurtbox-vs-hurtbox, never anything-vs-pushbox); throws use the
+    // distance rule above instead.
     void ResolveCombat(Fighter& attacker, Fighter& defender) {
-        if (attacker.ActiveHitboxRects.empty() || attacker.CurrentMoveData == nullptr) return;
+        if (attacker.CurrentMoveData == nullptr || attacker.SM.CurrentState != CharState::Attack) return;
         if (defender.IsDead) return;
         if (std::find(attacker.AlreadyHit.begin(), attacker.AlreadyHit.end(), &defender) != attacker.AlreadyHit.end()) return;
-        std::vector<RectBox> hurtRects = defender.HurtboxRects();
-        bool anyOverlap = false;
-        for (const auto& hb : attacker.ActiveHitboxRects) {
-            for (const auto& hr : hurtRects) {
-                if (hb.Intersects(hr)) { anyOverlap = true; break; }
+        const MoveData& move = *attacker.CurrentMoveData;
+
+        bool connects = false;
+        if (move.GuardType == Constants::GuardThrow) {
+            connects = ThrowInRange(attacker, defender);
+        } else {
+            if (attacker.ActiveHitboxRects.empty()) return;
+            std::vector<RectBox> hurtRects = defender.HurtboxRects();
+            for (const auto& hb : attacker.ActiveHitboxRects) {
+                for (const auto& hr : hurtRects) {
+                    if (hb.Intersects(hr)) { connects = true; break; }
+                }
+                if (connects) break;
             }
-            if (anyOverlap) break;
         }
-        if (!anyOverlap) return;
+        if (!connects) return;
 
         attacker.AlreadyHit.push_back(&defender);
-        const MoveData& move = *attacker.CurrentMoveData;
         bool wasAlreadyStunned = (defender.SM.CurrentState == CharState::Hitstun || defender.SM.CurrentState == CharState::Knockdown);
         HitResult result = defender.ReceiveHit(move, attacker);
         if (move.Hitstop > attacker.HitstopTimer) attacker.HitstopTimer = move.Hitstop;

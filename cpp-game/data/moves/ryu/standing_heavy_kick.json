@@ -1,9 +1,9 @@
 {
  "id": "standing_heavy_kick",
  "name": "\u7acb\u3061\u5f37\u30ad\u30c3\u30af",
- "startup": 11,
+ "startup": 9,
  "active": 4,
- "recovery": 19,
+ "recovery": 16,
  "damage": 105,
  "hitstun": 32,
  "blockstun": 12,
@@ -12,10 +12,10 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 59.8,
-   "offsetY": -55.96,
-   "width": 62.4,
-   "height": 33.8
+   "offsetX": 36,
+   "offsetY": -38,
+   "width": 24,
+   "height": 14
   }
  ],
  "knockbackX": 117.0,

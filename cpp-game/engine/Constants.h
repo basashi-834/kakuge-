@@ -78,6 +78,65 @@ struct Constants {
 };
 
 // ---------------------------------------------------------------------
+// GameSpec - the user's 384x224-native screen / character / collision
+// baseline, verbatim (names and values match the spec document's
+// parameter list). Everything else in the codebase that cares about
+// these numbers derives from here rather than repeating them:
+//   - StageConstants below (world start positions) and platform/Draw.h's
+//     OriginY / platform/Draw.cpp's kCharScale (ground line, draw scale)
+//   - Fighter's stance pushboxes, HurtboxSet's default parts
+//   - the throw-range check in BattleSystem::ResolveCombat
+//   - the HUD's top-band / bottom-gauge sizing in platform/Draw.cpp
+// Units are canvas pixels at camera zoom 1.0 (== world units, see the
+// StageConstants note). Coordinates here are integers on purpose (the
+// spec asks for integer-px collision data); movement math stays double.
+// ---------------------------------------------------------------------
+struct GameSpec {
+    static constexpr int BaseWidth = 384;
+    static constexpr int BaseHeight = 224;
+
+    // Feet line for both fighters (84.4% of BaseHeight).
+    static constexpr int GroundY = 189;
+
+    // Authoring canvas per sprite frame (guideline for art assets - the
+    // renderer scales whatever it's given, see data/sprites/README.txt).
+    static constexpr int CharacterSpriteWidth = 75;
+    static constexpr int CharacterSpriteHeight = 90;
+    // Actual body silhouette inside that canvas. Height is what the draw
+    // scale is solved against; width is a target for real sprite art (the
+    // procedural stick figure can't reach it without a shape redesign -
+    // see kCharScale's comment in platform/Draw.cpp).
+    static constexpr int CharacterVisualWidth = 55;
+    static constexpr int CharacterVisualHeight = 88;
+
+    // Round-start centers, in canvas X (30% / 70% of BaseWidth, 152 apart).
+    static constexpr int Player1StartX = 116;
+    static constexpr int Player2StartX = 268;
+
+    static constexpr int HudHeight = 30;        // top band: HP/timer/names
+    static constexpr int SuperGaugeHeight = 18; // bottom band: super gauges
+
+    // Pushbox (body-vs-body separation only - never used for hits), per
+    // stance. Grounded boxes stand on the feet line; the air box is
+    // centered on the torso instead (see Fighter::PushboxRect).
+    static constexpr int PushboxStandWidth = 30, PushboxStandHeight = 72;
+    static constexpr int PushboxCrouchWidth = 32, PushboxCrouchHeight = 48;
+    static constexpr int PushboxAirWidth = 28, PushboxAirHeight = 52;
+
+    // Throws resolve on center-to-center distance, not a hitbox.
+    static constexpr int NormalThrowRange = 28;
+
+    // Reference hitbox sizes for the first-pass test normals (the live
+    // values are data - data/moves/ryu/*.json - these are the spec's
+    // numbers they were authored from).
+    static constexpr int LightPunchHitboxWidth = 16, LightPunchHitboxHeight = 10;
+    static constexpr int HeavyPunchHitboxWidth = 20, HeavyPunchHitboxHeight = 12;
+    static constexpr int LightKickHitboxWidth = 18, LightKickHitboxHeight = 10;
+    static constexpr int HeavyKickHitboxWidth = 24, HeavyKickHitboxHeight = 14;
+    static constexpr int CrouchLightKickHitboxWidth = 20, CrouchLightKickHitboxHeight = 8;
+};
+
+// ---------------------------------------------------------------------
 // Stage / start-position tuning constants (user-specified proportions).
 // ---------------------------------------------------------------------
 // World units here are the same unit the whole engine/renderer already
@@ -123,19 +182,20 @@ struct StageConstants {
     static constexpr double StageMinX = -StageWidth / 2.0;
     static constexpr double StageMaxX = StageWidth / 2.0;
 
-    // PLAYER1_START_X / PLAYER2_START_X: symmetric +-76 around world X=0 -
-    // see the history note above for why (zoom-1.0 screen projection lands
-    // on the later 384x224-native spec's 116/268 canvas positions).
-    static constexpr double Player1StartX = -76.0;
-    static constexpr double Player2StartX = 76.0;
+    // PLAYER1_START_X / PLAYER2_START_X: GameSpec's canvas positions
+    // (116/268) re-centered on world X=0 (canvas center = BaseWidth/2 =
+    // 192) -> symmetric -76/+76, 152 apart. At the round-start camera's
+    // zoom 1.0 (see kCameraPaddingWorld in platform/Draw.cpp) these project
+    // back onto exactly canvas x=116/268.
+    static constexpr double Player1StartX = GameSpec::Player1StartX - GameSpec::BaseWidth / 2.0; // -76
+    static constexpr double Player2StartX = GameSpec::Player2StartX - GameSpec::BaseWidth / 2.0; // +76
     static constexpr double PlayerStartDistance = Player2StartX - Player1StartX; // 152
 
     // PLAYER_HEIGHT ratio - superseded from the original 760/1080 (0.704)
-    // to the later 384x224-native spec's 88/224 (~0.393); the actual pixel
-    // constant (kCharScale) lives in platform/Draw.cpp since character
-    // draw size is a rendering concern, recorded here too so the ratio
-    // itself isn't duplicated-and-drifts if either side gets retuned later.
-    static constexpr double PlayerHeightRatio = 88.0 / 224.0;
+    // to GameSpec's 88/224 (~0.393); the actual pixel constant (kCharScale)
+    // lives in platform/Draw.cpp since character draw size is a rendering
+    // concern, and is solved from the same GameSpec value.
+    static constexpr double PlayerHeightRatio = static_cast<double>(GameSpec::CharacterVisualHeight) / GameSpec::BaseHeight;
 };
 
 } // namespace kakuge

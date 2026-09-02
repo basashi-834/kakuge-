@@ -28,7 +28,7 @@ constexpr double OriginX = VirtualW / 2.0;
 // the character now standing 88px tall at zoom 1.0 (kCharScale in
 // Draw.cpp), the head sits at Y~=101 - comfortably clear of the ~30-37px
 // top HUD region per that same spec's headroom requirement.
-constexpr double OriginY = 189.0;
+constexpr double OriginY = GameSpec::GroundY;
 
 // Dynamic camera (auto-zoom): follows the midpoint between the two
 // fighters and zooms in/out based on the distance between them - closer

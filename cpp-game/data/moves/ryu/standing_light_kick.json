@@ -3,7 +3,7 @@
  "name": "\u7acb\u3061\u5f31\u30ad\u30c3\u30af",
  "startup": 5,
  "active": 3,
- "recovery": 7,
+ "recovery": 8,
  "damage": 28,
  "hitstun": 12,
  "blockstun": 8,
@@ -12,10 +12,10 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 48.04,
-   "offsetY": -61.04,
-   "width": 46.8,
-   "height": 28.6
+   "offsetX": 29,
+   "offsetY": -33,
+   "width": 18,
+   "height": 10
   }
  ],
  "knockbackX": 61.04,

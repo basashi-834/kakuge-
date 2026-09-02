@@ -8,12 +8,44 @@
 #include <vector>
 #include <algorithm>
 #include "Constants.h"
+#include "Boxes.h"
 #include <nlohmann/json.hpp>
 
 namespace kakuge {
 
+// offsetX/offsetY are the box CENTER relative to the character's origin
+// (center X, feet Y), in the character's facing direction - the engine
+// mirrors offsetX for a left-facing fighter (see MoveExecutor::
+// GetActiveHitboxRects), so one set of data serves both facings. A
+// spec-style top-left box (x, y, w, h) is entered as
+// offsetX = x + w/2, offsetY = y + h/2.
 struct HitboxDef {
     double offsetX = 0, offsetY = 0, width = 40, height = 40;
+};
+
+// Per-animation-frame collision override for a span of a move's frames
+// (0-based, inclusive on both ends, in the move's own frame count). Any
+// of the three box kinds can be overridden independently; a kind that
+// isn't set falls back to the normal source for that frame (stance
+// hurtboxes, stance pushbox, the move's Active-window hitboxes). This is
+// what lets a move shrink its arm-side hurtbox during an anti-air, swap
+// in a tucked pushbox mid-jump, or run a hitbox on a different timing
+// than the shared startup/active/recovery window. JSON key "frameBoxes":
+//   [{"startFrame":4,"endFrame":6,
+//     "hurtboxes":[{"part":"head","offsetX":0,"offsetY":-80,"width":18,"height":16}, ...],
+//     "pushbox":{"offsetX":0,"offsetY":-36,"width":30,"height":72},
+//     "hitboxes":[{"offsetX":26,"offsetY":-61,"width":16,"height":10}]}]
+// Authored in JSON for now (not yet exposed in the Character Editor).
+struct FrameBoxSet {
+    int startFrame = 0, endFrame = 0;
+    bool hasHurtboxes = false;
+    std::vector<HurtboxPart> hurtboxes;
+    bool hasPushbox = false;
+    RectBox pushbox;
+    bool hasHitboxes = false;
+    std::vector<HitboxDef> hitboxes;
+
+    bool Covers(int frame) const { return frame >= startFrame && frame <= endFrame; }
 };
 
 struct Invincibility {
@@ -44,6 +76,13 @@ public:
     double ChipDamagePercent = 0.0;
 
     std::vector<HitboxDef> Hitboxes;
+    std::vector<FrameBoxSet> FrameBoxes;
+
+    // Throws (GuardType "Throw") don't use Hitboxes for their connect
+    // check - they resolve on center-to-center distance during the Active
+    // window instead (see BattleSystem::ResolveCombat). Defaults to the
+    // spec's NORMAL_THROW_RANGE; per-move override via JSON "throwRange".
+    double ThrowRange = GameSpec::NormalThrowRange;
 
     double KnockbackX = 0.0, KnockbackY = 0.0;
     std::string HitOutcome = "Normal";
@@ -95,6 +134,16 @@ public:
         return frame >= CancelStartFrame && frame <= CancelEndFrame;
     }
 
+    // First FrameBoxSet covering `frame`, or nullptr when the frame has no
+    // per-frame override (the common case for every move authored before
+    // frameBoxes existed).
+    const FrameBoxSet* FrameBoxesAt(int frame) const {
+        for (const auto& fb : FrameBoxes) {
+            if (fb.Covers(frame)) return &fb;
+        }
+        return nullptr;
+    }
+
     // Frame advantage helpers, used by the Character Editor.
     int OnHitAdvantage() const { return Hitstun - Recovery; }
     int OnBlockAdvantage() const { return Blockstun - Recovery; }
@@ -115,16 +164,47 @@ public:
         m.GuardType = obj.value("guardType", std::string("High"));
         m.ChipDamagePercent = obj.value("chipDamagePercent", 0.0);
 
+        auto readHitbox = [](const nlohmann::json& hb) {
+            HitboxDef d;
+            d.offsetX = hb.value("offsetX", 0.0);
+            d.offsetY = hb.value("offsetY", 0.0);
+            d.width = hb.value("width", 40.0);
+            d.height = hb.value("height", 40.0);
+            return d;
+        };
         if (obj.contains("hitbox") && obj["hitbox"].is_array()) {
-            for (const auto& hb : obj["hitbox"]) {
-                HitboxDef d;
-                d.offsetX = hb.value("offsetX", 0.0);
-                d.offsetY = hb.value("offsetY", 0.0);
-                d.width = hb.value("width", 40.0);
-                d.height = hb.value("height", 40.0);
-                m.Hitboxes.push_back(d);
+            for (const auto& hb : obj["hitbox"]) m.Hitboxes.push_back(readHitbox(hb));
+        }
+
+        if (obj.contains("frameBoxes") && obj["frameBoxes"].is_array()) {
+            for (const auto& fj : obj["frameBoxes"]) {
+                FrameBoxSet fb;
+                fb.startFrame = fj.value("startFrame", 0);
+                fb.endFrame = fj.value("endFrame", fb.startFrame);
+                if (fj.contains("hurtboxes") && fj["hurtboxes"].is_array()) {
+                    fb.hasHurtboxes = true;
+                    for (const auto& pj : fj["hurtboxes"]) {
+                        HurtboxPart part;
+                        part.Name = pj.value("part", std::string("body"));
+                        part.Box = RectBox(pj.value("offsetX", 0.0), pj.value("offsetY", 0.0),
+                                           pj.value("width", 40.0), pj.value("height", 40.0));
+                        fb.hurtboxes.push_back(part);
+                    }
+                }
+                if (fj.contains("pushbox") && fj["pushbox"].is_object()) {
+                    const auto& pb = fj["pushbox"];
+                    fb.hasPushbox = true;
+                    fb.pushbox = RectBox(pb.value("offsetX", 0.0), pb.value("offsetY", 0.0),
+                                         pb.value("width", 30.0), pb.value("height", 72.0));
+                }
+                if (fj.contains("hitboxes") && fj["hitboxes"].is_array()) {
+                    fb.hasHitboxes = true;
+                    for (const auto& hb : fj["hitboxes"]) fb.hitboxes.push_back(readHitbox(hb));
+                }
+                m.FrameBoxes.push_back(fb);
             }
         }
+        m.ThrowRange = obj.value("throwRange", static_cast<double>(GameSpec::NormalThrowRange));
 
         m.KnockbackX = obj.value("knockbackX", 0.0);
         m.KnockbackY = obj.value("knockbackY", 0.0);
@@ -169,11 +249,14 @@ public:
         m.MotionImagePath = obj.value("motionImage", std::string());
         m.EffectiveRange = obj.value("effectiveRange", 0.0);
         if (m.EffectiveRange <= 0.0) {
+            // CPU-AI engagement distances (center-to-center), sized against
+            // the GameSpec-scale normals: a light reaches ~34px from center,
+            // a heavy ~48px, a throw NormalThrowRange (28).
             if (m.HasTag(Constants::TagProjectile)) m.EffectiveRange = 900.0;
-            else if (m.HasTag(Constants::TagThrow)) m.EffectiveRange = 55.0;
-            else if (m.HasTag(Constants::TagHeavy)) m.EffectiveRange = 100.0;
-            else if (m.HasTag(Constants::TagMedium)) m.EffectiveRange = 85.0;
-            else m.EffectiveRange = 70.0;
+            else if (m.HasTag(Constants::TagThrow)) m.EffectiveRange = m.ThrowRange;
+            else if (m.HasTag(Constants::TagHeavy)) m.EffectiveRange = 50.0;
+            else if (m.HasTag(Constants::TagMedium)) m.EffectiveRange = 42.0;
+            else m.EffectiveRange = 36.0;
         }
         return m;
     }
@@ -184,10 +267,34 @@ public:
         j["startup"] = Startup; j["active"] = Active; j["recovery"] = Recovery; j["totalFrame"] = TotalFrame;
         j["damage"] = Damage; j["hitstun"] = Hitstun; j["blockstun"] = Blockstun; j["hitstop"] = Hitstop;
         j["guardType"] = GuardType; j["chipDamagePercent"] = ChipDamagePercent;
+        auto hitboxJson = [](const HitboxDef& hb) {
+            return nlohmann::json{{"offsetX", hb.offsetX}, {"offsetY", hb.offsetY}, {"width", hb.width}, {"height", hb.height}};
+        };
         j["hitbox"] = nlohmann::json::array();
-        for (const auto& hb : Hitboxes) {
-            j["hitbox"].push_back({{"offsetX", hb.offsetX}, {"offsetY", hb.offsetY}, {"width", hb.width}, {"height", hb.height}});
+        for (const auto& hb : Hitboxes) j["hitbox"].push_back(hitboxJson(hb));
+        if (!FrameBoxes.empty()) {
+            j["frameBoxes"] = nlohmann::json::array();
+            for (const auto& fb : FrameBoxes) {
+                nlohmann::json fj{{"startFrame", fb.startFrame}, {"endFrame", fb.endFrame}};
+                if (fb.hasHurtboxes) {
+                    fj["hurtboxes"] = nlohmann::json::array();
+                    for (const auto& part : fb.hurtboxes) {
+                        fj["hurtboxes"].push_back({{"part", part.Name}, {"offsetX", part.Box.CenterX}, {"offsetY", part.Box.CenterY},
+                                                   {"width", part.Box.Width}, {"height", part.Box.Height}});
+                    }
+                }
+                if (fb.hasPushbox) {
+                    fj["pushbox"] = {{"offsetX", fb.pushbox.CenterX}, {"offsetY", fb.pushbox.CenterY},
+                                     {"width", fb.pushbox.Width}, {"height", fb.pushbox.Height}};
+                }
+                if (fb.hasHitboxes) {
+                    fj["hitboxes"] = nlohmann::json::array();
+                    for (const auto& hb : fb.hitboxes) fj["hitboxes"].push_back(hitboxJson(hb));
+                }
+                j["frameBoxes"].push_back(fj);
+            }
         }
+        if (GuardType == Constants::GuardThrow) j["throwRange"] = ThrowRange;
         j["knockbackX"] = KnockbackX; j["knockbackY"] = KnockbackY; j["hitOutcome"] = HitOutcome;
         j["meterGain"] = MeterGain; j["meterCost"] = MeterCost;
         j["cancelRoutes"] = CancelRoutes;

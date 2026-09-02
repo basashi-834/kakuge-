@@ -23,7 +23,7 @@ namespace kakuge {
 // buffer + nearest-neighbor pipeline (see App::OnPaint) is what turns
 // this line art into genuine chunky pixels rather than smooth vector
 // strokes.
-constexpr double kCharScale = 88.0 / 108.0;
+constexpr double kCharScale = static_cast<double>(GameSpec::CharacterVisualHeight) / 108.0;
 // A separate horizontal-only scale was tried here to also hit the user's
 // spec'd CHARACTER_VISUAL_WIDTH (~55px, ~14-15% of the 384px canvas)
 // alongside height - solving 24*kCharWidthScale == 55 against the shared
@@ -523,8 +523,13 @@ Gdiplus::Image* PickSprite(const Fighter& fighter, const CharacterSpriteSet& spr
 
 void DrawFighter(Graphics& g, const Fighter& fighter, const fs::path& baseDataDir, const fs::path& userDir) {
     Color bodyColor(255, static_cast<BYTE>(fighter.Stats.ColorR), static_cast<BYTE>(fighter.Stats.ColorG), static_cast<BYTE>(fighter.Stats.ColorB));
-    double sx = ToScreenX(fighter.PositionX);
-    double sy = ToScreenY(fighter.PositionY);
+    // Snapped to whole canvas pixels (the spec asks for integer draw
+    // coordinates; movement math itself stays fractional) - and snapped the
+    // same way the collision rects are (HurtboxSet::PlaceParts rounds the
+    // origin first), so the debug boxes and the drawn body never drift a
+    // sub-pixel apart from each other.
+    double sx = std::round(ToScreenX(fighter.PositionX));
+    double sy = std::round(ToScreenY(fighter.PositionY));
     int facing = fighter.Facing;
     // The dynamic camera (see GameCamera in Draw.h) moves fighters via
     // ToScreenX/Y above, but DrawHumanoid itself is zoom-agnostic (it's
@@ -781,9 +786,13 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     // fit) keeps the box border from touching the glyphs - at this tiny a
     // scale a border pixel flush against a digit reads as part of the
     // digit and makes it illegible.
-    float boxW = 28, boxH = 20;
+    // Top HUD band budget: GameSpec::HudHeight (30, spec range 28-32). The
+    // timer box (y 5..23) and the round label under it (y 24..32) are the
+    // tallest elements, so the band's bottom edge is y=32; the HP bars/
+    // portraits/names all finish above that.
+    float boxW = 28, boxH = 18;
     float boxX = (VirtualW - boxW) / 2.0f;
-    RectF boxRect(boxX, 8, boxW, boxH); // shifted down 6px alongside the HP bars above
+    RectF boxRect(boxX, 5, boxW, boxH);
     GraphicsPath boxPath;
     AddRoundedRect(boxPath, boxRect, 0.0f);
     SolidBrush accentBrush(pal.Accent);
@@ -791,7 +800,7 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     Pen boxBorder(pal.ArenaLine, 1.0f);
     g.DrawPath(&boxBorder, &boxPath);
     DrawPixelTextCentered(g, timerText, boxRect, 2.0f, pal.White);
-    RectF roundLabelRect(VirtualW / 2.0f - 30, 29, 60, 8);
+    RectF roundLabelRect(VirtualW / 2.0f - 30, 24, 60, 8);
     DrawPixelTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", roundLabelRect, 1.0f, pal.ArenaTextDim);
 
     // "FIGHT" banner - a brief flash right as the match starts, fading out
@@ -836,26 +845,50 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     DrawPixelTextRight(g, L"SP", VirtualW - 3.0f, gaugeY - 7, 1.0f, pal.ArenaTextDim);
 }
 
+namespace {
+// Debug-overlay rect: both edges are projected and snapped to whole canvas
+// pixels independently (rather than snapping the origin and scaling the
+// size) so a box's right/bottom edge lands on the same pixel column/row
+// as an adjacent box's left/top edge at any camera zoom.
+void DrawWorldRect(Graphics& g, Pen& pen, const RectBox& r) {
+    REAL left = static_cast<REAL>(std::round(ToScreenX(r.Left())));
+    REAL top = static_cast<REAL>(std::round(ToScreenY(r.Top())));
+    REAL right = static_cast<REAL>(std::round(ToScreenX(r.Right())));
+    REAL bottom = static_cast<REAL>(std::round(ToScreenY(r.Bottom())));
+    g.DrawRectangle(&pen, left, top, std::max(1.0f, right - left), std::max(1.0f, bottom - top));
+}
+} // namespace
+
+// Collision-box debug view (F1 in Training Mode - see App::OnKeyDown;
+// never part of the real game screen). Color code per the user's spec:
+// pushbox = blue, hurtbox = green, hitbox = red, throw range = yellow.
 void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
-    Pen pushPen(Color(255, 40, 200, 40), 1.0f);
-    Pen hurtPen(Color(255, 50, 110, 230), 1.0f);
-    Pen hitPen(Color(255, 230, 30, 30), 1.5f);
+    Pen pushPen(Color(255, 60, 120, 255), 1.0f);
+    Pen hurtPen(Color(255, 40, 210, 70), 1.0f);
+    Pen hitPen(Color(255, 235, 35, 35), 1.0f);
+    Pen throwPen(Color(255, 245, 210, 30), 1.0f);
     Color textColor = GetPalette().ArenaLine; // the arena ground is dark now - needs a light-on-dark color
 
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
-        RectBox push = f->PushboxRect();
-        g.DrawRectangle(&pushPen, static_cast<REAL>(ToScreenX(push.Left())), static_cast<REAL>(ToScreenY(push.Top())), static_cast<REAL>(ScreenScale(push.Width)), static_cast<REAL>(ScreenScale(push.Height)));
-        for (const RectBox& hurt : f->HurtboxRects()) {
-            g.DrawRectangle(&hurtPen, static_cast<REAL>(ToScreenX(hurt.Left())), static_cast<REAL>(ToScreenY(hurt.Top())), static_cast<REAL>(ScreenScale(hurt.Width)), static_cast<REAL>(ScreenScale(hurt.Height)));
-        }
-        for (const RectBox& hb : f->ActiveHitboxRects) {
-            g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(ScreenScale(hb.Width)), static_cast<REAL>(ScreenScale(hb.Height)));
+        DrawWorldRect(g, pushPen, f->PushboxRect());
+        for (const RectBox& hurt : f->HurtboxRects()) DrawWorldRect(g, hurtPen, hurt);
+
+        bool throwing = f->SM.CurrentState == CharState::Attack && f->CurrentMoveData != nullptr &&
+                        f->CurrentMoveData->GuardType == Constants::GuardThrow;
+        for (const RectBox& hb : f->ActiveHitboxRects) DrawWorldRect(g, throwing ? throwPen : hitPen, hb);
+        if (throwing && MoveExecutor::GetPhase(*f->CurrentMoveData, f->SM.CurrentFrame) == MovePhase::Active) {
+            // The throw's real connect rule is a center-distance check, so
+            // show that reach as a box from the fighter's center out to
+            // ThrowRange in front of them, pushbox-tall.
+            double range = f->CurrentMoveData->ThrowRange;
+            double cx = std::round(f->PositionX) + f->Facing * range / 2.0;
+            DrawWorldRect(g, throwPen, RectBox(cx, std::round(f->PositionY) - f->PushboxStandH / 2.0, range, f->PushboxStandH));
         }
         // Fixed HUD position (top corner, below the HP bar/name) rather
         // than tracking the character around the stage.
         bool isP1 = (f == &bs.Player1);
         float tx = isP1 ? 2.0f : (VirtualW - 190.0f);
-        float ty = 28.0f;
+        float ty = 34.0f; // just under the 32px top HUD band (GameSpec::HudHeight)
         auto info = f->DebugInfo();
         std::wstring line1 = L"st=" + Utf8ToWide(info.state) + L" mv=" + Utf8ToWide(info.move) + L" f=" + std::to_wstring(info.frame);
         DrawPixelText(g, line1, tx, ty, 1.0f, textColor);

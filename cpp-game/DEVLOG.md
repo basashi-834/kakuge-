@@ -244,6 +244,81 @@ thin-line stick figure) - flagged as a follow-up rather than attempted
 blind a second time; current on-screen width is whatever this stick
 figure's existing (much narrower) proportions produce at the new height.
 
+## Collision spec (`GameSpec` in `engine/Constants.h`)
+
+The user followed the size/layout spec with a fourth document covering
+Pushbox / Hurtbox / Hitbox / throw semantics with exact integer values,
+asking that those numbers be the game-wide baseline. All of it now lives in
+one `GameSpec` struct (names match the spec's parameter list), and the
+previously scattered derived values (`StageConstants::Player*StartX`,
+`OriginY`, `kCharScale`, pushbox sizes, hurtbox defaults, throw range, HUD
+band heights) read from it. What changed, and the gotchas:
+
+- **Pushbox is per stance** (`Fighter::PushboxStandW/H`, `Crouch*`,
+  `Air*`), replacing the single `PushboxHalfWidth/Height`. The air box is
+  centered on the torso (`AirPushboxCenterY = -42`, matching
+  `HurtboxSet::Air`'s torso part), not stood on the feet line - a jumping
+  fighter's tucked legs shouldn't shove someone below them.
+- **Hurtboxes are 3 parts per stance** (head/torso/leg) with the spec's
+  boxes, stored center-based: spec `(x, y, w, h)` top-left ->
+  `RectBox(x + w/2, y + h/2, w, h)`. Standing outer extent is 30x88 -
+  narrower than the ~55 visual on purpose. `HurtboxSet::RectsForStance`
+  now takes `facing` and mirrors X (matters only for asymmetric override
+  parts, e.g. a forward arm), and snaps the origin to whole pixels.
+- **Throws resolve on center distance** (`MoveData::ThrowRange`, default
+  `GameSpec::NormalThrowRange = 28`; JSON `throwRange`), not hitbox
+  overlap - `BattleSystem::ThrowInRange` requires Active phase, both
+  grounded, attacker facing the defender, defender `IsThrowable()` (not
+  knocked down / waking / being thrown). The throw's JSON hitbox is kept
+  only so the debug overlay has something to draw in yellow.
+- **Pushbox wall rule**: `ResolvePushboxes` hands any push a fighter
+  can't make (already at their stage edge) to the other fighter, so the
+  full overlap resolves in one frame instead of leaking through
+  `ClampToStage`. The earlier "crouch/block holds ground" rule is kept on
+  top of the spec's half/half default.
+- **Per-frame box overrides** (`MoveData::FrameBoxes`, JSON `frameBoxes`
+  - see `FrameBoxSet`'s comment for the schema): each entry covers an
+  inclusive frame range and may replace hurtboxes, pushbox and/or
+  hitboxes for those frames. Consulted first by `Fighter::HurtboxRects`,
+  `Fighter::PushboxRect` and `MoveExecutor::GetActiveHitboxRects`; a
+  frame without one falls back to the stance/Active-window behavior. This
+  changed `ProgressMove`'s hitbox lifecycle: hitboxes are now recomputed
+  every live frame (`MoveExecutor::HasLiveHitboxes`) and `AlreadyHit`
+  resets on the rising edge via `HitboxesWereLive`, instead of "populate
+  once when Active starts". `StartMove` also clears `AlreadyHit` now.
+  JSON-only for now - not exposed in the Character Editor.
+- **Move data rescaled**: the five spec'd normals (`standing_light`,
+  `standing_heavy`, `standing_light_kick`, `standing_heavy_kick`,
+  `crouch_light`) carry the spec's exact hitboxes and startup/active/
+  recovery (4/3/7, 7/3/13, 5/3/8, 9/4/16); every other move's hitbox,
+  projectile size/spawn offset and explicit `effectiveRange` were scaled
+  by 88/156.44 (the old author-time character height -> the new one) and
+  rounded to integers, so reach stays proportional across the whole
+  moveset. Speeds/knockback velocities were NOT touched (not collision
+  geometry; balance question for later). `MoveData::FromJson`'s
+  `EffectiveRange` fallbacks and `CPUAI`'s `CloseRange/MidRange/
+  AntiAirRange` (+ its two inline distance literals) were rescaled to the
+  new reach numbers - without that the CPU either never closes to attack
+  range or attacks from way outside it (same failure mode as the earlier
+  size rework, see the CPU AI follow-up that used to sit in this file).
+- **Integer snapping**: collision rects round the fighter's origin to a
+  whole pixel (`HurtboxSet::PlaceParts`, `GetActiveHitboxRects`,
+  `PushboxRect`, `ThrowInRange`), and `DrawFighter` rounds its screen
+  origin the same way, so the drawn body and the debug boxes can't drift a
+  sub-pixel apart. Movement math is still double.
+- **Debug overlay colors** follow the spec now (pushbox blue, hurtbox
+  green, hitbox red, throw yellow) - they were swapped before (pushbox
+  green / hurtbox blue). Still F1 in Training Mode only (earlier explicit
+  user decision), and rects are drawn edge-snapped (`DrawWorldRect`).
+- **Top HUD compressed to 32px**: timer box 18 tall at y=5, round label
+  at y=24, so the band ends at y=32 (spec 28-32) with the character's head
+  at y~=101 well clear.
+- `HurtboxSet::RectsForStance` signature changed (added `facing`) -
+  nothing outside `Fighter` called it, but the Editor draws parts from
+  `HurtboxPart` data directly, so it's unaffected.
+- Tests: 23 new checks under "Collision spec (GameSpec)" in
+  `tests/EngineTests.cpp` pin all of the above (53 total).
+
 ## Sprite art system (`platform/Sprites.h`/`.cpp`)
 
 Layers optional bitmap sprite art *on top of* the procedural line-art

@@ -12,10 +12,10 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 39.0,
-   "offsetY": -143.0,
-   "width": 65.0,
-   "height": 91.0
+   "offsetX": 22,
+   "offsetY": -80,
+   "width": 37,
+   "height": 51
   }
  ],
  "knockbackX": 40.7,
@@ -41,5 +41,5 @@
  "input": "623",
  "button": "AnyP",
  "stance": "stand",
- "effectiveRange": 195.0
+ "effectiveRange": 110
 }

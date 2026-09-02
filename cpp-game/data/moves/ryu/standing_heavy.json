@@ -1,9 +1,9 @@
 {
  "id": "standing_heavy",
  "name": "\u7acb\u3061\u5f37\u653b\u6483",
- "startup": 10,
- "active": 4,
- "recovery": 18,
+ "startup": 7,
+ "active": 3,
+ "recovery": 13,
  "damage": 100,
  "hitstun": 30,
  "blockstun": 12,
@@ -12,10 +12,10 @@
  "chipDamagePercent": 0.0,
  "hitbox": [
   {
-   "offsetX": 57.2,
-   "offsetY": -78.0,
-   "width": 59.8,
-   "height": 33.8
+   "offsetX": 32,
+   "offsetY": -58,
+   "width": 20,
+   "height": 12
   }
  ],
  "knockbackX": 111.91,

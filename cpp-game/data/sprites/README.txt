@@ -27,9 +27,19 @@ Any file you don't provide simply falls back to the line-art pose it
 replaces - you can add these incrementally in any order.
 
 Art should be drawn facing right (the game mirrors it automatically for a
-character facing left) and sized/cropped to its own natural pose - it gets
-scaled as a whole to match the character's on-screen height, whatever the
-source image's pixel dimensions are.
+character facing left). Recommended authoring canvas, per the game's
+384x224 layout spec: 75 x 90 px per frame (CHARACTER_SPRITE_WIDTH/HEIGHT),
+with the body itself about 55 wide x 88 tall inside it and the feet on the
+canvas's bottom row - the game scales the whole image so its height matches
+the character's 88px on-screen height, whatever the source pixel size, so
+padding the canvas to 75x90 mostly matters for keeping frames aligned with
+each other. Draw with hard pixel edges (no anti-aliasing / soft shading);
+the renderer never smooths or blurs, so soft edges would show as-is.
+
+The sprite is visual only: collision uses separate pushbox/hurtbox/hitbox
+data (Data/characters/<id>.json "hurtboxes", Data/moves/<id>/*.json
+"hitbox"/"frameBoxes"), never the image's own bounds - press F1 in
+Training Mode to see the boxes over the art.
 
 Un-listed states (blocking, being thrown, waking up from a knockdown,
 defeated) always use the line-art renderer - they weren't part of the

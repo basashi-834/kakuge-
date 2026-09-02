@@ -8,6 +8,7 @@
 //   Done:     frame >= startup+active+recovery
 // 1:1 port of MoveData/MoveExecutor.ps1.
 #pragma once
+#include <cmath>
 #include <string>
 #include "MoveData.h"
 #include "Boxes.h"
@@ -38,21 +39,43 @@ struct MoveExecutor {
         return move.IsCancelWindowOpen(frame);
     }
 
-    // Every hitbox in move.Hitboxes is simultaneously active during the
-    // move's Active window (they all share the move's single startup/
-    // active/recovery timing - per-hitbox timing isn't modeled). Returns
-    // world-space, facing-flipped rects; empty when no hitbox should be
-    // live this frame.
+    // Hitboxes live this frame, as world-space, facing-flipped rects
+    // (empty when none should be). Two sources, in priority order:
+    //   1. a FrameBoxSet covering this frame with "hitboxes" set - the
+    //      per-frame override, honored regardless of startup/active/
+    //      recovery phase (an empty list is a valid override meaning "no
+    //      hitbox on these frames");
+    //   2. otherwise move.Hitboxes, all simultaneously active during the
+    //      move's shared Active window.
+    // Throws (GuardType "Throw") never connect through these - see
+    // BattleSystem::ResolveCombat's distance check - but still report them
+    // so the debug overlay can draw the throw's reach in its own color.
+    // The origin is snapped to whole pixels (see HurtboxSet::PlaceParts).
     static std::vector<RectBox> GetActiveHitboxRects(const MoveData& move, int frame, int facing,
                                                        double originX, double originY) {
         std::vector<RectBox> out;
-        if (GetPhase(move, frame) != MovePhase::Active) return out;
-        for (const auto& box : move.Hitboxes) {
-            double offsetX = box.offsetX * facing;
-            double offsetY = box.offsetY;
-            out.emplace_back(originX + offsetX, originY + offsetY, box.width, box.height);
+        const std::vector<HitboxDef>* source = nullptr;
+        if (const FrameBoxSet* fb = move.FrameBoxesAt(frame); fb != nullptr && fb->hasHitboxes) {
+            source = &fb->hitboxes;
+        } else if (GetPhase(move, frame) == MovePhase::Active) {
+            source = &move.Hitboxes;
+        }
+        if (source == nullptr) return out;
+        double ox = std::round(originX), oy = std::round(originY);
+        int f = facing < 0 ? -1 : 1;
+        for (const auto& box : *source) {
+            out.emplace_back(ox + box.offsetX * f, oy + box.offsetY, box.width, box.height);
         }
         return out;
+    }
+
+    // Whether the move is in a window where it can connect at all this
+    // frame - Active phase, or a per-frame hitbox override that's live.
+    static bool HasLiveHitboxes(const MoveData& move, int frame) {
+        if (const FrameBoxSet* fb = move.FrameBoxesAt(frame); fb != nullptr && fb->hasHitboxes) {
+            return !fb->hitboxes.empty();
+        }
+        return GetPhase(move, frame) == MovePhase::Active && !move.Hitboxes.empty();
     }
 };
 

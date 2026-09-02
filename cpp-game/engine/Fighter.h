@@ -76,17 +76,23 @@ public:
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;
 
-    // Sized independently from the renderer's humanoid image size (see
-    // platform/Draw.cpp's kCharScale) so two fighters visually stop
-    // shoulder-to-shoulder instead of overlapping/passing through each
-    // other. Rescaled each time kCharScale changed, proportionally against
-    // the very first 36.4/71.5 <-> kCharScale=1.3 pairing so the ratio
-    // between box size and character height stays constant across all the
-    // resizes: up ~10% to 40.0/78.5 (kCharScale -> 1.43), then halved to
-    // 20.0/39.25 (kCharScale -> 0.715, "about half size"), then to the
-    // current 22.79/44.73 for kCharScale -> 88/108 (~0.815), matching the
-    // user's later, precise 384x224-native size/layout spec.
-    double PushboxHalfWidth = 22.79, PushboxHalfHeight = 44.73;
+    // Pushbox per stance (GameSpec, Constants.h) - body-vs-body separation
+    // only, never used for hits. Deliberately narrower than the ~55px
+    // visual (30 wide standing) so an outstretched arm or a wide stance
+    // doesn't shove the opponent; it's the torso-to-legs core. Grounded
+    // boxes stand on the feet line; the air box is centered on the torso
+    // (AirPushboxCenterY, matching HurtboxSet::Air's torso part) so a
+    // jumping fighter's tucked legs don't push someone standing under them
+    // until the bodies actually meet. A move can swap in its own via a
+    // FrameBoxSet "pushbox" (see PushboxRect). Kept as plain members (not
+    // constexpr) so a character/editor could override them later.
+    int PushboxStandW = GameSpec::PushboxStandWidth, PushboxStandH = GameSpec::PushboxStandHeight;
+    int PushboxCrouchW = GameSpec::PushboxCrouchWidth, PushboxCrouchH = GameSpec::PushboxCrouchHeight;
+    int PushboxAirW = GameSpec::PushboxAirWidth, PushboxAirH = GameSpec::PushboxAirHeight;
+    static constexpr int AirPushboxCenterY = -42;
+    // Set while the current move's hitboxes are live; used to reset
+    // AlreadyHit exactly once per hitbox activation (see ProgressMove).
+    bool HitboxesWereLive = false;
     // Every entry is simultaneously live this frame (a move can carry more
     // than one hitbox - e.g. separate hand/foot boxes on a multi-part
     // attack); empty means no hitbox is active. See MoveExecutor::
@@ -130,6 +136,7 @@ public:
         SM.ChangeState(CharState::Idle, "");
         ActiveHitboxRects.clear();
         AlreadyHit.clear();
+        HitboxesWereLive = false;
         PendingEffects.clear();
         PendingSounds.clear();
         PendingProjectileValid = false;
@@ -410,6 +417,8 @@ public:
         if (move.MeterCost > 0) Gauge.Spend(move.MeterCost);
         CurrentMoveData = &move;
         ProjectileSpawnedThisActivation = false;
+        AlreadyHit.clear();
+        HitboxesWereLive = false;
         FacingLocked = true;
         // Grounded moves (fireball, dragon punch, normals, ...) should
         // start from a dead stop even if the player walk-canceled or
@@ -430,14 +439,20 @@ public:
         const MoveData& move = *CurrentMoveData;
         MovePhase phase = MoveExecutor::GetPhase(move, frame);
 
-        if (phase == MovePhase::Active) {
-            if (ActiveHitboxRects.empty()) {
-                ActiveHitboxRects = MoveExecutor::GetActiveHitboxRects(move, frame, Facing, PositionX, PositionY);
-                AlreadyHit.clear();
-            }
+        // Hitboxes exist only on frames where the move says so - the shared
+        // Active window, or a per-frame "frameBoxes" override (which may
+        // put them on other frames entirely). Recomputed every frame so a
+        // keyframed hitbox can change shape/position mid-move; AlreadyHit
+        // resets once per activation (the rising edge), not every frame,
+        // so a multi-frame active window still lands once.
+        bool live = MoveExecutor::HasLiveHitboxes(move, frame);
+        if (live) {
+            if (!HitboxesWereLive) AlreadyHit.clear();
+            ActiveHitboxRects = MoveExecutor::GetActiveHitboxRects(move, frame, Facing, PositionX, PositionY);
         } else {
             ActiveHitboxRects.clear();
         }
+        HitboxesWereLive = live;
 
         if (phase == MovePhase::Active && move.HasTag(Constants::TagProjectile) && !ProjectileSpawnedThisActivation) {
             ProjectileSpawnedThisActivation = true;
@@ -608,9 +623,48 @@ public:
         return "stand";
     }
 
-    std::vector<RectBox> HurtboxRects() const { return Hurtboxes.RectsForStance(Stance(), PositionX, PositionY); }
+    // The per-frame collision override for the current attack frame, if
+    // the move being played defines one (see FrameBoxSet in MoveData.h) -
+    // nullptr in every other state and for every frame with no override.
+    const FrameBoxSet* CurrentFrameBoxes() const {
+        if (SM.CurrentState != CharState::Attack || CurrentMoveData == nullptr) return nullptr;
+        return CurrentMoveData->FrameBoxesAt(SM.CurrentFrame);
+    }
+
+    // World-space hurtboxes this frame: a move's per-frame override when
+    // present, else the character's stance set (stand/crouch/air). Facing-
+    // flipped and pixel-snapped by HurtboxSet::PlaceParts.
+    std::vector<RectBox> HurtboxRects() const {
+        if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasHurtboxes) {
+            return HurtboxSet::PlaceParts(fb->hurtboxes, Facing, PositionX, PositionY);
+        }
+        return Hurtboxes.RectsForStance(Stance(), Facing, PositionX, PositionY);
+    }
+
+    // World-space pushbox this frame - per-frame override first, else the
+    // stance box (see the Pushbox* members above for the placement rules).
     RectBox PushboxRect() const {
-        return RectBox(PositionX, PositionY - PushboxHalfHeight, PushboxHalfWidth * 2.0, PushboxHalfHeight * 2.0);
+        double ox = std::round(PositionX), oy = std::round(PositionY);
+        if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasPushbox) {
+            int f = Facing < 0 ? -1 : 1;
+            return RectBox(ox + fb->pushbox.CenterX * f, oy + fb->pushbox.CenterY, fb->pushbox.Width, fb->pushbox.Height);
+        }
+        std::string stance = Stance();
+        if (stance == "air") return RectBox(ox, oy + AirPushboxCenterY, PushboxAirW, PushboxAirH);
+        if (stance == "crouch") return RectBox(ox, oy - PushboxCrouchH / 2.0, PushboxCrouchW, PushboxCrouchH);
+        return RectBox(ox, oy - PushboxStandH / 2.0, PushboxStandW, PushboxStandH);
+    }
+
+    // Throw eligibility for the DEFENDER side: grounded and not already
+    // knocked down / getting up / being thrown / dead. Throw invincibility
+    // frames are checked separately in ReceiveHit.
+    bool IsThrowable() const {
+        if (IsDead) return false;
+        if (Stance() == "air") return false;
+        switch (SM.CurrentState) {
+            case CharState::Knockdown: case CharState::WakeUp: case CharState::Throw: case CharState::Dead: return false;
+            default: return true;
+        }
     }
 
     const MoveData* GetMove(const std::string& id) const {

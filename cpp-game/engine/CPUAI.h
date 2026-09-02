@@ -27,15 +27,15 @@ public:
 
     DummyMode Mode = DummyMode::CPU;
 
-    // Rescaled alongside the bigger hurtbox/pushbox/hitbox geometry (see
-    // engine/Boxes.h and Fighter::PushboxHalfWidth): two pushboxes now
-    // physically can't get closer than ~230 units apart, so CloseRange
-    // must sit above that floor while still being inside normal-attack
-    // reach, or the CPU would never consider itself "close enough" to
-    // attack at all.
-    static constexpr double CloseRange = 88.8;
-    static constexpr double MidRange = 190.2;
-    static constexpr double AntiAirRange = 101.5;
+    // Engagement distances (center-to-center), sized against the GameSpec
+    // collision geometry (engine/Constants.h): standing pushboxes stop two
+    // fighters 30 apart, a light normal reaches ~34 from center, a heavy
+    // ~48. CloseRange sits just past heavy reach so the CPU keeps closing
+    // until its normals actually connect; MidRange is roughly a
+    // dash-length outside that.
+    static constexpr double CloseRange = 50.0;
+    static constexpr double MidRange = 110.0;
+    static constexpr double AntiAirRange = 60.0;
     static constexpr double LowHpRatio = 0.25;
 
     CPUAI(Fighter* self, Fighter* opp) : Self(self), Opp(opp) {}
@@ -59,7 +59,7 @@ public:
         double dist = std::abs(dx);
         int dirToOpp = dx < 0 ? -1 : 1;
 
-        if (Opp->SM.CurrentState == CharState::Attack && dist < 95.1 && Self->SM.IsActionable() && RandDouble() < 0.7) {
+        if (Opp->SM.CurrentState == CharState::Attack && dist < 55.0 && Self->SM.IsActionable() && RandDouble() < 0.7) {
             return HoldBack();
         }
 
@@ -86,7 +86,7 @@ public:
             if (antiAir) return UseMove(*antiAir);
         }
 
-        if (dist < 158.6 && RandDouble() < 0.5) {
+        if (dist < 90.0 && RandDouble() < 0.5) {
             const MoveData* superMove = FindMove([this](const MoveData& m) {
                 return m.HasTag(Constants::TagSuper) && Self->Gauge.CanSpend(m.MeterCost);
             });

@@ -188,6 +188,150 @@ int main() {
     dm3.ReloadAll();
     Check("new character persists across reload", dm3.GetCharacter("ken") != nullptr);
 
+    // -----------------------------------------------------------------
+    // 6) Collision spec (GameSpec in engine/Constants.h): pushbox per
+    //    stance, 3-part hurtboxes, facing flip, throw range, wall rule,
+    //    per-frame overrides, integer snapping, first-pass frame data.
+    // -----------------------------------------------------------------
+    std::cout << "\n=== Collision spec (GameSpec) ===\n";
+    Check("start positions project to canvas x=116/268 (world -76/+76)",
+          StageConstants::Player1StartX == -76.0 && StageConstants::Player2StartX == 76.0 &&
+          StageConstants::PlayerStartDistance == 152.0);
+
+    {
+        Fighter f;
+        f.Setup(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"));
+        f.Opponent = &f;
+        f.PositionX = 0; f.PositionY = 0; f.Facing = Constants::FacingRight;
+
+        RectBox stand = f.PushboxRect();
+        Check("standing pushbox is 30x72 on the feet line (x -15..15, y -72..0)",
+              stand.Width == 30 && stand.Height == 72 && stand.Left() == -15 && stand.Right() == 15 &&
+              stand.Top() == -72 && stand.Bottom() == 0);
+
+        f.SM.ChangeState(CharState::Crouch, "");
+        RectBox crouch = f.PushboxRect();
+        Check("crouching pushbox is 32x48 on the feet line",
+              crouch.Width == 32 && crouch.Height == 48 && crouch.Bottom() == 0 && crouch.Left() == -16);
+
+        f.SM.ChangeState(CharState::Jump, "");
+        f.PositionY = -40;
+        RectBox air = f.PushboxRect();
+        Check("air pushbox is 28x52 and rides the body (torso-centered), not the ground",
+              air.Width == 28 && air.Height == 52 && air.CenterY == -40 + Fighter::AirPushboxCenterY);
+        f.SM.ChangeState(CharState::Idle, "");
+        f.PositionY = 0;
+
+        std::vector<RectBox> hurt = f.HurtboxRects();
+        double left = 1e9, right = -1e9, top = 1e9, bottom = -1e9;
+        for (const auto& r : hurt) { left = std::min(left, r.Left()); right = std::max(right, r.Right()); top = std::min(top, r.Top()); bottom = std::max(bottom, r.Bottom()); }
+        Check("standing hurtbox has 3 parts (head/torso/legs)", hurt.size() == 3);
+        Check("standing hurtbox outer extent is 30 wide x 88 tall, feet at 0 (spec: 28-34 x 86-88)",
+              (right - left) == 30 && (bottom - top) == 88 && bottom == 0);
+
+        f.SM.ChangeState(CharState::Crouch, "");
+        std::vector<RectBox> churt = f.HurtboxRects();
+        double ctop = 1e9;
+        for (const auto& r : churt) ctop = std::min(ctop, r.Top());
+        Check("crouching hurtbox total height is within 50-58", churt.size() == 3 && -ctop >= 50 && -ctop <= 58);
+        f.SM.ChangeState(CharState::Idle, "");
+
+        f.PositionX = 10.4;
+        Check("collision rects snap the fractional position to whole pixels", f.PushboxRect().CenterX == 10.0 && f.HurtboxRects()[0].CenterX == 10.0);
+    }
+
+    {
+        const MoveData* lp = dm.GetMove("ryu", "standing_light");
+        const MoveData* hp = dm.GetMove("ryu", "standing_heavy");
+        const MoveData* lk = dm.GetMove("ryu", "standing_light_kick");
+        const MoveData* hk = dm.GetMove("ryu", "standing_heavy_kick");
+        const MoveData* clk = dm.GetMove("ryu", "crouch_light");
+        Check("first-pass frame data: LP 4/3/7, HP 7/3/13, LK 5/3/8, HK 9/4/16",
+              lp->Startup == 4 && lp->Active == 3 && lp->Recovery == 7 && lp->TotalFrame == 14 &&
+              hp->Startup == 7 && hp->Active == 3 && hp->Recovery == 13 && hp->TotalFrame == 23 &&
+              lk->Startup == 5 && lk->Active == 3 && lk->Recovery == 8 && lk->TotalFrame == 16 &&
+              hk->Startup == 9 && hk->Active == 4 && hk->Recovery == 16 && hk->TotalFrame == 29);
+
+        // Facing right from x=100: LP box is x 118..134, y -66..-56 (reach 34).
+        auto rightBoxes = MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup, Constants::FacingRight, 100, 0);
+        auto leftBoxes = MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup, Constants::FacingLeft, 100, 0);
+        Check("LP hitbox: 16x10, x +18..+34, y -66..-56 when facing right",
+              rightBoxes.size() == 1 && rightBoxes[0].Width == 16 && rightBoxes[0].Height == 10 &&
+              rightBoxes[0].Left() == 118 && rightBoxes[0].Right() == 134 && rightBoxes[0].Top() == -66 && rightBoxes[0].Bottom() == -56);
+        Check("LP hitbox mirrors to x -34..-18 when facing left (same data, flipped)",
+              leftBoxes.size() == 1 && leftBoxes[0].Left() == 66 && leftBoxes[0].Right() == 82);
+        Check("no hitbox exists outside the Active window (startup frame)",
+              MoveExecutor::GetActiveHitboxRects(*lp, 0, Constants::FacingRight, 100, 0).empty());
+        auto hkBoxes = MoveExecutor::GetActiveHitboxRects(*hk, hk->Startup, Constants::FacingRight, 0, 0);
+        Check("HK hitbox: 24x14 reaching to +48 (longest normal)", hkBoxes.size() == 1 && hkBoxes[0].Width == 24 && hkBoxes[0].Height == 14 && hkBoxes[0].Right() == 48);
+        auto clkBoxes = MoveExecutor::GetActiveHitboxRects(*clk, clk->Startup, Constants::FacingRight, 0, 0);
+        Check("crouch LK hitbox is a low: 20x8 at y -12..-4", clkBoxes.size() == 1 && clkBoxes[0].Top() == -12 && clkBoxes[0].Bottom() == -4);
+
+        // Per-frame override: hitbox on startup frames 0-1, then the
+        // normal Active window; a hurtbox override shrinks to one part.
+        MoveData custom;
+        custom.Startup = 3; custom.Active = 2; custom.Recovery = 2; custom.TotalFrame = 7;
+        custom.Hitboxes.push_back({20, -20, 8, 8});
+        FrameBoxSet fb;
+        fb.startFrame = 0; fb.endFrame = 1;
+        fb.hasHitboxes = true; fb.hitboxes.push_back({10, -10, 6, 6});
+        fb.hasHurtboxes = true; fb.hurtboxes.push_back({"torso", RectBox{0, -40, 20, 80}});
+        fb.hasPushbox = true; fb.pushbox = RectBox{0, -20, 10, 40};
+        custom.FrameBoxes.push_back(fb);
+        auto ovr = MoveExecutor::GetActiveHitboxRects(custom, 0, Constants::FacingRight, 0, 0);
+        auto normal = MoveExecutor::GetActiveHitboxRects(custom, 3, Constants::FacingRight, 0, 0);
+        Check("frameBoxes hitbox override applies on its frames even during startup",
+              MoveExecutor::HasLiveHitboxes(custom, 0) && ovr.size() == 1 && ovr[0].Width == 6 && !MoveExecutor::HasLiveHitboxes(custom, 2));
+        Check("frames without an override fall back to the move's Active-window hitboxes", normal.size() == 1 && normal[0].Width == 8);
+        Fighter f2;
+        f2.Setup(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"));
+        f2.Opponent = &f2;
+        f2.CurrentMoveData = &custom;
+        f2.SM.ChangeState(CharState::Attack, "custom");
+        Check("frameBoxes hurtbox/pushbox overrides replace the stance boxes on their frames",
+              f2.HurtboxRects().size() == 1 && f2.HurtboxRects()[0].Height == 80 && f2.PushboxRect().Width == 10);
+    }
+
+    {
+        BattleSystem bsThrow;
+        bsThrow.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
+        const MoveData* throwMove = bsThrow.Player1.GetMove("standing_throw");
+        auto armThrow = [&](double defX, double defY) {
+            bsThrow.ResetHP();
+            // Fully reset the attacker between attempts: ChangeState is a
+            // no-op for the same state+move, so a leftover Attack state
+            // would keep the previous attempt's frame counter.
+            bsThrow.Player1.SM.ChangeState(CharState::Idle, "");
+            bsThrow.Player1.CurrentMoveData = nullptr;
+            bsThrow.Player1.ActiveHitboxRects.clear();
+            bsThrow.Player1.PositionX = 0; bsThrow.Player1.PositionY = 0; bsThrow.Player1.Facing = Constants::FacingRight;
+            bsThrow.Player2.PositionX = defX; bsThrow.Player2.PositionY = defY; bsThrow.Player2.Facing = Constants::FacingLeft;
+            bsThrow.Player2.SM.ChangeState(defY < 0 ? CharState::Jump : CharState::Idle, "");
+            bsThrow.Player1.StartMove(*throwMove);
+            for (int i = 0; i < throwMove->Startup; i++) bsThrow.Player1.SM.Tick();
+            bsThrow.Player1.ProgressMove();
+            bsThrow.ResolveCombat(bsThrow.Player1, bsThrow.Player2);
+            return bsThrow.Player2.SM.CurrentState == CharState::Throw;
+        };
+        Check("throw connects at center distance 20 (<= NORMAL_THROW_RANGE 28)", armThrow(20, 0));
+        Check("throw whiffs at center distance 40 (> 28) even though the old hitbox would have reached", !armThrow(40, 0));
+        Check("throw whiffs on an airborne opponent at any distance", !armThrow(20, -30));
+        Check("throw resolves on distance, not hitbox-vs-hurtbox", throwMove->ThrowRange == 28.0 && throwMove->GuardType == Constants::GuardThrow);
+    }
+
+    {
+        BattleSystem bsPush;
+        bsPush.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
+        bsPush.Player1.PositionX = 0; bsPush.Player2.PositionX = 20; // 30-wide boxes -> 10 overlap
+        bsPush.ResolvePushboxes();
+        Check("pushbox overlap of 10 splits half/half (-5 / +5)", bsPush.Player1.PositionX == -5 && bsPush.Player2.PositionX == 25);
+
+        bsPush.Player1.PositionX = BattleSystem::StageMinX; bsPush.Player2.PositionX = BattleSystem::StageMinX + 20;
+        bsPush.ResolvePushboxes();
+        Check("cornered fighter doesn't move; the other absorbs the full overlap",
+              bsPush.Player1.PositionX == BattleSystem::StageMinX && bsPush.Player2.PositionX == BattleSystem::StageMinX + 30);
+    }
+
     std::error_code ec;
     fs::remove_all(tempUserDir, ec);
 
