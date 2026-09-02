@@ -401,8 +401,8 @@ void App::DrawGame(Graphics& g) {
     SolidBrush groundBrush(pal.ArenaPanel);
     g.FillRectangle(&groundBrush, 0.0f, static_cast<REAL>(ToScreenY(0)), static_cast<REAL>(VirtualW), 4.0f);
 
-    DrawFighter(g, Battle->Player1);
-    DrawFighter(g, Battle->Player2);
+    DrawFighter(g, Battle->Player1, BaseDataDir, UserDir);
+    DrawFighter(g, Battle->Player2, BaseDataDir, UserDir);
     for (const auto& proj : Battle->Projectiles) DrawProjectile(g, proj);
     for (const auto& fx : Effects) DrawEffect(g, fx);
     // Counter/Effective Counter info is pinned to the scoring player's

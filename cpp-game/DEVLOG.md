@@ -38,11 +38,13 @@ at any output resolution - it is a deliberate, explicit design choice (see
 - Photo-sprite character art (`data/images/fighter_*.png`) was explicitly
   **removed** earlier in the project at the user's request, in favor of a
   hand-drawn procedural pixel-art line-art humanoid (`DrawHumanoid` in
-  `platform/Draw.cpp`). Any future request to add "character art"/sprites
-  needs to clarify whether that's meant to reverse this decision (actual
-  bitmap art assets - which also requires an actual image source, since
-  there's no image-generation tool available in this session) or just
-  wants more procedural pose variety within the existing line-art system.
+  `platform/Draw.cpp`). Later in the project the user asked for real
+  bitmap sprite art back (confirmed explicitly: not just more procedural
+  pose variety) - see "Sprite art system" below for how that request was
+  reconciled with the earlier decision (art layers *on top of*, doesn't
+  replace, the line-art renderer). **This session has no image-generation
+  tool** - actual pixel-art image files still need to come from the user
+  (or another tool), not from Claude.
 
 ## Sandbox / testing environment gotchas
 
@@ -160,9 +162,41 @@ character) no longer fit under the HUD without clipping - `ryu.json`'s
 margin; this is character-data, so it's re-tunable per-character from the
 Character Editor's own JUMP VELOCITY/GRAVITY fields without touching code.
 
+## Sprite art system (`platform/Sprites.h`/`.cpp`)
+
+Layers optional bitmap sprite art *on top of* the procedural line-art
+renderer rather than replacing it - any pose without a sprite file falls
+back to the existing `DrawHumanoid` line art, so the game works with zero
+art present and characters can gain real art one pose at a time. Files:
+`Data/sprites/<charId>/<pose>.png` (`stand_0..3`, `crouch`, `punch`,
+`kick`, `jump`, `jumppunch`, `jumpkick`, `hitstun`, `knockdown` - see
+`data/sprites/README.txt` for the full convention). Loaded once per
+character id and cached (`GetCharacterSprites`/`ClearSpriteCache`);
+`DrawFighter` now takes `baseDataDir`/`userDir` params to reach that cache
+and picks a sprite via `PickSprite()` before falling through to the
+existing line-art `switch`. Standing idle is a 4-frame loop keyed off
+`Fighter::FrameCounter % 4` (ticks up every simulation frame, never
+resets) - `kIdleTicksPerFrame` in `Sprites.h` controls how many ticks each
+frame holds (1 = literally every tick/60fps, per the user's explicit
+spec - flagged as likely reading like flicker rather than a breathing
+loop once real art lands, easy one-constant fix if so). Sprites are
+mirrored for `facing < 0` via GDI+'s 3-point `DrawImage` overload
+(swapping the top-left/top-right destination points), not a separate
+flipped asset. Block/Throw/WakeUp/Dead intentionally have no sprite slot
+(outside the user's requested pose list) and always use line art.
+
 ## Known follow-ups (flagged, not yet acted on)
 
 - CPU AI's per-move `EffectiveRange` values (55-100 world units) weren't
   rescaled when the stage widened from 260 to 640 world units - CPU
   engagement-distance judgment may now be off. Out of scope for the sizing
   request that prompted the world-scale rework; flagged for a future pass.
+- **In-game (custom GDI+) Character Editor UI** was requested (replace the
+  native Win32-controls editor screen with one drawn/hit-tested the same
+  way Title/Select/etc. are) but not started - `platform/Editor.cpp` is
+  ~1300 lines of native-control wiring and this is a large enough rewrite
+  that rushing it in the same turn as other work risks a broken result;
+  treat as its own dedicated pass. Whatever replaces it still needs to
+  cover everything the current native editor does (stats, moves, hitbox/
+  hurtbox authoring incl. drag-to-resize, JP/EN toggle, character
+  creation) - review this file's Editor.cpp-related entries above first.

@@ -8,12 +8,14 @@
 #include <gdiplus.h>
 #include <string>
 #include <vector>
+#include <filesystem>
 #include "Palette.h"
 #include "Layout.h"
 #include "../engine/Fighter.h"
 #include "../engine/BattleSystem.h"
 
 namespace kakuge {
+namespace fs = std::filesystem;
 
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
 constexpr double OriginX = VirtualW / 2.0;
@@ -92,7 +94,7 @@ struct HumanoidPose {
 };
 void DrawHumanoid(Gdiplus::Graphics& g, double sx, double sy, Gdiplus::Color color, const HumanoidPose& pose = {});
 
-void DrawFighter(Gdiplus::Graphics& g, const Fighter& fighter);
+void DrawFighter(Gdiplus::Graphics& g, const Fighter& fighter, const fs::path& baseDataDir, const fs::path& userDir);
 void DrawProjectile(Gdiplus::Graphics& g, const Projectile& proj);
 
 struct EffectStyle { Gdiplus::Color color; double radius; double duration; };

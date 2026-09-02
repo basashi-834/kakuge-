@@ -1,5 +1,6 @@
 // platform/Draw.cpp
 #include "Draw.h"
+#include "Sprites.h"
 #include <algorithm>
 #include <cmath>
 
@@ -448,7 +449,59 @@ void DrawHumanoid(Graphics& g, double sx, double sy, Color color, const Humanoid
     g.DrawLine(&bandPen, static_cast<REAL>(tailX), static_cast<REAL>(bandY), static_cast<REAL>(tailX - facing * 4 * s), static_cast<REAL>(bandY - 14 * s));
 }
 
-void DrawFighter(Graphics& g, const Fighter& fighter) {
+namespace {
+// Draws a sprite bottom-center anchored at (sx,sy) (matching where the
+// procedural humanoid's feet land), scaled so its height matches heightPx,
+// mirrored horizontally when facing < 0 (art is assumed drawn facing
+// right, same convention as the line-art renderer's `facing` parameter).
+void DrawSpriteFacing(Graphics& g, Gdiplus::Image* img, double sx, double sy, double heightPx, int facing) {
+    double scale = heightPx / img->GetHeight();
+    double widthPx = img->GetWidth() * scale;
+    double left = sx - widthPx / 2.0, top = sy - heightPx, right = left + widthPx, bottom = sy;
+    PointF destPoints[3];
+    if (facing >= 0) {
+        destPoints[0] = PointF(static_cast<REAL>(left), static_cast<REAL>(top));
+        destPoints[1] = PointF(static_cast<REAL>(right), static_cast<REAL>(top));
+        destPoints[2] = PointF(static_cast<REAL>(left), static_cast<REAL>(bottom));
+    } else {
+        destPoints[0] = PointF(static_cast<REAL>(right), static_cast<REAL>(top));
+        destPoints[1] = PointF(static_cast<REAL>(left), static_cast<REAL>(top));
+        destPoints[2] = PointF(static_cast<REAL>(right), static_cast<REAL>(bottom));
+    }
+    g.DrawImage(img, destPoints, 3);
+}
+
+// Picks the sprite (if any) matching the fighter's current pose - see
+// Sprites.h's file-naming comment for the full state->file mapping.
+// Returns nullptr (meaning: fall back to the line-art renderer) for any
+// state outside the requested pose set (Block/Throw/WakeUp/Dead keep no
+// sprite slot at all) or when the matching file wasn't found on disk.
+Gdiplus::Image* PickSprite(const Fighter& fighter, const CharacterSpriteSet& sprites) {
+    bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
+    switch (fighter.SM.CurrentState) {
+        case CharState::Crouch: return sprites.Crouch.get();
+        case CharState::Hitstun: return sprites.Hitstun.get();
+        case CharState::Knockdown: return sprites.Knockdown.get();
+        case CharState::Jump: return sprites.Jump.get();
+        case CharState::Attack: {
+            std::string btn = fighter.CurrentMoveData ? fighter.CurrentMoveData->Button : std::string();
+            bool isKick = !btn.empty() && btn.back() == 'K';
+            if (airborne) return isKick ? sprites.JumpKick.get() : sprites.JumpPunch.get();
+            return isKick ? sprites.Kick.get() : sprites.Punch.get();
+        }
+        case CharState::Idle:
+        case CharState::WalkForward:
+        case CharState::WalkBackward: {
+            int frame = (fighter.FrameCounter / kIdleTicksPerFrame) % 4;
+            return sprites.Stand[frame].get();
+        }
+        default:
+            return nullptr;
+    }
+}
+} // namespace
+
+void DrawFighter(Graphics& g, const Fighter& fighter, const fs::path& baseDataDir, const fs::path& userDir) {
     Color bodyColor(255, static_cast<BYTE>(fighter.Stats.ColorR), static_cast<BYTE>(fighter.Stats.ColorG), static_cast<BYTE>(fighter.Stats.ColorB));
     double sx = ToScreenX(fighter.PositionX);
     double sy = ToScreenY(fighter.PositionY);
@@ -462,6 +515,17 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
     // instead.
     double zoom = GetCamera().Zoom;
     double cs = kCharScale * zoom;
+
+    const CharacterSpriteSet& sprites = GetCharacterSprites(fighter.Stats.Id, baseDataDir, userDir);
+    if (Gdiplus::Image* sprite = PickSprite(fighter, sprites)) {
+        // Same on-screen height the line-art renderer's heightScale=zoom
+        // (idle/standard) pose resolves to, so sprite and line-art poses
+        // read as the same size regardless of which one a given state
+        // currently has art for.
+        double heightPx = 108.0 * kCharScale * zoom + 2.0;
+        DrawSpriteFacing(g, sprite, sx, sy, heightPx, facing);
+        return;
+    }
 
     switch (fighter.SM.CurrentState) {
         case CharState::Knockdown: {
