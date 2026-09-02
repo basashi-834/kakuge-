@@ -259,6 +259,24 @@ void App::DrawVS(Graphics& g) {
 
     auto* p1 = Dm->GetCharacter(P1CharId);
     auto* p2 = Dm->GetCharacter(P2CharId);
+
+    // Face-off silhouettes: standing in the two symmetric placement frames
+    // (see ComputeTwoBoxLayout in Layout.h - the same 80x95/gap-80/bottom-8
+    // pattern used elsewhere), facing inward toward each other. Drawn once
+    // the color panels have swept in but before the name/diamond/prompt
+    // text, so that text stays legible on top.
+    if (t > 0.5) {
+        double poseT = std::min(1.0, (t - 0.5) / 0.5);
+        TwoBoxLayout frames = ComputeTwoBoxLayout(static_cast<float>(VirtualW), static_cast<float>(VirtualH));
+        // heightScale so an idle silhouette (~140px tall at scale 1.0, see
+        // kCharScale's comment in Draw.cpp) fits within the frame's height.
+        float heightScale = static_cast<float>((frames.Left.Height / 140.0) * poseT);
+        Color p1Color = p1 ? Color(255, static_cast<BYTE>(p1->ColorR), static_cast<BYTE>(p1->ColorG), static_cast<BYTE>(p1->ColorB)) : pal.White;
+        Color p2Color = p2 ? Color(255, static_cast<BYTE>(p2->ColorR), static_cast<BYTE>(p2->ColorG), static_cast<BYTE>(p2->ColorB)) : pal.White;
+        DrawHumanoid(g, frames.Left.X + frames.Left.Width / 2.0, frames.Left.Y + frames.Left.Height, p1Color, {heightScale, 1});
+        DrawHumanoid(g, frames.Right.X + frames.Right.Width / 2.0, frames.Right.Y + frames.Right.Height, p2Color, {heightScale, -1});
+    }
+
     if (t > 0.3) {
         DrawPixelTextCentered(g, Utf8ToWide(p1 ? p1->Name : P1CharId), RectF(0, VirtualH / 2.0f - 24, half, 24), 2.0f, pal.White);
         DrawPixelTextCentered(g, Utf8ToWide(p2 ? p2->Name : P2CharId), RectF(half, VirtualH / 2.0f - 24, half, 24), 2.0f, pal.White);
@@ -293,6 +311,7 @@ void App::StartMatch() {
     if (!p1s) p1s = Dm->GetCharacter(Dm->GetCharacterIds().front());
     if (!p2s) p2s = Dm->GetCharacter(Dm->GetCharacterIds().front());
     Battle->StartMatch(*p1s, Dm->GetMoveset(P1CharId), *p2s, Dm->GetMoveset(P2CharId), g_RoundTimeSeconds);
+    ResetCamera(Battle->Player1.PositionX, Battle->Player2.PositionX);
     Battle->TrainingMode = IsTrainingMode;
     Battle->TrainingAutoHeal = TrainingAutoHealPref;
     // The dummy-mode toggle only lives in Training mode's pause menu now,

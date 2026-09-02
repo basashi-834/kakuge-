@@ -125,6 +125,22 @@ public:
     HWND ChkDynamicHitbox = nullptr;
     std::string EditorCommandDigits; // e.g. "236", built up by clicking BtnDigit
 
+    // ---- Motion reference image (see Editor.cpp / App::DrawMotionImagePreview) ----
+    // An optional per-move reference image, browsed/attached in the editor
+    // and stored on MoveData::MotionImagePath - authoring reference only,
+    // not yet drawn in actual gameplay (see MoveData.h's comment on the
+    // field). EditMotionImagePath displays the current path (read-only);
+    // a small thumbnail is custom-painted below it from
+    // EditorMotionImageCache, reloaded only when the path actually changes
+    // so the editor isn't re-decoding the file from disk every repaint.
+    HWND EditMotionImagePath = nullptr, BtnBrowseMotionImage = nullptr, BtnClearMotionImage = nullptr;
+    std::string EditorMotionImagePath;
+    std::unique_ptr<Gdiplus::Image> EditorMotionImageCache;
+    std::string EditorMotionImageCachedPath;
+    Gdiplus::RectF EditorMotionImageRect{40.0f, 756.0f, 320.0f, 136.0f}; // overwritten to match by CreateEditorControls
+    void BrowseMotionImage();
+    void DrawMotionImagePreview(Gdiplus::Graphics& g);
+
     // ---- Hitbox/hurtbox editor (see Editor.cpp / App::DrawEditorPreview) ----
     // A move's hitboxes and a character's per-stance hurtbox parts are both
     // edited as an in-memory draft (numeric fields + drag-in-preview),
@@ -220,6 +236,7 @@ public:
     void LeaveEditor();
     void CreateEditorControls();
     void DestroyEditorControls();
+    void HideEditorControls();
     void LayoutEditorControls();
     void PopulateCharacterCombo();
     void PopulateMoveCombo();

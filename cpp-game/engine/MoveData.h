@@ -75,6 +75,15 @@ public:
     // now, but the data has a place to live once it's built.
     bool HasDynamicHitbox = false;
 
+    // Optional reference image for this move's motion, attached in the
+    // Character Editor (browse/preview only - see platform/Editor.cpp).
+    // Stored as a path relative to the Data directory when the chosen file
+    // lives under it, or an absolute path otherwise; empty means no image
+    // is attached. Not yet wired into in-game rendering (the game still
+    // draws every move with the procedural pixel-art humanoid) - this is
+    // purely a move-design reference asset for now.
+    std::string MotionImagePath;
+
     bool HasTag(const std::string& tag) const {
         return std::find(Tags.begin(), Tags.end(), tag) != Tags.end();
     }
@@ -157,6 +166,7 @@ public:
         }
 
         m.HasDynamicHitbox = obj.value("hasDynamicHitbox", false);
+        m.MotionImagePath = obj.value("motionImage", std::string());
         m.EffectiveRange = obj.value("effectiveRange", 0.0);
         if (m.EffectiveRange <= 0.0) {
             if (m.HasTag(Constants::TagProjectile)) m.EffectiveRange = 900.0;
@@ -196,6 +206,7 @@ public:
         }
         j["effectiveRange"] = EffectiveRange;
         j["hasDynamicHitbox"] = HasDynamicHitbox;
+        j["motionImage"] = MotionImagePath;
         return j;
     }
 };

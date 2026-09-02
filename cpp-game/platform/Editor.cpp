@@ -50,6 +50,7 @@
 // resolutions) and restores the game's resolution on exit.
 #include "App.h"
 #include <commctrl.h>
+#include <commdlg.h>
 #include <string>
 #include <sstream>
 #include <algorithm>
@@ -115,6 +116,9 @@ constexpr int ID_CHK_DYNAMIC_HITBOX = 2102;
 
 constexpr int ID_BTN_LANGUAGE = 2110;
 
+constexpr int ID_BTN_BROWSE_MOTION_IMAGE = 2120;
+constexpr int ID_BTN_CLEAR_MOTION_IMAGE = 2121;
+
 // ---------------------------------------------------------------------
 // Language table. Every static label / button created via MakeLabel/
 // MakeButton(EStr) registers into g_LangControls so ApplyEditorLanguage()
@@ -133,6 +137,7 @@ enum class EStr {
     HitboxSection, AddBtn, RemoveBtn,
     HurtboxSection, Stance, Part,
     Legend, LanguageBtn,
+    MotionImageLabel, BrowseBtn,
     Count
 };
 
@@ -149,6 +154,7 @@ const wchar_t* const kStringsEN[static_cast<size_t>(EStr::Count)] = {
     L"MOVE HITBOX  X / Y / W / H", L"+ ADD", L"- REMOVE",
     L"CHARACTER HURTBOX  X / Y / W / H", L"HURTBOX STANCE", L"HURTBOX PART",
     L"blue = hurtbox   red = hitbox", L"EN",
+    L"MOTION IMAGE (reference only)", L"BROWSE",
 };
 const wchar_t* const kStringsJP[static_cast<size_t>(EStr::Count)] = {
     L"キャラクター", L"名前", L"最大HP", L"前歩き速度", L"後ろ歩き速度", L"ダッシュ速度",
@@ -163,6 +169,7 @@ const wchar_t* const kStringsJP[static_cast<size_t>(EStr::Count)] = {
     L"攻撃判定 X/Y/W/H", L"+ 追加", L"- 削除",
     L"喰らい判定 X/Y/W/H", L"姿勢", L"部位",
     L"青=喰らい判定  赤=攻撃判定", L"JP",
+    L"モーション画像(参考用)", L"参照",
 };
 
 const wchar_t* Str(EStr id, int lang) {
@@ -305,6 +312,11 @@ void App::EnterEditor() {
     // EditorCreatingNew may already be true if Character Select routed us
     // here via the "+ ADD CHARACTER" tile - respect that starting mode.
     if (EditorCreatingNew) ShowCreateCharacterPrompt(); else HideCreateCharacterPrompt();
+    // Not covered by either list above (always visible regardless of
+    // create/normal mode) - only needs restoring after a HideEditorControls()
+    // from a previous visit; a no-op on the very first entry.
+    if (BtnBack) ShowWindow(BtnBack, SW_SHOW);
+    if (BtnLanguage) ShowWindow(BtnLanguage, SW_SHOW);
     if (!EditorCreatingNew && !Dm->GetCharacterIds().empty()) {
         LoadCharacterIntoForm(Dm->GetCharacterIds()[0]);
     }
@@ -313,7 +325,7 @@ void App::EnterEditor() {
 }
 
 void App::LeaveEditor() {
-    DestroyEditorControls();
+    HideEditorControls();
     if (EditorSizeSaved) {
         SetWindowPos(Hwnd, nullptr, 0, 0, PreEditorWindowRect.right - PreEditorWindowRect.left,
                      PreEditorWindowRect.bottom - PreEditorWindowRect.top, SWP_NOMOVE | SWP_NOZORDER);
@@ -448,6 +460,23 @@ void App::CreateEditorControls() {
 
     BtnBack = MakeButton(Hwnd, hInst, ID_BTN_BACK, col1, 900, fieldW, 44, EStr::BackToTitle);
 
+    // Motion reference image: browse/clear a per-move image path, shown as
+    // a filename (read-only, the real path can be long) plus a small
+    // thumbnail custom-painted by DrawMotionImagePreview - see App.h's
+    // comment on EditorMotionImagePath for why it doesn't affect gameplay.
+    // Lives in column 1's otherwise-empty gap below + NEW CHARACTER (ends
+    // y=678) and above BACK TO TITLE (y=900) - columns 2/3 are already
+    // full down to nearly that same y=900.
+    lbl = MakeLabel(Hwnd, hInst, col1, 700, fieldW, 18, EStr::MotionImageLabel); g_NormalModeControls.push_back(lbl);
+    EditMotionImagePath = MakeEdit(Hwnd, hInst, 0, col1, 722, 170, 26);
+    SendMessageW(EditMotionImagePath, EM_SETREADONLY, TRUE, 0);
+    BtnBrowseMotionImage = MakeButton(Hwnd, hInst, ID_BTN_BROWSE_MOTION_IMAGE, col1 + 178, 722, 68, 26, EStr::BrowseBtn);
+    BtnClearMotionImage = MakeButton(Hwnd, hInst, ID_BTN_CLEAR_MOTION_IMAGE, col1 + 252, 722, 68, 26, EStr::ClearBtn);
+    for (HWND h : {EditMotionImagePath, BtnBrowseMotionImage, BtnClearMotionImage}) g_NormalModeControls.push_back(h);
+    // Thumbnail drawn directly (App::DrawMotionImagePreview, called from
+    // OnPaint's Editor branch) into this rect - not a child control.
+    EditorMotionImageRect = Gdiplus::RectF(static_cast<Gdiplus::REAL>(col1), 756.0f, static_cast<Gdiplus::REAL>(fieldW), 136.0f);
+
     // ---- Column 3: hitbox/hurtbox visual+numeric editor ----
     // The preview canvas itself (drag-to-move, drag-corner-to-resize) is
     // custom-painted in App::DrawEditorPreview, called from App::OnPaint's
@@ -521,6 +550,23 @@ void App::DestroyEditorControls() {
     ComboHurtStance = ComboHurtPart = BtnAddPart = BtnRemovePart = nullptr;
     EditHurtX = EditHurtY = EditHurtW = EditHurtH = nullptr;
     BtnDragHitbox = BtnDragHurtbox = nullptr;
+    EditMotionImagePath = BtnBrowseMotionImage = BtnClearMotionImage = nullptr;
+}
+
+// Leaving the editor used to tear down and rebuild every one of its ~70
+// native controls on every visit (DestroyEditorControls() then
+// CreateEditorControls() again next time) - real CreateWindowExW/
+// DestroyWindow syscall traffic on every single transition, which is what
+// made switching to/from the Character Editor feel heavy. The controls'
+// content is fully re-synced on each entry anyway (PopulateCharacterCombo/
+// PopulateMoveCombo/LoadCharacterIntoForm), so there's nothing gained by
+// destroying them - just hide everything and let CreateEditorControls()'s
+// existing "already created" guard skip recreation on the next visit.
+void App::HideEditorControls() {
+    for (HWND h : g_NormalModeControls) if (h) ShowWindow(h, SW_HIDE);
+    for (HWND h : g_CreateModeControls) if (h) ShowWindow(h, SW_HIDE);
+    if (BtnBack) ShowWindow(BtnBack, SW_HIDE);
+    if (BtnLanguage) ShowWindow(BtnLanguage, SW_HIDE);
 }
 
 void App::LayoutEditorControls() {
@@ -660,6 +706,11 @@ void App::LoadMoveIntoForm(const std::string& moveId) {
     for (HWND h : BtnDigit) if (h) EnableWindow(h, isSpecialOrSuper);
     if (BtnCommandClear) EnableWindow(BtnCommandClear, isSpecialOrSuper);
     if (ChkDynamicHitbox) SendMessageW(ChkDynamicHitbox, BM_SETCHECK, move->HasDynamicHitbox ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    EditorMotionImagePath = move->MotionImagePath;
+    if (EditMotionImagePath) {
+        SetEditText(EditMotionImagePath, EditorMotionImagePath.empty() ? L"" : Utf8ToWide(fs::path(EditorMotionImagePath).filename().string()));
+    }
 
     EditorHitboxDraftList = move->Hitboxes;
     EditorHitboxIndex = 0;
@@ -843,6 +894,7 @@ void App::ApplyMoveForm() {
         move.InputCommand = EditorCommandDigits;
     }
     if (ChkDynamicHitbox) move.HasDynamicHitbox = SendMessageW(ChkDynamicHitbox, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    move.MotionImagePath = EditorMotionImagePath;
 
     ApplyHitboxFieldsToDraft();
     move.Hitboxes = EditorHitboxDraftList;
@@ -994,6 +1046,12 @@ void Editor_OnCommand(App& app, int controlId, int notifyCode, HWND ctrl) {
     } else if (controlId == ID_BTN_LANGUAGE && notifyCode == BN_CLICKED) {
         app.EditorLanguage = app.EditorLanguage == 1 ? 0 : 1;
         app.ApplyEditorLanguage();
+    } else if (controlId == ID_BTN_BROWSE_MOTION_IMAGE && notifyCode == BN_CLICKED) {
+        app.BrowseMotionImage();
+    } else if (controlId == ID_BTN_CLEAR_MOTION_IMAGE && notifyCode == BN_CLICKED) {
+        app.EditorMotionImagePath.clear();
+        if (app.EditMotionImagePath) SetEditText(app.EditMotionImagePath, L"");
+        InvalidateRect(app.Hwnd, nullptr, FALSE);
     } else if (controlId == ID_BTN_SAVE && notifyCode == BN_CLICKED) {
         app.ApplyStatsForm();
         MessageBoxW(app.Hwnd, app.EditorLanguage == 1 ? L"キャラクターを保存しました。" : L"Character saved.",
@@ -1169,6 +1227,75 @@ void App::DrawEditorPreview(Gdiplus::Graphics& g) {
 
     Gdiplus::RectF legendRect(r.X, r.Y + r.Height + 4, r.Width, 16.0f);
     DrawLabelText(g, Str(EStr::Legend, EditorLanguage), legendRect, 1.5f, pal.Ink55, false);
+}
+
+// Resolves a stored motion-image path (relative to BaseDataDir when it
+// could be made relative at browse time, absolute otherwise - see
+// BrowseMotionImage) back to a real filesystem path for loading.
+static fs::path ResolveMotionImagePath(const fs::path& baseDataDir, const std::string& stored) {
+    fs::path p(stored);
+    return p.is_absolute() ? p : (baseDataDir / p);
+}
+
+void App::BrowseMotionImage() {
+    wchar_t fileBuf[MAX_PATH] = L"";
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = Hwnd;
+    ofn.lpstrFilter = L"Image Files\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0All Files\0*.*\0";
+    ofn.lpstrFile = fileBuf;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.lpstrTitle = EditorLanguage == 1 ? L"モーション画像を選択" : L"Select Motion Image";
+    if (!GetOpenFileNameW(&ofn)) return;
+
+    fs::path chosen(fileBuf);
+    std::error_code ec;
+    fs::path rel = fs::relative(chosen, BaseDataDir, ec);
+    std::string stored;
+    // fs::relative yields a leading ".." when the target isn't under
+    // BaseDataDir (e.g. "../../Pictures/pose.png") - store the absolute
+    // path in that case instead of a relative path that would break once
+    // the game moves to a different machine/install location.
+    if (!ec && !rel.empty() && rel.generic_string().rfind("..", 0) != 0) {
+        stored = rel.generic_string();
+    } else {
+        stored = WideToUtf8(chosen.wstring());
+    }
+    EditorMotionImagePath = stored;
+    if (EditMotionImagePath) SetEditText(EditMotionImagePath, Utf8ToWide(fs::path(stored).filename().string()));
+    InvalidateRect(Hwnd, nullptr, FALSE);
+}
+
+void App::DrawMotionImagePreview(Gdiplus::Graphics& g) {
+    const auto& pal = GetPalette();
+    const Gdiplus::RectF& r = EditorMotionImageRect;
+    Gdiplus::SolidBrush bg(pal.PanelBg);
+    g.FillRectangle(&bg, r);
+    Gdiplus::Pen border(pal.Ink, 1.5f);
+    g.DrawRectangle(&border, r);
+
+    if (EditorMotionImagePath.empty()) {
+        EditorMotionImageCache.reset();
+        EditorMotionImageCachedPath.clear();
+        return;
+    }
+    if (EditorMotionImageCachedPath != EditorMotionImagePath) {
+        fs::path full = ResolveMotionImagePath(BaseDataDir, EditorMotionImagePath);
+        EditorMotionImageCache = std::make_unique<Gdiplus::Image>(full.wstring().c_str());
+        EditorMotionImageCachedPath = EditorMotionImagePath;
+    }
+    if (!EditorMotionImageCache || EditorMotionImageCache->GetLastStatus() != Gdiplus::Ok) return;
+
+    // Fit within the box, preserving aspect ratio, centered.
+    Gdiplus::REAL iw = static_cast<Gdiplus::REAL>(EditorMotionImageCache->GetWidth());
+    Gdiplus::REAL ih = static_cast<Gdiplus::REAL>(EditorMotionImageCache->GetHeight());
+    if (iw <= 0 || ih <= 0) return;
+    float pad = 6.0f;
+    Gdiplus::REAL scale = std::min((r.Width - pad * 2) / iw, (r.Height - pad * 2) / ih);
+    Gdiplus::REAL dw = iw * scale, dh = ih * scale;
+    Gdiplus::REAL dx = r.X + (r.Width - dw) / 2.0f, dy = r.Y + (r.Height - dh) / 2.0f;
+    g.DrawImage(EditorMotionImageCache.get(), dx, dy, dw, dh);
 }
 
 } // namespace kakuge

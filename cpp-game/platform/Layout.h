@@ -47,6 +47,33 @@ struct ViewTransform {
     }
 };
 
+// Two symmetric, horizontally-centered "placement frames" for showing two
+// characters/UI elements side by side (e.g. the VS screen's two fighter
+// portraits) - a fixed gap between them and a fixed margin from the
+// canvas's bottom edge, both boxes vertically aligned to that same bottom
+// margin. Anchored to this game's own 384x224 canvas (80x95 boxes, 80px
+// gap, 8px bottom margin - reproduces that pattern exactly when called
+// with VirtualW/VirtualH) and scaled proportionally for any other canvas
+// size, so the same layout call stays correct if the virtual canvas ever
+// changes size - not a naive uniform scale of some other resolution's
+// numbers, which wouldn't necessarily hit round pixel values here.
+struct TwoBoxLayout {
+    Gdiplus::RectF Left;
+    Gdiplus::RectF Right;
+};
+
+inline TwoBoxLayout ComputeTwoBoxLayout(float canvasW, float canvasH) {
+    constexpr float kRefW = 384.0f, kRefH = 224.0f;
+    constexpr float kBoxW = 80.0f, kBoxH = 95.0f, kGap = 80.0f, kBottomMargin = 8.0f;
+    float sx = canvasW / kRefW, sy = canvasH / kRefH;
+    float boxW = kBoxW * sx, boxH = kBoxH * sy, gap = kGap * sx, bottom = kBottomMargin * sy;
+    float totalW = boxW * 2.0f + gap;
+    float leftX = (canvasW - totalW) / 2.0f;
+    float rightX = leftX + boxW + gap;
+    float y = canvasH - bottom - boxH;
+    return {Gdiplus::RectF(leftX, y, boxW, boxH), Gdiplus::RectF(rightX, y, boxW, boxH)};
+}
+
 // A simple clickable rectangle in virtual-canvas units, used by every
 // custom-drawn menu screen (Title/Select/VS/Result/Settings/Pause) so we
 // don't need real Win32 HWND buttons for plain navigation actions - only

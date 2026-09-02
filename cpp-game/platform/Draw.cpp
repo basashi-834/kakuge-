@@ -19,6 +19,51 @@ namespace kakuge {
 // into genuine chunky pixels rather than smooth vector strokes.
 constexpr double kCharScale = 1.3;
 
+// ---- Dynamic camera (auto-zoom) ----
+// Extra world-space width kept visible around the two fighters (beyond
+// their raw separation) so they're never crammed edge-to-edge even at
+// minimum distance - roughly two pushbox-widths of breathing room.
+constexpr double kCameraPaddingWorld = 150.0;
+// At StageMaxX-StageMinX separation (260 units, both fighters pinned to
+// opposite walls) the natural zoom-to-fit is 384/(260+150) ~= 0.937 - the
+// floor sits just under that so the widest shot still shows a hair of
+// margin past both fighters rather than cropping right to them.
+constexpr double kCameraMinZoom = 0.85;
+// At minimum meaningful distance (pushbox contact, ~73 units) the natural
+// zoom-to-fit is 384/(73+150) ~= 1.72 - capped a bit under that so a throw
+// or point-blank exchange doesn't blow the characters up past a readable
+// size.
+constexpr double kCameraMaxZoom = 1.6;
+// Exponential lerp rate (per second) for both center and zoom - high
+// enough that the camera visibly keeps pace with a dash or a knockback,
+// low enough that it never reads as a hard cut.
+constexpr double kCameraLerpSpeed = 6.0;
+
+namespace {
+GameCamera g_Camera;
+
+double CameraTargetZoom(double distance) {
+    double desiredWidth = distance + kCameraPaddingWorld;
+    double zoom = (desiredWidth > 1.0) ? (VirtualW / desiredWidth) : kCameraMaxZoom;
+    return std::clamp(zoom, kCameraMinZoom, kCameraMaxZoom);
+}
+} // namespace
+
+GameCamera& GetCamera() { return g_Camera; }
+
+void UpdateCamera(double p1x, double p2x, double dt) {
+    double targetCenter = (p1x + p2x) / 2.0;
+    double targetZoom = CameraTargetZoom(std::abs(p1x - p2x));
+    double t = std::clamp(kCameraLerpSpeed * dt, 0.0, 1.0);
+    g_Camera.CenterX += (targetCenter - g_Camera.CenterX) * t;
+    g_Camera.Zoom += (targetZoom - g_Camera.Zoom) * t;
+}
+
+void ResetCamera(double p1x, double p2x) {
+    g_Camera.CenterX = (p1x + p2x) / 2.0;
+    g_Camera.Zoom = CameraTargetZoom(std::abs(p1x - p2x));
+}
+
 namespace {
 
 // 5x7 dot-matrix glyphs, one 5-char row per string ('#' = lit, '.' = off).
@@ -372,56 +417,65 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
     double sx = ToScreenX(fighter.PositionX);
     double sy = ToScreenY(fighter.PositionY);
     int facing = fighter.Facing;
+    // The dynamic camera (see GameCamera in Draw.h) moves fighters via
+    // ToScreenX/Y above, but DrawHumanoid itself is zoom-agnostic (it's
+    // reused for Character Select/VS portraits, which must never be
+    // affected by the in-match camera) - so every heightScale passed to it
+    // here, and every raw kCharScale-based knockdown/dead measurement
+    // below, is scaled by the live zoom explicitly at this call site
+    // instead.
+    double zoom = GetCamera().Zoom;
+    double cs = kCharScale * zoom;
 
     switch (fighter.SM.CurrentState) {
         case CharState::Knockdown: {
             Color c(255, static_cast<BYTE>(std::max(0, bodyColor.GetR() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetG() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetB() - 60)));
-            Pen pen(c, static_cast<REAL>(3.5 * kCharScale));
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * kCharScale), static_cast<REAL>(sy - 6 * kCharScale), static_cast<REAL>(sx + 44 * kCharScale), static_cast<REAL>(sy - 6 * kCharScale));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * kCharScale), static_cast<REAL>(sy - 24 * kCharScale), static_cast<REAL>(20 * kCharScale), static_cast<REAL>(20 * kCharScale));
+            Pen pen(c, static_cast<REAL>(3.5 * cs));
+            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * cs), static_cast<REAL>(sy - 6 * cs), static_cast<REAL>(sx + 44 * cs), static_cast<REAL>(sy - 6 * cs));
+            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * cs), static_cast<REAL>(sy - 24 * cs), static_cast<REAL>(20 * cs), static_cast<REAL>(20 * cs));
             break;
         }
         case CharState::WakeUp:
-            DrawHumanoid(g, sx, sy, bodyColor, {0.75, facing});
+            DrawHumanoid(g, sx, sy, bodyColor, {0.75 * zoom, facing});
             break;
         case CharState::Crouch:
-            DrawHumanoid(g, sx, sy, bodyColor, {0.72, facing});
+            DrawHumanoid(g, sx, sy, bodyColor, {0.72 * zoom, facing});
             break;
         case CharState::Block:
-            DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), {1.0, facing, 0, 0, 0, 10});
+            DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), {zoom, facing, 0, 0, 0, 10});
             break;
         case CharState::Hitstun:
-            DrawHumanoid(g, sx, sy, Color(255, 220, 60, 60), {1.0, facing, 0, 0, 8.0 * facing, 0});
+            DrawHumanoid(g, sx, sy, Color(255, 220, 60, 60), {zoom, facing, 0, 0, 8.0 * facing * zoom, 0});
             break;
         case CharState::Throw:
-            DrawHumanoid(g, sx, sy, Color(255, 200, 50, 50), {0.85, facing});
+            DrawHumanoid(g, sx, sy, Color(255, 200, 50, 50), {0.85 * zoom, facing});
             break;
         case CharState::Dead: {
             // Lighter than before (was 140,140,140) - the arena ground is
             // now dark (Screen 03 reference), and the old gray barely read
             // against it.
             Color c(255, 220, 218, 216);
-            Pen pen(c, static_cast<REAL>(3.0 * kCharScale));
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale), static_cast<REAL>(sx + 44 * kCharScale), static_cast<REAL>(sy - 4 * kCharScale));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * kCharScale), static_cast<REAL>(sy - 20 * kCharScale), static_cast<REAL>(18 * kCharScale), static_cast<REAL>(18 * kCharScale));
+            Pen pen(c, static_cast<REAL>(3.0 * cs));
+            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * cs), static_cast<REAL>(sy - 4 * cs), static_cast<REAL>(sx + 44 * cs), static_cast<REAL>(sy - 4 * cs));
+            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * cs), static_cast<REAL>(sy - 20 * cs), static_cast<REAL>(18 * cs), static_cast<REAL>(18 * cs));
             break;
         }
         case CharState::Attack: {
             std::string btn = fighter.CurrentMoveData ? fighter.CurrentMoveData->Button : std::string();
             bool isKick = !btn.empty() && btn.back() == 'K';
             Color tint = MoveTint(fighter);
-            if (isKick) DrawHumanoid(g, sx, sy, tint, {1.0, facing, 0, 34, 0, 0});
-            else DrawHumanoid(g, sx, sy, tint, {1.0, facing, 34, 0, 0, 0});
+            if (isKick) DrawHumanoid(g, sx, sy, tint, {zoom, facing, 0, 34, 0, 0});
+            else DrawHumanoid(g, sx, sy, tint, {zoom, facing, 34, 0, 0, 0});
             break;
         }
         case CharState::Jump: {
             Color c(255, static_cast<BYTE>(std::min(255, bodyColor.GetR() + 20)), static_cast<BYTE>(std::min(255, bodyColor.GetG() + 20)), static_cast<BYTE>(std::min(255, bodyColor.GetB() + 20)));
-            DrawHumanoid(g, sx, sy, c, {0.92, facing});
+            DrawHumanoid(g, sx, sy, c, {0.92 * zoom, facing});
             break;
         }
         default:
             // Idle/standing.
-            DrawHumanoid(g, sx, sy, bodyColor, {1.0, facing});
+            DrawHumanoid(g, sx, sy, bodyColor, {zoom, facing});
             break;
     }
 }
@@ -429,10 +483,11 @@ void DrawFighter(Graphics& g, const Fighter& fighter) {
 void DrawProjectile(Graphics& g, const Projectile& proj) {
     double sx = ToScreenX(proj.PositionX);
     double sy = ToScreenY(proj.PositionY);
+    double r = ScreenScale(16.0);
     SolidBrush brush(Color(255, 235, 130, 30));
-    g.FillEllipse(&brush, static_cast<REAL>(sx - 16), static_cast<REAL>(sy - 16), 32.0f, 32.0f);
-    Pen pen(Color(255, 255, 200, 60), 3.0f);
-    g.DrawEllipse(&pen, static_cast<REAL>(sx - 16), static_cast<REAL>(sy - 16), 32.0f, 32.0f);
+    g.FillEllipse(&brush, static_cast<REAL>(sx - r), static_cast<REAL>(sy - r), static_cast<REAL>(r * 2), static_cast<REAL>(r * 2));
+    Pen pen(Color(255, 255, 200, 60), static_cast<REAL>(ScreenScale(3.0)));
+    g.DrawEllipse(&pen, static_cast<REAL>(sx - r), static_cast<REAL>(sy - r), static_cast<REAL>(r * 2), static_cast<REAL>(r * 2));
 }
 
 EffectStyle GetEffectStyle(const std::string& kind) {
@@ -449,7 +504,7 @@ EffectStyle GetEffectStyle(const std::string& kind) {
 void DrawEffect(Graphics& g, const LiveEffect& fx) {
     EffectStyle style = GetEffectStyle(fx.kind);
     double t = std::min(1.0, fx.age / style.duration);
-    double r = style.radius * (0.4 + t * 1.1);
+    double r = ScreenScale(style.radius * (0.4 + t * 1.1));
     int alpha = static_cast<int>(255 * (1.0 - t));
     if (alpha <= 0) return;
     double sx = ToScreenX(fx.x), sy = ToScreenY(fx.y);
@@ -602,12 +657,12 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
 
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
         RectBox push = f->PushboxRect();
-        g.DrawRectangle(&pushPen, static_cast<REAL>(ToScreenX(push.Left())), static_cast<REAL>(ToScreenY(push.Top())), static_cast<REAL>(push.Width), static_cast<REAL>(push.Height));
+        g.DrawRectangle(&pushPen, static_cast<REAL>(ToScreenX(push.Left())), static_cast<REAL>(ToScreenY(push.Top())), static_cast<REAL>(ScreenScale(push.Width)), static_cast<REAL>(ScreenScale(push.Height)));
         for (const RectBox& hurt : f->HurtboxRects()) {
-            g.DrawRectangle(&hurtPen, static_cast<REAL>(ToScreenX(hurt.Left())), static_cast<REAL>(ToScreenY(hurt.Top())), static_cast<REAL>(hurt.Width), static_cast<REAL>(hurt.Height));
+            g.DrawRectangle(&hurtPen, static_cast<REAL>(ToScreenX(hurt.Left())), static_cast<REAL>(ToScreenY(hurt.Top())), static_cast<REAL>(ScreenScale(hurt.Width)), static_cast<REAL>(ScreenScale(hurt.Height)));
         }
         for (const RectBox& hb : f->ActiveHitboxRects) {
-            g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(hb.Width), static_cast<REAL>(hb.Height));
+            g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(ScreenScale(hb.Width)), static_cast<REAL>(ScreenScale(hb.Height)));
         }
         // Fixed HUD position (top corner, below the HP bar/name) rather
         // than tracking the character around the stage.

@@ -128,6 +128,7 @@ void App::OnPaint() {
         Font headerFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
         DrawTextCentered(g, L"CHARACTER EDITOR", headerFont, RectF(0, 0, static_cast<REAL>(w), static_cast<REAL>(kEditorHeaderHeight)), pal.White);
         DrawEditorPreview(g);
+        DrawMotionImagePreview(g);
     }
 
     // Single blit of the fully-rendered frame onto the real window surface
@@ -303,6 +304,7 @@ void App::OnTimer() {
             RawInput p1 = CollectP1Input();
             Battle->CpuAI->Mode = P2DummyMode;
             Battle->Update(FixedDt, p1);
+            UpdateCamera(Battle->Player1.PositionX, Battle->Player2.PositionX, FixedDt);
             extern void PlaySoundEvent(const std::string&);
             for (const auto& snd : Battle->AllSounds) PlaySoundEvent(snd);
             for (const auto& fx : Battle->AllEffects) Effects.push_back({fx.kind, fx.x, fx.y, 0.0, fx.side});

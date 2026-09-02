@@ -23,8 +23,38 @@ constexpr double OriginX = VirtualW / 2.0;
 // before the HUD gauge bars at the bottom of the canvas.
 constexpr double OriginY = 194.0;
 
-inline double ToScreenX(double worldX) { return OriginX + worldX; }
-inline double ToScreenY(double worldY) { return OriginY + worldY; }
+// Dynamic camera (auto-zoom): follows the midpoint between the two
+// fighters and zooms in/out based on the distance between them - closer
+// together reads as more zoomed-in (impact/detail), farther apart pulls
+// back toward showing the whole stage. Only ever mutated by UpdateCamera/
+// ResetCamera (App::OnTimer's fixed-step Game loop, and App::StartMatch),
+// and only ever read by ToScreenX/ToScreenY/ScreenScale and DrawFighter/
+// DrawProjectile/DrawEffect/DrawDebugOverlay - every one of those is
+// exclusively part of the Game screen's own render path, so this global
+// state never leaks into Title/Select/VS/Result/Editor (which position
+// everything in fixed canvas coordinates, not through these helpers).
+struct GameCamera {
+    double CenterX = 0.0; // world-space X the canvas center is currently pointed at
+    double Zoom = 1.0;    // world-to-canvas scale multiplier (1.0 = no zoom)
+};
+GameCamera& GetCamera();
+
+// Recomputes the camera's target center/zoom from both fighters' current
+// PositionX and smoothly (lerp) moves the live camera toward it - call
+// once per fixed simulation step (FixedDt) while Screen::Game is running.
+void UpdateCamera(double p1x, double p2x, double dt);
+// Snaps the camera directly to the correct framing for the given starting
+// positions with no lerp-in - call once when a match starts, so the very
+// first frame doesn't inherit a stale zoom/pan left over from a previous
+// match's close-range finish.
+void ResetCamera(double p1x, double p2x);
+
+inline double ToScreenX(double worldX) { return OriginX + (worldX - GetCamera().CenterX) * GetCamera().Zoom; }
+inline double ToScreenY(double worldY) { return OriginY + worldY * GetCamera().Zoom; }
+// Scales a world-space length (radius, box width/height, line thickness)
+// by the camera's current zoom - use alongside ToScreenX/ToScreenY
+// anywhere a size (not just a position) needs to track the zoom level.
+inline double ScreenScale(double worldLength) { return worldLength * GetCamera().Zoom; }
 
 void AddRoundedRect(Gdiplus::GraphicsPath& path, const Gdiplus::RectF& rect, float radius);
 
