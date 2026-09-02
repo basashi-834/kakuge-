@@ -188,6 +188,62 @@ the shrink, just more conservative than strictly necessary now (see their
 comments in `platform/Draw.h`/`.cpp`), left alone since retuning either
 wasn't requested and isn't broken.
 
+**Later update - precise 384x224-native size/layout spec.** The user then
+gave a third, much more precise spec, this time expressed *directly* in
+384x224 canvas terms (not scaled from a 1920x1080 reference) - explicit
+CHARACTER_VISUAL_HEIGHT (88px/39.3%), CHARACTER_VISUAL_WIDTH (55px/14-15%),
+GROUND_Y (189px/84.4%), PLAYER1_START_X/PLAYER2_START_X (screen x=116/268,
+the canvas's 30%/70% points, ~150px apart), HUD_HEIGHT (~30-32px) and
+SUPER_GAUGE_HEIGHT (~18px), explicitly asking these be treated as the
+game's unified baseline going forward, not auto-adjusted. Implemented:
+- `kCharScale` (`platform/Draw.cpp`) -> `88.0/108.0` (idle height exactly
+  88px/39.3%).
+- `OriginY` (`platform/Draw.h`) -> `189.0` (was `200.0`).
+- `StageConstants::Player1StartX`/`Player2StartX` (`engine/Constants.h`)
+  -> `-76.0`/`76.0` (symmetric around world X=0, 152 units apart) and
+  `kCameraPaddingWorld` (`platform/Draw.cpp`) -> `232.0`, chosen together
+  so the round-start camera sits at *exactly* zoom 1.0
+  (`384/(152+232)==1.0`), which puts the two fighters' zoom-1.0 screen
+  projection at exactly canvas x=116/268 - verified by pixel-sampling a
+  Wine screenshot (head centers landed at ~506/1161 screen px against a
+  measured ~508/1164 expected, ground line at ~y188 against expected 189).
+- Bottom super-gauge bar (`DrawHUD` in `platform/Draw.cpp`) thickened
+  6px->8px with adjusted margins so its total footprint (label to bottom
+  margin) is 18px, matching SUPER_GAUGE_HEIGHT's recommendation.
+- `Fighter::PushboxHalfWidth`/`PushboxHalfHeight`, `HurtboxSet`'s
+  `Stand`/`Crouch`/`Air`, and the VS-screen silhouette sizing literal in
+  `platform/Screens.cpp` were all rescaled proportionally to the new
+  `kCharScale`, same pattern as the previous size change.
+- `StageConstants`' documentation block was rewritten to explain the
+  history across all three specs (1920x1080-derived -> "about half" ->
+  this native-384 one) rather than silently drifting from an increasingly
+  inaccurate original comment.
+
+**Attempted and reverted: independent width scale.** To also hit the
+55px CHARACTER_VISUAL_WIDTH target (which a single uniform `kCharScale`
+can't do at the same time as the height target - 55/88 = 0.625 is far
+"wider for its height" than this stick figure's own natural proportions),
+tried adding a second horizontal-only scale (`kCharWidthScale =
+55.0/24.0`) applied to `DrawHumanoid`'s static body-frame X-offsets (hip/
+shoulder half-width, foot stance spread, torso width) while leaving limb
+articulation/reach, line thickness and head radius on the original
+height-based scale. Visually verified via a Wine screenshot and it looked
+*wrong*, not just imprecise: the torso stretched into a flat, box-like
+rectangle (as wide as the entire leg stance) rather than reading as a
+body, because this procedural line-art humanoid's limbs are constant-
+width single strokes with no independent "mass" to widen - unlike real
+sprite art, there's no torso fill/shading to carry extra width, so
+stretching the coordinates alone just makes the wireframe rectangular.
+**Reverted entirely** (back to single `s = heightScale*kCharScale` used
+everywhere, as it always was) rather than shipping a broken-looking
+character - see `kCharScale`'s comment in `platform/Draw.cpp` for a
+pointer back to this entry. Getting a genuine ~55px-wide silhouette
+without that distortion needs an actual shape/stroke-weight redesign
+(thicker limbs, real torso mass, i.e. closer to real sprite art than this
+thin-line stick figure) - flagged as a follow-up rather than attempted
+blind a second time; current on-screen width is whatever this stick
+figure's existing (much narrower) proportions produce at the new height.
+
 ## Sprite art system (`platform/Sprites.h`/`.cpp`)
 
 Layers optional bitmap sprite art *on top of* the procedural line-art

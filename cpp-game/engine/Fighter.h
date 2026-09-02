@@ -79,14 +79,14 @@ public:
     // Sized independently from the renderer's humanoid image size (see
     // platform/Draw.cpp's kCharScale) so two fighters visually stop
     // shoulder-to-shoulder instead of overlapping/passing through each
-    // other - previously scaled up ~10% from 36.4/71.5 to 40.0/78.5
-    // alongside a ~10% character-size increase (kCharScale 1.3 -> 1.43),
-    // then halved again to 20.0/39.25 alongside kCharScale being halved
-    // (1.43 -> 0.715) per the user's later request to shrink the
-    // character to about half its size (see StageConstants in engine/
-    // Constants.h for the original 1920x1080-proportioned spec this all
-    // traces back to).
-    double PushboxHalfWidth = 20.0, PushboxHalfHeight = 39.25;
+    // other. Rescaled each time kCharScale changed, proportionally against
+    // the very first 36.4/71.5 <-> kCharScale=1.3 pairing so the ratio
+    // between box size and character height stays constant across all the
+    // resizes: up ~10% to 40.0/78.5 (kCharScale -> 1.43), then halved to
+    // 20.0/39.25 (kCharScale -> 0.715, "about half size"), then to the
+    // current 22.79/44.73 for kCharScale -> 88/108 (~0.815), matching the
+    // user's later, precise 384x224-native size/layout spec.
+    double PushboxHalfWidth = 22.79, PushboxHalfHeight = 44.73;
     // Every entry is simultaneously live this frame (a move can carry more
     // than one hitbox - e.g. separate hand/foot boxes on a multi-part
     // attack); empty means no hitbox is active. See MoveExecutor::

@@ -19,16 +19,16 @@ namespace fs = std::filesystem;
 
 // World-space (game logic, centered on stage) -> virtual canvas pixel space.
 constexpr double OriginX = VirtualW / 2.0;
-// Ground line's Y in the 384x224 virtual canvas. Nudged down from the
-// 1920x1080 spec's literal 85.2%-of-height ratio (191) to 89.3% (200) per
-// user feedback that the round-start gap above the character's head felt
-// too tight - originally left an idle character (~156px tall at zoom 1.0)
-// ~44px of headroom above their head. The character was later shrunk to
-// about half size (kCharScale in Draw.cpp, ~79px tall at zoom 1.0) per a
-// further user request, which roughly doubles that headroom on its own;
-// OriginY itself wasn't retuned for that, since less headroom was never
-// the complaint.
-constexpr double OriginY = 200.0;
+// Ground line's Y in the 384x224 virtual canvas - GROUND_Y in the user's
+// later, precise 384x224-native size/layout spec, which fixed this at 189
+// (~84.4% of the 224px canvas height, "接地ライン"), superseding two
+// earlier iterations that had put it at 191 (the original 1920x1080
+// spec's literal 85.2%-of-height ratio) and then 200 (nudged down further
+// per user feedback that the round-start headroom felt too tight). With
+// the character now standing 88px tall at zoom 1.0 (kCharScale in
+// Draw.cpp), the head sits at Y~=101 - comfortably clear of the ~30-37px
+// top HUD region per that same spec's headroom requirement.
+constexpr double OriginY = 189.0;
 
 // Dynamic camera (auto-zoom): follows the midpoint between the two
 // fighters and zooms in/out based on the distance between them - closer

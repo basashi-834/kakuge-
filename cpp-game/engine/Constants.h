@@ -87,33 +87,33 @@ struct Constants {
 // (platform/Layout.h's VirtualW/VirtualH) that then gets nearest-neighbor
 // upscaled to the real window, whatever the window's actual resolution.
 //
-// The values below reproduce - as ratios against that 384-wide canvas,
-// which plays the role of "camera view width" at zoom 1.0 - the exact
-// proportions of a user-specified 1920x1080 reference layout (stage
-// 3200px wide, ground at y=920, player height 760px/70% of screen,
-// start positions x=1250/x=1850 i.e. 600px apart), rather than that
-// layout's literal pixel values, so the game keeps its pixel-art look
-// (see kCharScale/OriginY in platform/Draw.h/.cpp for the matching
-// on-screen size/ground-line constants - character height and ground
-// position are rendering concerns, not gameplay ones, so they live
-// there instead of here; PlayerHeightRatio below is recorded purely as
-// the source ratio those were derived from).
-//
-// Scale factor used throughout: 384 / 1920 = 0.2 (canvas width relative
-// to the reference layout's camera view width).
+// History: this struct originally reproduced - as ratios against the
+// 384-wide canvas - a user-specified *1920x1080* reference layout (stage
+// 3200px wide, ground at y=920, player height 760px/70%, start positions
+// x=1250/x=1850), scaled by 384/1920 = 0.2. That was later superseded by
+// a second, precise spec given *directly* in 384x224 canvas terms (no
+// external reference resolution to scale from) - CHARACTER_VISUAL_HEIGHT
+// ~88px/39.3%, PLAYER1_START_X/PLAYER2_START_X at screen x=116/268 (the
+// canvas's 30%/70% points), ~150px center-to-center distance. Character
+// height/ground-line constants derived from that spec (kCharScale/
+// OriginY) live in platform/Draw.h/.cpp since those are rendering
+// concerns, not gameplay ones; Player1StartX/Player2StartX below (a
+// gameplay concern - Fighter/BattleSystem read these) were recomputed to
+// match: symmetric world positions +-76 put their zoom-1.0 screen
+// projection (see kCameraPaddingWorld's comment in platform/Draw.cpp)
+// exactly at 116/268 with a 152-unit center-to-center distance, matching
+// that second spec almost exactly (150 recommended, 152 exact from its
+// own 116/268 example numbers). Stage width wasn't covered by either
+// later spec, so it's kept from the original 1920x1080-derived value.
 struct StageConstants {
-    // Reference layout this was derived from (1920x1080, informational -
-    // not read by any code, kept so the ratios above stay traceable to
-    // their source spec without re-deriving them by hand).
+    // Original 1920x1080 reference layout (informational only, not read by
+    // any code - see the history note above; StageWidth below is the one
+    // value still actually derived from it).
     static constexpr double RefCameraViewWidth = 1920.0;
     static constexpr double RefStageWidth = 3200.0;
     static constexpr double RefGroundY = 920.0;
     static constexpr double RefScreenHeight = 1080.0;
-    // Halved from the original spec's 760 (-> 380) per the user's later
-    // request to shrink the character to about half its size; kept here
-    // so PlayerHeightRatio below stays in sync with platform/Draw.cpp's
-    // kCharScale rather than silently drifting from it.
-    static constexpr double RefPlayerHeight = 380.0;
+    static constexpr double RefPlayerHeight = 760.0;
     static constexpr double RefPlayer1StartX = 1250.0;
     static constexpr double RefPlayer2StartX = 1850.0;
 
@@ -123,20 +123,19 @@ struct StageConstants {
     static constexpr double StageMinX = -StageWidth / 2.0;
     static constexpr double StageMaxX = StageWidth / 2.0;
 
-    // PLAYER1_START_X / PLAYER2_START_X: the reference spec's 1250/1850
-    // (out of a 0-3200 stage, center 1600) re-centered on 0 and scaled by
-    // 0.2 - reproduces both the 600-unit start distance (*0.2 = 120) and
-    // the (slightly asymmetric, as given) margins to each stage edge.
-    static constexpr double Player1StartX = -70.0;
-    static constexpr double Player2StartX = 50.0;
-    static constexpr double PlayerStartDistance = Player2StartX - Player1StartX; // 120
+    // PLAYER1_START_X / PLAYER2_START_X: symmetric +-76 around world X=0 -
+    // see the history note above for why (zoom-1.0 screen projection lands
+    // on the later 384x224-native spec's 116/268 canvas positions).
+    static constexpr double Player1StartX = -76.0;
+    static constexpr double Player2StartX = 76.0;
+    static constexpr double PlayerStartDistance = Player2StartX - Player1StartX; // 152
 
-    // PLAYER_HEIGHT ratio (760/1080 = 0.704 of screen height) - the actual
-    // pixel constant derived from it (kCharScale) lives in platform/
-    // Draw.cpp since character draw size is a rendering concern; recorded
-    // here too so the ratio itself isn't duplicated-and-drifts if either
-    // side gets retuned later.
-    static constexpr double PlayerHeightRatio = RefPlayerHeight / RefScreenHeight;
+    // PLAYER_HEIGHT ratio - superseded from the original 760/1080 (0.704)
+    // to the later 384x224-native spec's 88/224 (~0.393); the actual pixel
+    // constant (kCharScale) lives in platform/Draw.cpp since character
+    // draw size is a rendering concern, recorded here too so the ratio
+    // itself isn't duplicated-and-drifts if either side gets retuned later.
+    static constexpr double PlayerHeightRatio = 88.0 / 224.0;
 };
 
 } // namespace kakuge

@@ -8,13 +8,14 @@ using namespace Gdiplus;
 
 namespace kakuge {
 
-// Sized so an idle character stands ~79px tall (35% of the 224px virtual
-// canvas height, see OriginY in Draw.h for the other half of that math) -
-// half of the previous 1.43 (~156px/70%) that matched the user's
-// 1920x1080-proportioned spec (PLAYER_HEIGHT=760 of a 1080-tall screen,
-// see StageConstants::PlayerHeightRatio in engine/Constants.h), per the
-// user's later explicit request to shrink the character to about half
-// that size. Shared by DrawHumanoid and the lying-down Knockdown/Dead
+// Sized so an idle character stands exactly 88px tall (108*kCharScale ==
+// 88, ~39.3% of the 224px virtual canvas height, see OriginY in Draw.h for
+// the other half of that math) - matches the user's later, precise
+// 384x224-native size/layout spec (CHARACTER_VISUAL_HEIGHT ~= 88px, ratio
+// screen-height*0.39~0.40), which superseded two earlier iterations: the
+// original 1920x1080-proportioned spec (kCharScale 1.43, ~156px/70%) and
+// a rougher "about half that" request in between (kCharScale 0.715,
+// ~79px/35%). Shared by DrawHumanoid and the lying-down Knockdown/Dead
 // poses in DrawFighter so both scale together. Every character is drawn
 // with this same vector line-art path - the earlier round's photo-sprite
 // renders (data/images/fighter_*.png) were removed per the user's
@@ -22,17 +23,30 @@ namespace kakuge {
 // buffer + nearest-neighbor pipeline (see App::OnPaint) is what turns
 // this line art into genuine chunky pixels rather than smooth vector
 // strokes.
-constexpr double kCharScale = 0.715;
+constexpr double kCharScale = 88.0 / 108.0;
+// A separate horizontal-only scale was tried here to also hit the user's
+// spec'd CHARACTER_VISUAL_WIDTH (~55px, ~14-15% of the 384px canvas)
+// alongside height - solving 24*kCharWidthScale == 55 against the shared
+// coefficient behind the foot-stance spread and torso top width. Visually
+// verified via Wine screenshot and reverted: it stretched the torso into
+// a flat, box-like rectangle (as wide as the full leg stance) rather than
+// a body, because this stick figure's limbs are thin single-width strokes
+// with no independent "bulk" to add width to - width and height were
+// always the same single scale for a reason. Getting a genuinely ~55px-
+// wide silhouette without that distortion needs an actual shape/stroke-
+// weight redesign (thicker limbs, a real torso mass), not a coordinate
+// stretch; flagged in DEVLOG.md rather than attempted blind a second time.
 
 // ---- Dynamic camera (auto-zoom) ----
 // Extra world-space width kept visible around the two fighters (beyond
 // their raw separation) so they're never crammed edge-to-edge - chosen so
-// the fighters' StageConstants::PlayerStartDistance (120, matching the
-// user's spec's ~600px starting range at 1920x1080) reads as almost
-// exactly baseline zoom (384/(120+264) = 1.008): the round's opening
-// neutral position is the natural "standard magnification" reference
-// point the user's spec describes, not an already-zoomed-in one.
-constexpr double kCameraPaddingWorld = 264.0;
+// the fighters' StageConstants::PlayerStartDistance (152, matching the
+// user's later 384x224-native spec's center-to-center distance of ~150px,
+// see Player1StartX/Player2StartX below) reads as *exactly* baseline zoom
+// (384/(152+232) = 1.0): the round's opening neutral position is the
+// natural "standard magnification" reference point that spec describes
+// (screen positions 116/268), not an already-zoomed-in one.
+constexpr double kCameraPaddingWorld = 232.0;
 // At StageMaxX-StageMinX separation (640 units, both fighters pinned to
 // opposite walls - StageConstants::StageWidth) the natural zoom-to-fit
 // would be 384/(640+264) ~= 0.42, but the floor is set higher, at the
@@ -45,16 +59,17 @@ constexpr double kCameraPaddingWorld = 264.0;
 constexpr double kCameraMinZoom = 0.49;
 // At minimum meaningful distance (pushbox contact) the natural horizontal
 // zoom-to-fit would run well past 1.4, but the real ceiling is vertical,
-// not horizontal: an idle character is ~108*kCharScale+2 px tall at zoom
-// 1 (~79px - 35% of the canvas, see kCharScale's comment) and scales
-// linearly with zoom, while the canvas is only 224px tall with the HUD's
-// HP bar/name tag occupying its own ~20px at the top. 1.05 keeps an idle
-// character comfortably clear of the top HUD even at the closest range
-// (with the character now roughly half its previous height, this ceiling
-// is more conservative than strictly necessary - it could safely go
-// higher, but 1.05 wasn't broken by the shrink so it's left as-is) while
-// still giving the "distance is close -> zoom in a little" effect the
-// spec asks for something real to show.
+// not horizontal: an idle character is 88px tall at zoom 1 (see
+// kCharScale's comment) and scales linearly with zoom (~92px at 1.05),
+// while the canvas is only 224px tall with the HUD's HP bar/name tag/
+// round timer occupying its own ~30-37px at the top. 1.05 keeps an idle
+// character comfortably clear of the top HUD even at the closest range -
+// this ceiling has been conservative (more headroom than strictly
+// necessary) since the character was shrunk from its original ~156px
+// height across two later user requests, but it was never broken by
+// either shrink, so it's left as-is - while still giving the "distance is
+// close -> zoom in a little" effect the spec asks for something real to
+// show.
 constexpr double kCameraMaxZoom = 1.05;
 // Exponential lerp rate (per second) for both center and zoom - high
 // enough that the camera visibly keeps pace with a dash or a knockback,
@@ -810,7 +825,11 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
         }
     }
 
-    float gaugeW = 90.0f, gaugeH = 6.0f, gaugeY = static_cast<float>(VirtualH) - gaugeH - 2.0f;
+    // Bottom super-gauge strip: SUPER_GAUGE_HEIGHT ~= 18px per the user's
+    // 384x224-native size/layout spec (label top at gaugeY-7 to the 3px
+    // bottom margin spans 224-206 = 18px), up from the previous 6px-tall
+    // bar that only spanned ~13px total.
+    float gaugeW = 90.0f, gaugeH = 8.0f, gaugeY = static_cast<float>(VirtualH) - gaugeH - 3.0f;
     DrawGaugeBar(g, 3, gaugeY, gaugeW, gaugeH, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false, pal.ArenaLine);
     DrawGaugeBar(g, VirtualW - 3.0f - gaugeW, gaugeY, gaugeW, gaugeH, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true, pal.ArenaLine);
     DrawPixelText(g, L"SP", 3, gaugeY - 7, 1.0f, pal.ArenaTextDim);
