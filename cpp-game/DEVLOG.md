@@ -162,6 +162,32 @@ character) no longer fit under the HUD without clipping - `ryu.json`'s
 margin; this is character-data, so it's re-tunable per-character from the
 Character Editor's own JUMP VELOCITY/GRAVITY fields without touching code.
 
+**Later update - character shrunk to ~half size.** After the above sizing
+landed, the user asked to shrink the character to about half its size
+(unrelated to the HUD reskin below - a separate, simpler ask). Changed
+`kCharScale` in `platform/Draw.cpp` from `1.43` to `0.715` (exactly half -
+idle height ~79px/35% of the 224px canvas, down from ~156px/70%), and
+scaled `Fighter::PushboxHalfWidth`/`PushboxHalfHeight` (`engine/Fighter.h`)
+and `HurtboxSet`'s `Stand`/`Crouch`/`Air` rects (`engine/Boxes.h`) down by
+the same 0.5 factor so hit detection still visually lines up with the
+smaller body - consistent with how those boxes were scaled *up* ~10%
+alongside the earlier size increase. Also updated the VS-screen silhouette
+sizing literal in `platform/Screens.cpp` (`156.44` -> `79.22`, matching the
+new `108*kCharScale+2`) and `StageConstants::RefPlayerHeight` in
+`engine/Constants.h` (`760` -> `380`) so that documentation stays in sync
+per its own stated intent. **Deliberately NOT touched**: per-move attack
+hitbox reach (`data/moves/ryu/*.json`) - halving those too would be a much
+bigger, separate balance-tuning pass the user didn't ask for, and the
+"coordinates vs. visuals are separate" principle above means normals'
+reach not shrinking in lockstep with the body isn't a bug, just an
+independent value; `jumpVelocity`/gravity - the smaller character now has
+*more* headroom under the existing jump arc than before (shrinking only
+ever loosens that constraint), so nothing needed retuning there; `OriginY`
+(ground line position) and `kCameraMaxZoom` - both still safe/valid after
+the shrink, just more conservative than strictly necessary now (see their
+comments in `platform/Draw.h`/`.cpp`), left alone since retuning either
+wasn't requested and isn't broken.
+
 ## Sprite art system (`platform/Sprites.h`/`.cpp`)
 
 Layers optional bitmap sprite art *on top of* the procedural line-art

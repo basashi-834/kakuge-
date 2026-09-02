@@ -22,10 +22,12 @@ constexpr double OriginX = VirtualW / 2.0;
 // Ground line's Y in the 384x224 virtual canvas. Nudged down from the
 // 1920x1080 spec's literal 85.2%-of-height ratio (191) to 89.3% (200) per
 // user feedback that the round-start gap above the character's head felt
-// too tight - leaves an idle character (~156px tall at zoom 1.0, see
-// kCharScale in Draw.cpp) ~44px of headroom (was ~35px) above their head,
-// and still ~9px of footroom before the HUD's "SP" gauge label at the
-// bottom of the canvas.
+// too tight - originally left an idle character (~156px tall at zoom 1.0)
+// ~44px of headroom above their head. The character was later shrunk to
+// about half size (kCharScale in Draw.cpp, ~79px tall at zoom 1.0) per a
+// further user request, which roughly doubles that headroom on its own;
+// OriginY itself wasn't retuned for that, since less headroom was never
+// the complaint.
 constexpr double OriginY = 200.0;
 
 // Dynamic camera (auto-zoom): follows the midpoint between the two

@@ -8,11 +8,13 @@ using namespace Gdiplus;
 
 namespace kakuge {
 
-// Sized so an idle character stands ~156px tall (70% of the 224px virtual
+// Sized so an idle character stands ~79px tall (35% of the 224px virtual
 // canvas height, see OriginY in Draw.h for the other half of that math) -
-// matches the user's 1920x1080-proportioned spec (PLAYER_HEIGHT=760 of a
-// 1080-tall screen, see StageConstants::PlayerHeightRatio in engine/
-// Constants.h). Shared by DrawHumanoid and the lying-down Knockdown/Dead
+// half of the previous 1.43 (~156px/70%) that matched the user's
+// 1920x1080-proportioned spec (PLAYER_HEIGHT=760 of a 1080-tall screen,
+// see StageConstants::PlayerHeightRatio in engine/Constants.h), per the
+// user's later explicit request to shrink the character to about half
+// that size. Shared by DrawHumanoid and the lying-down Knockdown/Dead
 // poses in DrawFighter so both scale together. Every character is drawn
 // with this same vector line-art path - the earlier round's photo-sprite
 // renders (data/images/fighter_*.png) were removed per the user's
@@ -20,7 +22,7 @@ namespace kakuge {
 // buffer + nearest-neighbor pipeline (see App::OnPaint) is what turns
 // this line art into genuine chunky pixels rather than smooth vector
 // strokes.
-constexpr double kCharScale = 1.43;
+constexpr double kCharScale = 0.715;
 
 // ---- Dynamic camera (auto-zoom) ----
 // Extra world-space width kept visible around the two fighters (beyond
@@ -44,12 +46,15 @@ constexpr double kCameraMinZoom = 0.49;
 // At minimum meaningful distance (pushbox contact) the natural horizontal
 // zoom-to-fit would run well past 1.4, but the real ceiling is vertical,
 // not horizontal: an idle character is ~108*kCharScale+2 px tall at zoom
-// 1 (~156px - 70% of the canvas, see kCharScale's comment) and scales
+// 1 (~79px - 35% of the canvas, see kCharScale's comment) and scales
 // linearly with zoom, while the canvas is only 224px tall with the HUD's
 // HP bar/name tag occupying its own ~20px at the top. 1.05 keeps an idle
-// character under ~165px tall (still ~27px short of the top HUD even at
-// the closest range) while still giving the "distance is close -> zoom in
-// a little" effect the spec asks for something real to show.
+// character comfortably clear of the top HUD even at the closest range
+// (with the character now roughly half its previous height, this ceiling
+// is more conservative than strictly necessary - it could safely go
+// higher, but 1.05 wasn't broken by the shrink so it's left as-is) while
+// still giving the "distance is close -> zoom in a little" effect the
+// spec asks for something real to show.
 constexpr double kCameraMaxZoom = 1.05;
 // Exponential lerp rate (per second) for both center and zoom - high
 // enough that the camera visibly keeps pace with a dash or a knockback,

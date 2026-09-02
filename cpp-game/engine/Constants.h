@@ -109,7 +109,11 @@ struct StageConstants {
     static constexpr double RefStageWidth = 3200.0;
     static constexpr double RefGroundY = 920.0;
     static constexpr double RefScreenHeight = 1080.0;
-    static constexpr double RefPlayerHeight = 760.0;
+    // Halved from the original spec's 760 (-> 380) per the user's later
+    // request to shrink the character to about half its size; kept here
+    // so PlayerHeightRatio below stays in sync with platform/Draw.cpp's
+    // kCharScale rather than silently drifting from it.
+    static constexpr double RefPlayerHeight = 380.0;
     static constexpr double RefPlayer1StartX = 1250.0;
     static constexpr double RefPlayer2StartX = 1850.0;
 

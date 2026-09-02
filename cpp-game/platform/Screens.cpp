@@ -268,9 +268,9 @@ void App::DrawVS(Graphics& g) {
     if (t > 0.5) {
         double poseT = std::min(1.0, (t - 0.5) / 0.5);
         TwoBoxLayout frames = ComputeTwoBoxLayout(static_cast<float>(VirtualW), static_cast<float>(VirtualH));
-        // heightScale so an idle silhouette (~156px tall at scale 1.0, see
+        // heightScale so an idle silhouette (~79px tall at scale 1.0, see
         // kCharScale's comment in Draw.cpp) fits within the frame's height.
-        float heightScale = static_cast<float>((frames.Left.Height / 156.44) * poseT);
+        float heightScale = static_cast<float>((frames.Left.Height / 79.22) * poseT);
         Color p1Color = p1 ? Color(255, static_cast<BYTE>(p1->ColorR), static_cast<BYTE>(p1->ColorG), static_cast<BYTE>(p1->ColorB)) : pal.White;
         Color p2Color = p2 ? Color(255, static_cast<BYTE>(p2->ColorR), static_cast<BYTE>(p2->ColorG), static_cast<BYTE>(p2->ColorB)) : pal.White;
         DrawHumanoid(g, frames.Left.X + frames.Left.Width / 2.0, frames.Left.Y + frames.Left.Height, p1Color, {heightScale, 1});

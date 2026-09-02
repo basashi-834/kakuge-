@@ -46,16 +46,18 @@ struct HurtboxPart {
 // Per-stance Hurtbox shapes (立ち/しゃがみ/ジャンプで形状変化), each a list of
 // named parts rather than one rectangle. Y is measured with 0 = ground,
 // negative = up (matches the JSON hitbox offset convention). Defaults
-// below are sized to match the renderer's ~156px-tall humanoid
+// below are sized to match the renderer's ~79px-tall humanoid
 // (platform/Draw.cpp's kCharScale, tuned for the 384x224 pixel-art
-// canvas per the user's 1920x1080-proportioned character-size spec - see
-// StageConstants in Constants.h) so hits visually connect where they
-// appear to - a single "torso" part per stance, matching the whole-body
-// box every character shipped with before per-part editing existed.
+// canvas per the user's 1920x1080-proportioned character-size spec, then
+// halved again alongside kCharScale per the user's later request to
+// shrink the character to about half its size - see StageConstants in
+// Constants.h) so hits visually connect where they appear to - a single
+// "torso" part per stance, matching the whole-body box every character
+// shipped with before per-part editing existed.
 struct HurtboxSet {
-    std::vector<HurtboxPart> Stand{{"torso", RectBox{0, -71.4, 65.7, 142.7}}};
-    std::vector<HurtboxPart> Crouch{{"torso", RectBox{0, -44.3, 65.7, 88.5}}};
-    std::vector<HurtboxPart> Air{{"torso", RectBox{0, -71.4, 65.7, 142.7}}};
+    std::vector<HurtboxPart> Stand{{"torso", RectBox{0, -35.7, 32.85, 71.35}}};
+    std::vector<HurtboxPart> Crouch{{"torso", RectBox{0, -22.15, 32.85, 44.25}}};
+    std::vector<HurtboxPart> Air{{"torso", RectBox{0, -35.7, 32.85, 71.35}}};
 
     std::vector<HurtboxPart>& PartsForStance(const std::string& stance) {
         if (stance == "crouch") return Crouch;
