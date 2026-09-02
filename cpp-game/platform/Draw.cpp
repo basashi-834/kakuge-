@@ -30,10 +30,15 @@ constexpr double kCameraPaddingWorld = 150.0;
 // margin past both fighters rather than cropping right to them.
 constexpr double kCameraMinZoom = 0.85;
 // At minimum meaningful distance (pushbox contact, ~73 units) the natural
-// zoom-to-fit is 384/(73+150) ~= 1.72 - capped a bit under that so a throw
-// or point-blank exchange doesn't blow the characters up past a readable
-// size.
-constexpr double kCameraMaxZoom = 1.6;
+// horizontal zoom-to-fit is 384/(73+150) ~= 1.72, but the real ceiling is
+// vertical, not horizontal: an idle character is ~108*kCharScale+2 px tall
+// at zoom 1 (~142px, see kCharScale's comment) and scales linearly with
+// zoom, while the canvas is only 224px tall with the HUD's HP bar/name
+// tag occupying its own ~20px at the top - a zoom past ~1.15 pushes the
+// character's head into (and past 1.2, clean through) that HUD strip.
+// 1.1 keeps an idle character under ~157px tall, a comfortable ~37px
+// short of the top HUD even at the closest range.
+constexpr double kCameraMaxZoom = 1.1;
 // Exponential lerp rate (per second) for both center and zoom - high
 // enough that the camera visibly keeps pace with a dash or a knockback,
 // low enough that it never reads as a hard cut.
