@@ -93,22 +93,24 @@ struct CommandParser {
         return required == pressed;
     }
 
-    static const std::unordered_map<std::string, std::vector<int>>& Motions() {
-        static const std::unordered_map<std::string, std::vector<int>> m = {
-            {"236", {2, 3, 6}},
-            {"214", {2, 1, 4}},
-            {"623", {6, 2, 3}},
-            {"236236", {2, 3, 6, 2, 3, 6}},
-        };
-        return m;
+    // inputCommand is a plain numpad-notation digit string (e.g. "236" for
+    // a quarter-circle-forward, "41236" for a half-circle-forward) - any
+    // sequence of '1'-'9' works, not just a fixed set of named motions, so
+    // the Character Editor's command builder can create new ones freely.
+    // Any non-digit characters (spaces, separators) are ignored, so a
+    // human-friendlier "2 3 6" typed in the editor parses the same way.
+    static std::vector<int> ParseDigits(const std::string& inputCommand) {
+        std::vector<int> digits;
+        for (char c : inputCommand) {
+            if (c >= '1' && c <= '9') digits.push_back(c - '0');
+        }
+        return digits;
     }
 
     static bool Matches(const InputBuffer& buffer, const std::string& inputCommand, const std::string& button, int window) {
         if (inputCommand.empty()) return false;
-        const auto& motions = Motions();
-        auto it = motions.find(inputCommand);
-        if (it == motions.end()) return false;
-        const auto& digits = it->second;
+        std::vector<int> digits = ParseDigits(inputCommand);
+        if (digits.empty()) return false;
         if (buffer.History.empty()) return false;
 
         int lastFrame = buffer.History.back().frame;

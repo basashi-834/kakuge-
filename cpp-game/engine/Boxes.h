@@ -5,6 +5,7 @@
 // 1:1 port of winforms-game/Character/Boxes.ps1.
 #pragma once
 #include <string>
+#include <vector>
 
 namespace kakuge {
 
@@ -31,21 +32,50 @@ struct RectBox {
     }
 };
 
-// Per-stance Hurtbox shapes (立ち/しゃがみ/ジャンプで形状変化). Y is measured
-// with 0 = ground, negative = up (matches the JSON hitbox offset convention).
-// Sized to match the renderer's ~140px-tall humanoid (platform/Draw.cpp's
-// kCharScale, tuned for the 384x224 pixel-art canvas) so hits visually
-// connect where they appear to.
-struct HurtboxSet {
-    RectBox Stand{0, -65.0, 59.8, 130.0};
-    RectBox Crouch{0, -40.3, 59.8, 80.6};
-    RectBox Air{0, -65.0, 59.8, 130.0};
+// One named hurtbox part (e.g. "head", "torso", "arm", "hand", "waist",
+// "leg", "foot") - a hit connects if it overlaps ANY part for the
+// defender's current stance, not just a single whole-body box. Name is
+// freeform (the Character Editor offers the seven above as presets but
+// doesn't require them) and purely cosmetic/organizational - hit
+// detection just unions every part's rect.
+struct HurtboxPart {
+    std::string Name = "body";
+    RectBox Box;
+};
 
-    RectBox ForStance(const std::string& stance, double originX, double originY) const {
-        const RectBox* src = &Stand;
-        if (stance == "crouch") src = &Crouch;
-        else if (stance == "air") src = &Air;
-        return RectBox(originX + src->CenterX, originY + src->CenterY, src->Width, src->Height);
+// Per-stance Hurtbox shapes (立ち/しゃがみ/ジャンプで形状変化), each a list of
+// named parts rather than one rectangle. Y is measured with 0 = ground,
+// negative = up (matches the JSON hitbox offset convention). Defaults
+// below are sized to match the renderer's ~140px-tall humanoid
+// (platform/Draw.cpp's kCharScale, tuned for the 384x224 pixel-art
+// canvas) so hits visually connect where they appear to - a single
+// "torso" part per stance, matching the whole-body box every character
+// shipped with before per-part editing existed.
+struct HurtboxSet {
+    std::vector<HurtboxPart> Stand{{"torso", RectBox{0, -65.0, 59.8, 130.0}}};
+    std::vector<HurtboxPart> Crouch{{"torso", RectBox{0, -40.3, 59.8, 80.6}}};
+    std::vector<HurtboxPart> Air{{"torso", RectBox{0, -65.0, 59.8, 130.0}}};
+
+    std::vector<HurtboxPart>& PartsForStance(const std::string& stance) {
+        if (stance == "crouch") return Crouch;
+        if (stance == "air") return Air;
+        return Stand;
+    }
+    const std::vector<HurtboxPart>& PartsForStance(const std::string& stance) const {
+        if (stance == "crouch") return Crouch;
+        if (stance == "air") return Air;
+        return Stand;
+    }
+
+    // World-space rects for every part in the defender's current stance -
+    // hit/pushbox-adjacent code checks a hit against all of these (see
+    // Fighter::HurtboxRects).
+    std::vector<RectBox> RectsForStance(const std::string& stance, double originX, double originY) const {
+        std::vector<RectBox> out;
+        for (const auto& part : PartsForStance(stance)) {
+            out.emplace_back(originX + part.Box.CenterX, originY + part.Box.CenterY, part.Box.Width, part.Box.Height);
+        }
+        return out;
     }
 };
 

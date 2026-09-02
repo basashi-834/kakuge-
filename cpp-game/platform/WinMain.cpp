@@ -100,6 +100,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
         case WM_DRAWITEM:
             if (g_App) g_App->OnDrawItem(reinterpret_cast<DRAWITEMSTRUCT*>(lParam));
             return TRUE;
+        case WM_CTLCOLOREDIT: {
+            // Recolors every Character Editor EDIT box to the same panel/
+            // ink palette the rest of the game uses (a flat white field
+            // with dark text), so it reads as part of the same design even
+            // though - unlike owner-drawn buttons/labels/combos - a plain
+            // EDIT control's live-typed text has to stay in the real
+            // system font (Win32 has no owner-draw hook for EDIT).
+            if (g_App && g_App->Current == Screen::Editor) {
+                static HBRUSH editBg = CreateSolidBrush(RGB(GetPalette().PanelBg.GetR(), GetPalette().PanelBg.GetG(), GetPalette().PanelBg.GetB()));
+                HDC hdc = reinterpret_cast<HDC>(wParam);
+                SetTextColor(hdc, RGB(GetPalette().Ink.GetR(), GetPalette().Ink.GetG(), GetPalette().Ink.GetB()));
+                SetBkColor(hdc, RGB(GetPalette().PanelBg.GetR(), GetPalette().PanelBg.GetG(), GetPalette().PanelBg.GetB()));
+                return reinterpret_cast<INT_PTR>(editBg);
+            }
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;

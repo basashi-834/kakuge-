@@ -114,20 +114,35 @@ public:
     RECT PreEditorWindowRect{};
     bool EditorSizeSaved = false;
 
-    // ---- Hitbox/hurtbox editor (see Editor.cpp / App::DrawEditorPreview) ----
-    // The move's own hitbox (first entry only - every shipped move has
-    // exactly one) and the character's per-stance hurtbox are both edited
-    // as an in-memory draft (numeric fields + drag-in-preview), written
-    // back to the real MoveData/CharacterStats only on SAVE MOVE/SAVE
-    // CHARACTER.
-    HWND EditHitX = nullptr, EditHitY = nullptr, EditHitW = nullptr, EditHitH = nullptr;
-    HitboxDef EditorHitboxDraft;
-    bool EditorHitboxHasBox = false;
+    // ---- Move: button binding, cancel window, special-move command builder ----
+    // ComboMoveButton is enabled (and meaningful) only for Normal-tagged
+    // moves - LP/MP/HP/LK/MK/HK direct binding. Specials/supers instead
+    // build an input command (digit sequence + button) below.
+    HWND ComboMoveButton = nullptr;
+    HWND EditCancelStart = nullptr, EditCancelEnd = nullptr;
+    HWND BtnDigit[9] = {}; // numpad-notation direction buttons, indices for digits 1-9 at BtnDigit[d-1]
+    HWND EditCommandPreview = nullptr, BtnCommandClear = nullptr, ComboSpecialButton = nullptr;
+    HWND ChkDynamicHitbox = nullptr;
+    std::string EditorCommandDigits; // e.g. "236", built up by clicking BtnDigit
 
-    HWND ComboHurtStance = nullptr;
+    // ---- Hitbox/hurtbox editor (see Editor.cpp / App::DrawEditorPreview) ----
+    // A move's hitboxes and a character's per-stance hurtbox parts are both
+    // edited as an in-memory draft (numeric fields + drag-in-preview),
+    // written back to the real MoveData/CharacterStats only on SAVE
+    // MOVE/SAVE CHARACTER. Multiple hitboxes/parts are supported - only the
+    // currently-selected one (EditorHitboxIndex / EditorHurtPartIndex) is
+    // shown in the X/Y/W/H fields and draggable in the preview, but every
+    // one is drawn as an outline so the whole set stays visible at once.
+    HWND ComboHitboxIndex = nullptr, BtnAddHitbox = nullptr, BtnRemoveHitbox = nullptr;
+    HWND EditHitX = nullptr, EditHitY = nullptr, EditHitW = nullptr, EditHitH = nullptr;
+    std::vector<HitboxDef> EditorHitboxDraftList;
+    int EditorHitboxIndex = 0;
+
+    HWND ComboHurtStance = nullptr, ComboHurtPart = nullptr, BtnAddPart = nullptr, BtnRemovePart = nullptr;
     HWND EditHurtX = nullptr, EditHurtY = nullptr, EditHurtW = nullptr, EditHurtH = nullptr;
     HurtboxSet EditorHurtboxDraft;
     int EditorHurtStance = 0; // 0=stand, 1=crouch, 2=air
+    int EditorHurtPartIndex = 0;
 
     // Which box the preview canvas' mouse drag currently controls.
     HWND BtnDragHitbox = nullptr, BtnDragHurtbox = nullptr;
@@ -144,10 +159,23 @@ public:
     // before, despite their world-unit values now being ~3.5x smaller.
     double EditorPreviewScale = 2.1231;
 
+    // ---- Language (JP/EN) ----
+    // 0 = English, 1 = Japanese. See Editor.cpp's EStr table - every
+    // label/button created through MakeLabel/MakeButton(EStr) registers
+    // itself so ApplyEditorLanguage() can retext them all in place without
+    // recreating any control.
+    int EditorLanguage = 0;
+    HWND BtnLanguage = nullptr;
+    void ApplyEditorLanguage();
+
     void SyncHitboxFieldsFromDraft();
     void ApplyHitboxFieldsToDraft();
     void SyncHurtboxFieldsFromDraft();
     void ApplyHurtboxFieldsToDraft();
+    void ClampBoxToPreview(double& cx, double& cy, double& w, double& h);
+    void RebuildHitboxCombo();
+    void RebuildHurtPartCombo();
+    void UpdateCommandPreview();
     void DrawEditorPreview(Gdiplus::Graphics& g);
     void OnMouseMove(int x, int y);
     void OnLButtonUp(int x, int y);

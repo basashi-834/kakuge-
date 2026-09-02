@@ -176,10 +176,8 @@ public:
             input.Buttons.Set(ConcreteButton(move.Button), true);
             return input;
         }
-        const auto& motions = CommandParser::Motions();
-        auto it = motions.find(move.InputCommand);
-        if (it == motions.end()) return RawInput{};
-        const auto& digits = it->second;
+        std::vector<int> digits = CommandParser::ParseDigits(move.InputCommand);
+        if (digits.empty()) return RawInput{};
         PendingSequence = std::queue<RawInput>();
         for (int d : digits) {
             RawInput raw = DigitToRaw(d, Self->Facing);

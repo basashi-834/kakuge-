@@ -65,6 +65,16 @@ public:
     ProjectileDef Projectile;
     double EffectiveRange = 0.0;
 
+    // Reserved (not yet wired to gameplay): a hitbox that moves under its
+    // own trajectory relative to the character during the move, rather
+    // than just riding along with the character's own position (which
+    // already happens automatically every frame - see Fighter::
+    // ApplyPhysics recomputing ActiveHitboxRects each tick). Flagged as a
+    // spec placeholder per the user's request - authoring a full per-frame
+    // hitbox keyframe timeline in the Character Editor is out of scope for
+    // now, but the data has a place to live once it's built.
+    bool HasDynamicHitbox = false;
+
     bool HasTag(const std::string& tag) const {
         return std::find(Tags.begin(), Tags.end(), tag) != Tags.end();
     }
@@ -146,6 +156,7 @@ public:
             m.Projectile.spawnOffsetY = p.value("spawnOffsetY", -40.0);
         }
 
+        m.HasDynamicHitbox = obj.value("hasDynamicHitbox", false);
         m.EffectiveRange = obj.value("effectiveRange", 0.0);
         if (m.EffectiveRange <= 0.0) {
             if (m.HasTag(Constants::TagProjectile)) m.EffectiveRange = 900.0;
@@ -184,6 +195,7 @@ public:
             j["projectile"] = nlohmann::json::object();
         }
         j["effectiveRange"] = EffectiveRange;
+        j["hasDynamicHitbox"] = HasDynamicHitbox;
         return j;
     }
 };

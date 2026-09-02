@@ -80,8 +80,11 @@ public:
     // kCharScale) so two fighters visually stop shoulder-to-shoulder instead
     // of overlapping/passing through each other.
     double PushboxHalfWidth = 36.4, PushboxHalfHeight = 71.5;
-    bool ActiveHitboxValid = false;
-    RectBox ActiveHitboxRect;
+    // Every entry is simultaneously live this frame (a move can carry more
+    // than one hitbox - e.g. separate hand/foot boxes on a multi-part
+    // attack); empty means no hitbox is active. See MoveExecutor::
+    // GetActiveHitboxRects.
+    std::vector<RectBox> ActiveHitboxRects;
     std::vector<Fighter*> AlreadyHit;
 
     std::vector<EffectEvent> PendingEffects;
@@ -118,7 +121,7 @@ public:
         Gauge.Value = 0.0;
         InputBuf.Clear();
         SM.ChangeState(CharState::Idle, "");
-        ActiveHitboxValid = false;
+        ActiveHitboxRects.clear();
         AlreadyHit.clear();
         PendingEffects.clear();
         PendingSounds.clear();
@@ -398,12 +401,12 @@ public:
         MovePhase phase = MoveExecutor::GetPhase(move, frame);
 
         if (phase == MovePhase::Active) {
-            if (!ActiveHitboxValid) {
-                ActiveHitboxValid = MoveExecutor::GetActiveHitboxRect(move, frame, Facing, PositionX, PositionY, ActiveHitboxRect);
+            if (ActiveHitboxRects.empty()) {
+                ActiveHitboxRects = MoveExecutor::GetActiveHitboxRects(move, frame, Facing, PositionX, PositionY);
                 AlreadyHit.clear();
             }
         } else {
-            ActiveHitboxValid = false;
+            ActiveHitboxRects.clear();
         }
 
         if (phase == MovePhase::Active && move.HasTag(Constants::TagProjectile) && !ProjectileSpawnedThisActivation) {
@@ -413,7 +416,7 @@ public:
         }
 
         if (phase == MovePhase::Done) {
-            ActiveHitboxValid = false;
+            ActiveHitboxRects.clear();
             FacingLocked = false;
             bool wasAir = PositionY < (GroundY - 1.0);
             CurrentMoveData = nullptr;
@@ -552,8 +555,8 @@ public:
         PositionX += VelocityX * dt;
         PositionY += VelocityY * dt;
         if (PositionY > GroundY) { PositionY = GroundY; VelocityY = 0.0; }
-        if (ActiveHitboxValid && CurrentMoveData != nullptr) {
-            ActiveHitboxValid = MoveExecutor::GetActiveHitboxRect(*CurrentMoveData, SM.CurrentFrame, Facing, PositionX, PositionY, ActiveHitboxRect);
+        if (!ActiveHitboxRects.empty() && CurrentMoveData != nullptr) {
+            ActiveHitboxRects = MoveExecutor::GetActiveHitboxRects(*CurrentMoveData, SM.CurrentFrame, Facing, PositionX, PositionY);
         }
     }
 
@@ -575,7 +578,7 @@ public:
         return "stand";
     }
 
-    RectBox HurtboxRect() const { return Hurtboxes.ForStance(Stance(), PositionX, PositionY); }
+    std::vector<RectBox> HurtboxRects() const { return Hurtboxes.RectsForStance(Stance(), PositionX, PositionY); }
     RectBox PushboxRect() const {
         return RectBox(PositionX, PositionY - PushboxHalfHeight, PushboxHalfWidth * 2.0, PushboxHalfHeight * 2.0);
     }

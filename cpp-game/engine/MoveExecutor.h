@@ -38,17 +38,21 @@ struct MoveExecutor {
         return move.IsCancelWindowOpen(frame);
     }
 
-    // Returns the currently active hitbox as a RectBox (world-space, already
-    // facing-flipped), or nullptr (via 'has') if no hitbox should be live.
-    static bool GetActiveHitboxRect(const MoveData& move, int frame, int facing,
-                                     double originX, double originY, RectBox& out) {
-        if (GetPhase(move, frame) != MovePhase::Active) return false;
-        if (move.Hitboxes.empty()) return false;
-        const auto& box = move.Hitboxes[0];
-        double offsetX = box.offsetX * facing;
-        double offsetY = box.offsetY;
-        out = RectBox(originX + offsetX, originY + offsetY, box.width, box.height);
-        return true;
+    // Every hitbox in move.Hitboxes is simultaneously active during the
+    // move's Active window (they all share the move's single startup/
+    // active/recovery timing - per-hitbox timing isn't modeled). Returns
+    // world-space, facing-flipped rects; empty when no hitbox should be
+    // live this frame.
+    static std::vector<RectBox> GetActiveHitboxRects(const MoveData& move, int frame, int facing,
+                                                       double originX, double originY) {
+        std::vector<RectBox> out;
+        if (GetPhase(move, frame) != MovePhase::Active) return out;
+        for (const auto& box : move.Hitboxes) {
+            double offsetX = box.offsetX * facing;
+            double offsetY = box.offsetY;
+            out.emplace_back(originX + offsetX, originY + offsetY, box.width, box.height);
+        }
+        return out;
     }
 };
 

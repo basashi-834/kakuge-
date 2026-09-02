@@ -90,7 +90,7 @@ int main() {
     int maxFrames = 12000, frame = 0;
     while (bs.MatchActive && frame < maxFrames) {
         bs.Update(dt, neutral);
-        if (bs.Player2.ActiveHitboxValid) sawHitboxActive = true;
+        if (!bs.Player2.ActiveHitboxRects.empty()) sawHitboxActive = true;
         if (bs.Player1.CurrentHP < bs.Player1.Stats.MaxHP) sawHpDrop = true;
         frame++;
     }

@@ -183,11 +183,18 @@ public:
     }
 
     void ResolveCombat(Fighter& attacker, Fighter& defender) {
-        if (!attacker.ActiveHitboxValid || attacker.CurrentMoveData == nullptr) return;
+        if (attacker.ActiveHitboxRects.empty() || attacker.CurrentMoveData == nullptr) return;
         if (defender.IsDead) return;
         if (std::find(attacker.AlreadyHit.begin(), attacker.AlreadyHit.end(), &defender) != attacker.AlreadyHit.end()) return;
-        RectBox hurtRect = defender.HurtboxRect();
-        if (!attacker.ActiveHitboxRect.Intersects(hurtRect)) return;
+        std::vector<RectBox> hurtRects = defender.HurtboxRects();
+        bool anyOverlap = false;
+        for (const auto& hb : attacker.ActiveHitboxRects) {
+            for (const auto& hr : hurtRects) {
+                if (hb.Intersects(hr)) { anyOverlap = true; break; }
+            }
+            if (anyOverlap) break;
+        }
+        if (!anyOverlap) return;
 
         attacker.AlreadyHit.push_back(&defender);
         const MoveData& move = *attacker.CurrentMoveData;
@@ -224,10 +231,14 @@ public:
             if (alive) {
                 Fighter* target = (proj.Owner == &Player1) ? &Player2 : &Player1;
                 if (!proj.HasHit && !target->IsDead) {
-                    if (proj.HitboxRect().Intersects(target->HurtboxRect())) {
-                        proj.HasHit = true;
-                        target->ReceiveHit(*proj.Move, *proj.Owner);
-                        alive = false;
+                    RectBox projRect = proj.HitboxRect();
+                    for (const auto& hr : target->HurtboxRects()) {
+                        if (projRect.Intersects(hr)) {
+                            proj.HasHit = true;
+                            target->ReceiveHit(*proj.Move, *proj.Owner);
+                            alive = false;
+                            break;
+                        }
                     }
                 }
             }

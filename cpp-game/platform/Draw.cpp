@@ -603,10 +603,10 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
         RectBox push = f->PushboxRect();
         g.DrawRectangle(&pushPen, static_cast<REAL>(ToScreenX(push.Left())), static_cast<REAL>(ToScreenY(push.Top())), static_cast<REAL>(push.Width), static_cast<REAL>(push.Height));
-        RectBox hurt = f->HurtboxRect();
-        g.DrawRectangle(&hurtPen, static_cast<REAL>(ToScreenX(hurt.Left())), static_cast<REAL>(ToScreenY(hurt.Top())), static_cast<REAL>(hurt.Width), static_cast<REAL>(hurt.Height));
-        if (f->ActiveHitboxValid) {
-            const RectBox& hb = f->ActiveHitboxRect;
+        for (const RectBox& hurt : f->HurtboxRects()) {
+            g.DrawRectangle(&hurtPen, static_cast<REAL>(ToScreenX(hurt.Left())), static_cast<REAL>(ToScreenY(hurt.Top())), static_cast<REAL>(hurt.Width), static_cast<REAL>(hurt.Height));
+        }
+        for (const RectBox& hb : f->ActiveHitboxRects) {
             g.DrawRectangle(&hitPen, static_cast<REAL>(ToScreenX(hb.Left())), static_cast<REAL>(ToScreenY(hb.Top())), static_cast<REAL>(hb.Width), static_cast<REAL>(hb.Height));
         }
         // Fixed HUD position (top corner, below the HP bar/name) rather

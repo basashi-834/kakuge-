@@ -143,24 +143,37 @@ void App::OnResize(int, int) {
     if (Current != Screen::Editor) InvalidateRect(Hwnd, nullptr, FALSE);
 }
 
+namespace {
+// The currently-selected hurtbox part (for the active stance) or hitbox
+// (by EditorHitboxIndex), whichever EditorDragTargetIsHurtbox names -
+// shared by OnLButtonDown/OnMouseMove below. Returns nullptr pairs if
+// there's nothing selected (e.g. a move with zero hitboxes).
+void EditorSelectedBox(App& app, double** cx, double** cy, double** bw, double** bh) {
+    *cx = *cy = *bw = *bh = nullptr;
+    if (app.EditorDragTargetIsHurtbox) {
+        const char* stance = app.EditorHurtStance == 1 ? "crouch" : app.EditorHurtStance == 2 ? "air" : "stand";
+        auto& parts = app.EditorHurtboxDraft.PartsForStance(stance);
+        if (app.EditorHurtPartIndex < 0 || app.EditorHurtPartIndex >= static_cast<int>(parts.size())) return;
+        RectBox& box = parts[app.EditorHurtPartIndex].Box;
+        *cx = &box.CenterX; *cy = &box.CenterY; *bw = &box.Width; *bh = &box.Height;
+    } else {
+        if (app.EditorHitboxIndex < 0 || app.EditorHitboxIndex >= static_cast<int>(app.EditorHitboxDraftList.size())) return;
+        HitboxDef& box = app.EditorHitboxDraftList[app.EditorHitboxIndex];
+        *cx = &box.offsetX; *cy = &box.offsetY; *bw = &box.width; *bh = &box.height;
+    }
+}
+} // namespace
+
 void App::OnLButtonDown(int x, int y) {
     if (Current == Screen::Editor) {
         // Native controls handle their own clicks; the only thing this
         // window proc needs to do is start a drag if the click landed
         // inside the hitbox/hurtbox preview canvas (drawn directly in real
         // window pixels by DrawEditorPreview, not a child control).
-        double& cx = EditorDragTargetIsHurtbox
-            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.CenterX : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.CenterX : EditorHurtboxDraft.Air.CenterX)
-            : EditorHitboxDraft.offsetX;
-        double& cy = EditorDragTargetIsHurtbox
-            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.CenterY : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.CenterY : EditorHurtboxDraft.Air.CenterY)
-            : EditorHitboxDraft.offsetY;
-        double& bw = EditorDragTargetIsHurtbox
-            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.Width : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.Width : EditorHurtboxDraft.Air.Width)
-            : EditorHitboxDraft.width;
-        double& bh = EditorDragTargetIsHurtbox
-            ? (EditorHurtStance == 0 ? EditorHurtboxDraft.Stand.Height : EditorHurtStance == 1 ? EditorHurtboxDraft.Crouch.Height : EditorHurtboxDraft.Air.Height)
-            : EditorHitboxDraft.height;
+        double *cxp, *cyp, *bwp, *bhp;
+        EditorSelectedBox(*this, &cxp, &cyp, &bwp, &bhp);
+        if (!cxp) return; // nothing selected to drag (e.g. move has no hitboxes)
+        double& cx = *cxp; double& cy = *cyp; double& bw = *bwp; double& bh = *bhp;
 
         float groundX = EditorPreviewRect.X + EditorPreviewRect.Width / 2.0f;
         float groundY = EditorPreviewRect.Y + EditorPreviewRect.Height - 20.0f;
@@ -206,12 +219,9 @@ void App::OnMouseMove(int x, int y) {
     double dxWorld = (x - EditorDragStartMouseX) / EditorPreviewScale;
     double dyWorld = (y - EditorDragStartMouseY) / EditorPreviewScale;
 
-    double* cx; double* cy; double* bw; double* bh;
-    RectBox* hb = EditorDragTargetIsHurtbox
-        ? (EditorHurtStance == 0 ? &EditorHurtboxDraft.Stand : EditorHurtStance == 1 ? &EditorHurtboxDraft.Crouch : &EditorHurtboxDraft.Air)
-        : nullptr;
-    if (hb) { cx = &hb->CenterX; cy = &hb->CenterY; bw = &hb->Width; bh = &hb->Height; }
-    else { cx = &EditorHitboxDraft.offsetX; cy = &EditorHitboxDraft.offsetY; bw = &EditorHitboxDraft.width; bh = &EditorHitboxDraft.height; }
+    double *cx, *cy, *bw, *bh;
+    EditorSelectedBox(*this, &cx, &cy, &bw, &bh);
+    if (!cx) return;
 
     if (EditorDragging) {
         *cx = EditorDragStartCenterX + dxWorld;
@@ -220,6 +230,7 @@ void App::OnMouseMove(int x, int y) {
         *bw = std::max(8.0, EditorDragStartW + dxWorld * 2.0);
         *bh = std::max(8.0, EditorDragStartH + dyWorld * 2.0);
     }
+    ClampBoxToPreview(*cx, *cy, *bw, *bh);
     if (EditorDragTargetIsHurtbox) SyncHurtboxFieldsFromDraft(); else SyncHitboxFieldsFromDraft();
     InvalidateRect(Hwnd, nullptr, FALSE);
 }
@@ -334,7 +345,10 @@ void App::OnCommand(int controlId, int notifyCode, HWND ctrl) {
 }
 
 void App::OnDrawItem(DRAWITEMSTRUCT* dis) {
-    if (Current == Screen::Editor && dis->CtlType == ODT_BUTTON) {
+    // ODT_BUTTON (owner-draw buttons), ODT_STATIC (pixel-font labels) and
+    // ODT_COMBOBOX (palette-styled dropdowns) all route to the same
+    // handler - see Editor_OnDrawItem's dispatch on dis->CtlType.
+    if (Current == Screen::Editor) {
         extern void Editor_OnDrawItem(DRAWITEMSTRUCT*);
         Editor_OnDrawItem(dis);
     }

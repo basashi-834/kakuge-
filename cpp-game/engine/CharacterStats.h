@@ -47,15 +47,36 @@ public:
         }
         if (obj.contains("hurtboxes") && obj["hurtboxes"].is_object()) {
             const auto& hb = obj["hurtboxes"];
-            auto loadBox = [](const nlohmann::json& j, RectBox& box) {
-                box.CenterX = j.value("offsetX", box.CenterX);
-                box.CenterY = j.value("offsetY", box.CenterY);
-                box.Width = j.value("width", box.Width);
-                box.Height = j.value("height", box.Height);
+            // A stance value is either the OLD schema - a single object
+            // {offsetX,offsetY,width,height} - or the new one, an array of
+            // named parts [{part,offsetX,offsetY,width,height}, ...]. Old
+            // files load as one part named "body" so nothing on disk needs
+            // migrating by hand.
+            auto loadStance = [](const nlohmann::json& j, std::vector<HurtboxPart>& parts) {
+                if (j.is_array()) {
+                    parts.clear();
+                    for (const auto& pj : j) {
+                        HurtboxPart part;
+                        part.Name = pj.value("part", std::string("body"));
+                        part.Box.CenterX = pj.value("offsetX", 0.0);
+                        part.Box.CenterY = pj.value("offsetY", 0.0);
+                        part.Box.Width = pj.value("width", 40.0);
+                        part.Box.Height = pj.value("height", 40.0);
+                        parts.push_back(part);
+                    }
+                } else if (j.is_object()) {
+                    HurtboxPart part;
+                    part.Name = "body";
+                    part.Box.CenterX = j.value("offsetX", 0.0);
+                    part.Box.CenterY = j.value("offsetY", 0.0);
+                    part.Box.Width = j.value("width", 40.0);
+                    part.Box.Height = j.value("height", 40.0);
+                    parts = {part};
+                }
             };
-            if (hb.contains("stand")) loadBox(hb["stand"], s.Hurtboxes.Stand);
-            if (hb.contains("crouch")) loadBox(hb["crouch"], s.Hurtboxes.Crouch);
-            if (hb.contains("air")) loadBox(hb["air"], s.Hurtboxes.Air);
+            if (hb.contains("stand")) loadStance(hb["stand"], s.Hurtboxes.Stand);
+            if (hb.contains("crouch")) loadStance(hb["crouch"], s.Hurtboxes.Crouch);
+            if (hb.contains("air")) loadStance(hb["air"], s.Hurtboxes.Air);
         }
         return s;
     }
@@ -66,10 +87,15 @@ public:
         j["walkForwardSpeed"] = WalkForwardSpeed; j["walkBackwardSpeed"] = WalkBackwardSpeed;
         j["dashSpeed"] = DashSpeed; j["jumpVelocity"] = JumpVelocity; j["gravity"] = Gravity;
         j["color"] = {ColorR / 255.0, ColorG / 255.0, ColorB / 255.0};
-        auto saveBox = [](const RectBox& box) {
-            return nlohmann::json{{"offsetX", box.CenterX}, {"offsetY", box.CenterY}, {"width", box.Width}, {"height", box.Height}};
+        auto saveStance = [](const std::vector<HurtboxPart>& parts) {
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& part : parts) {
+                arr.push_back({{"part", part.Name}, {"offsetX", part.Box.CenterX}, {"offsetY", part.Box.CenterY},
+                                {"width", part.Box.Width}, {"height", part.Box.Height}});
+            }
+            return arr;
         };
-        j["hurtboxes"] = {{"stand", saveBox(Hurtboxes.Stand)}, {"crouch", saveBox(Hurtboxes.Crouch)}, {"air", saveBox(Hurtboxes.Air)}};
+        j["hurtboxes"] = {{"stand", saveStance(Hurtboxes.Stand)}, {"crouch", saveStance(Hurtboxes.Crouch)}, {"air", saveStance(Hurtboxes.Air)}};
         j["moves"] = MoveIds;
         return j;
     }
