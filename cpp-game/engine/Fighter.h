@@ -205,9 +205,32 @@ public:
                 break;
             }
             case CharState::Block: {
-                BlockstunTimer -= 1;
-                VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
-                if (BlockstunTimer <= 0) SM.ChangeState(CharState::Idle, "");
+                // Block is entered two different ways: (1) actually getting
+                // hit while guarding (BattleSystem sets a real BlockstunTimer
+                // > 0 on that hit), or (2) just holding crouch+back with
+                // nothing incoming (HandleGroundMovement below enters Block
+                // as the "ready to guard" stance, with BlockstunTimer left
+                // at whatever it last was - typically 0). Both used to run
+                // through the same "count BlockstunTimer down, drop to Idle
+                // once it hits 0" logic - fine for (1), but for (2) it meant
+                // BlockstunTimer was already <=0 on entry, so the very next
+                // tick dropped straight back to Idle, which (still holding
+                // guard) immediately re-entered Block via HandleGroundMovement,
+                // which dropped to Idle again next tick, forever - the
+                // "state flips like crazy while holding crouch-guard" bug.
+                // Fix: only actually count down real blockstun; with none
+                // active, stay parked in Block for as long as guard is held
+                // and only leave when the player actually releases it.
+                bool stillGuarding = raw.Down && IsHoldingBack(raw);
+                if (BlockstunTimer > 0) {
+                    BlockstunTimer -= 1;
+                    VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
+                    if (BlockstunTimer <= 0 && !stillGuarding) SM.ChangeState(CharState::Idle, "");
+                } else if (!stillGuarding) {
+                    SM.ChangeState(CharState::Idle, "");
+                } else {
+                    VelocityX = 0.0;
+                }
                 break;
             }
             case CharState::Throw: {
