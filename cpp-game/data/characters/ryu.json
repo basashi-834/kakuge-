@@ -5,7 +5,7 @@
  "walkForwardSpeed": 62.17,
  "walkBackwardSpeed": 48.04,
  "dashSpeed": 121.52,
- "jumpVelocity": -254.35,
+ "jumpVelocity": -210.0,
  "gravity": 678.26,
  "color": [
   0.75,

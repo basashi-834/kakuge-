@@ -74,11 +74,11 @@ public:
         }
     }
 
-    // Tightened from the old +-560 now that characters are visually much
-    // wider (~190px, see engine/Boxes.h) - keeps them from clipping off
-    // the edge of the 1280px-wide canvas even at the stage boundary.
-    static constexpr double StageMinX = -130.0;
-    static constexpr double StageMaxX = 130.0;
+    // See StageConstants in engine/Constants.h for how these (and the
+    // starting positions below) were derived from the user's 1920x1080-
+    // proportioned stage/character spec.
+    static constexpr double StageMinX = StageConstants::StageMinX;
+    static constexpr double StageMaxX = StageConstants::StageMaxX;
 
     void StartMatch(const CharacterStats& p1Stats, const std::unordered_map<std::string, MoveData>* p1Moves,
                      const CharacterStats& p2Stats, const std::unordered_map<std::string, MoveData>* p2Moves,
@@ -93,8 +93,8 @@ public:
             p->StageMinX = StageMinX;
             p->StageMaxX = StageMaxX;
         }
-        Player1.PositionX = -62.17; Player1.PositionY = 0.0;
-        Player2.PositionX = 62.17; Player2.PositionY = 0.0;
+        Player1.PositionX = StageConstants::Player1StartX; Player1.PositionY = 0.0;
+        Player2.PositionX = StageConstants::Player2StartX; Player2.PositionY = 0.0;
         Player1.Facing = Constants::FacingRight;
         Player2.Facing = Constants::FacingLeft;
 

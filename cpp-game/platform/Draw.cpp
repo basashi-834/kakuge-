@@ -7,41 +7,53 @@ using namespace Gdiplus;
 
 namespace kakuge {
 
-// Sized so an idle character stands ~140px tall in the 384x224 virtual
-// canvas (see OriginY in Draw.h for the other half of that math, and
-// engine/Boxes.h's HurtboxSet comment for the matching hurtbox geometry).
-// Shared by DrawHumanoid and the lying-down Knockdown/Dead poses in
-// DrawFighter so both scale together. Every character is drawn with this
-// same vector line-art path now - the earlier round's photo-sprite renders
-// (data/images/fighter_*.png) were removed per the user's explicit request
-// to express everything as pixel art, and the low-res-buffer +
-// nearest-neighbor pipeline (see App::OnPaint) is what turns this line art
-// into genuine chunky pixels rather than smooth vector strokes.
-constexpr double kCharScale = 1.3;
+// Sized so an idle character stands ~156px tall (70% of the 224px virtual
+// canvas height, see OriginY in Draw.h for the other half of that math) -
+// matches the user's 1920x1080-proportioned spec (PLAYER_HEIGHT=760 of a
+// 1080-tall screen, see StageConstants::PlayerHeightRatio in engine/
+// Constants.h). Shared by DrawHumanoid and the lying-down Knockdown/Dead
+// poses in DrawFighter so both scale together. Every character is drawn
+// with this same vector line-art path - the earlier round's photo-sprite
+// renders (data/images/fighter_*.png) were removed per the user's
+// explicit request to express everything as pixel art, and the low-res-
+// buffer + nearest-neighbor pipeline (see App::OnPaint) is what turns
+// this line art into genuine chunky pixels rather than smooth vector
+// strokes.
+constexpr double kCharScale = 1.43;
 
 // ---- Dynamic camera (auto-zoom) ----
 // Extra world-space width kept visible around the two fighters (beyond
-// their raw separation) so they're never crammed edge-to-edge even at
-// minimum distance - roughly two pushbox-widths of breathing room.
-constexpr double kCameraPaddingWorld = 150.0;
-// At StageMaxX-StageMinX separation (260 units, both fighters pinned to
-// opposite walls) the natural zoom-to-fit is 384/(260+150) ~= 0.937 - the
-// floor sits just under that so the widest shot still shows a hair of
-// margin past both fighters rather than cropping right to them.
-constexpr double kCameraMinZoom = 0.85;
-// At minimum meaningful distance (pushbox contact, ~73 units) the natural
-// horizontal zoom-to-fit is 384/(73+150) ~= 1.72, but the real ceiling is
-// vertical, not horizontal: an idle character is ~108*kCharScale+2 px tall
-// at zoom 1 (~142px, see kCharScale's comment) and scales linearly with
-// zoom, while the canvas is only 224px tall with the HUD's HP bar/name
-// tag occupying its own ~20px at the top - a zoom past ~1.15 pushes the
-// character's head into (and past 1.2, clean through) that HUD strip.
-// 1.1 keeps an idle character under ~157px tall, a comfortable ~37px
-// short of the top HUD even at the closest range.
-constexpr double kCameraMaxZoom = 1.1;
+// their raw separation) so they're never crammed edge-to-edge - chosen so
+// the fighters' StageConstants::PlayerStartDistance (120, matching the
+// user's spec's ~600px starting range at 1920x1080) reads as almost
+// exactly baseline zoom (384/(120+264) = 1.008): the round's opening
+// neutral position is the natural "standard magnification" reference
+// point the user's spec describes, not an already-zoomed-in one.
+constexpr double kCameraPaddingWorld = 264.0;
+// At StageMaxX-StageMinX separation (640 units, both fighters pinned to
+// opposite walls - StageConstants::StageWidth) the natural zoom-to-fit
+// would be 384/(640+264) ~= 0.42, but the floor is set higher, at the
+// zoom where 384/zoom still covers that full 640 (plus a pushbox-width-ish
+// margin on each side): 384/0.49 ~= 784, comfortably >= 640 - so a
+// worst-case corner-to-corner separation still keeps both fighters (and
+// the stage edges) fully on screen, per the "両キャラクターをできるだけ常に
+// 画面内に表示する" / "ステージ外を映さない" requirements, without
+// zooming out further than that floor needs.
+constexpr double kCameraMinZoom = 0.49;
+// At minimum meaningful distance (pushbox contact) the natural horizontal
+// zoom-to-fit would run well past 1.4, but the real ceiling is vertical,
+// not horizontal: an idle character is ~108*kCharScale+2 px tall at zoom
+// 1 (~156px - 70% of the canvas, see kCharScale's comment) and scales
+// linearly with zoom, while the canvas is only 224px tall with the HUD's
+// HP bar/name tag occupying its own ~20px at the top. 1.05 keeps an idle
+// character under ~165px tall (still ~27px short of the top HUD even at
+// the closest range) while still giving the "distance is close -> zoom in
+// a little" effect the spec asks for something real to show.
+constexpr double kCameraMaxZoom = 1.05;
 // Exponential lerp rate (per second) for both center and zoom - high
 // enough that the camera visibly keeps pace with a dash or a knockback,
-// low enough that it never reads as a hard cut.
+// low enough that it never reads as a hard cut (the user's "急激に倍率を
+// 変更せず" / "カメラが急に動かない" requirements).
 constexpr double kCameraLerpSpeed = 6.0;
 
 namespace {

@@ -62,8 +62,8 @@ public:
     bool IsDead = false;
     Fighter* Opponent = nullptr;
 
-    double StageMinX = -130.0;
-    double StageMaxX = 130.0;
+    double StageMinX = StageConstants::StageMinX;
+    double StageMaxX = StageConstants::StageMaxX;
 
     double PositionX = 0.0, PositionY = 0.0;
     double VelocityX = 0.0, VelocityY = 0.0;
@@ -76,10 +76,14 @@ public:
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;
 
-    // Scaled to match the renderer's ~440px-tall humanoid (platform/Draw.cpp's
-    // kCharScale) so two fighters visually stop shoulder-to-shoulder instead
-    // of overlapping/passing through each other.
-    double PushboxHalfWidth = 36.4, PushboxHalfHeight = 71.5;
+    // Sized independently from the renderer's humanoid image size (see
+    // platform/Draw.cpp's kCharScale) so two fighters visually stop
+    // shoulder-to-shoulder instead of overlapping/passing through each
+    // other - scaled up ~10% from the previous 36.4/71.5 alongside the
+    // ~10% character-size increase (kCharScale 1.3 -> 1.43) that came with
+    // rescaling the game to the user's 1920x1080-proportioned stage/
+    // character spec (see StageConstants in engine/Constants.h).
+    double PushboxHalfWidth = 40.0, PushboxHalfHeight = 78.5;
     // Every entry is simultaneously live this frame (a move can carry more
     // than one hitbox - e.g. separate hand/foot boxes on a multi-part
     // attack); empty means no hitbox is active. See MoveExecutor::

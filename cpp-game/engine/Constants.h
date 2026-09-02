@@ -77,4 +77,62 @@ struct Constants {
     static constexpr int CommandWindow = 16;
 };
 
+// ---------------------------------------------------------------------
+// Stage / start-position tuning constants (user-specified proportions).
+// ---------------------------------------------------------------------
+// World units here are the same unit the whole engine/renderer already
+// used before this: "canvas pixels at camera zoom 1.0" (see platform/
+// Draw.h's ToScreenX/ToScreenY) - not literal screen pixels, since the
+// game always renders through a fixed 384x224 low-res pixel-art canvas
+// (platform/Layout.h's VirtualW/VirtualH) that then gets nearest-neighbor
+// upscaled to the real window, whatever the window's actual resolution.
+//
+// The values below reproduce - as ratios against that 384-wide canvas,
+// which plays the role of "camera view width" at zoom 1.0 - the exact
+// proportions of a user-specified 1920x1080 reference layout (stage
+// 3200px wide, ground at y=920, player height 760px/70% of screen,
+// start positions x=1250/x=1850 i.e. 600px apart), rather than that
+// layout's literal pixel values, so the game keeps its pixel-art look
+// (see kCharScale/OriginY in platform/Draw.h/.cpp for the matching
+// on-screen size/ground-line constants - character height and ground
+// position are rendering concerns, not gameplay ones, so they live
+// there instead of here; PlayerHeightRatio below is recorded purely as
+// the source ratio those were derived from).
+//
+// Scale factor used throughout: 384 / 1920 = 0.2 (canvas width relative
+// to the reference layout's camera view width).
+struct StageConstants {
+    // Reference layout this was derived from (1920x1080, informational -
+    // not read by any code, kept so the ratios above stay traceable to
+    // their source spec without re-deriving them by hand).
+    static constexpr double RefCameraViewWidth = 1920.0;
+    static constexpr double RefStageWidth = 3200.0;
+    static constexpr double RefGroundY = 920.0;
+    static constexpr double RefScreenHeight = 1080.0;
+    static constexpr double RefPlayerHeight = 760.0;
+    static constexpr double RefPlayer1StartX = 1250.0;
+    static constexpr double RefPlayer2StartX = 1850.0;
+
+    // STAGE_WIDTH: 3200 * 0.2 = 640, centered on world X=0 (StageMinX/
+    // StageMaxX), same convention Fighter/BattleSystem already used.
+    static constexpr double StageWidth = 640.0;
+    static constexpr double StageMinX = -StageWidth / 2.0;
+    static constexpr double StageMaxX = StageWidth / 2.0;
+
+    // PLAYER1_START_X / PLAYER2_START_X: the reference spec's 1250/1850
+    // (out of a 0-3200 stage, center 1600) re-centered on 0 and scaled by
+    // 0.2 - reproduces both the 600-unit start distance (*0.2 = 120) and
+    // the (slightly asymmetric, as given) margins to each stage edge.
+    static constexpr double Player1StartX = -70.0;
+    static constexpr double Player2StartX = 50.0;
+    static constexpr double PlayerStartDistance = Player2StartX - Player1StartX; // 120
+
+    // PLAYER_HEIGHT ratio (760/1080 = 0.704 of screen height) - the actual
+    // pixel constant derived from it (kCharScale) lives in platform/
+    // Draw.cpp since character draw size is a rendering concern; recorded
+    // here too so the ratio itself isn't duplicated-and-drifts if either
+    // side gets retuned later.
+    static constexpr double PlayerHeightRatio = RefPlayerHeight / RefScreenHeight;
+};
+
 } // namespace kakuge
