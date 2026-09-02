@@ -891,6 +891,19 @@ void Editor_OnDrawItem(DRAWITEMSTRUCT* dis) {
     const auto& pal = GetPalette();
     Gdiplus::Graphics g(dis->hDC);
     g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    // rcItem gives each item's rectangle in the shared DC's own coordinate
+    // space, not a per-item DC reset to (0,0). For a standalone button/
+    // static control that DC's origin already coincides with rcItem's
+    // top-left, so drawing at a local (0,0) rect happened to look right -
+    // but a combobox's dropdown list shares ONE DC across every visible
+    // row, and each row's rcItem.top is its real offset within it (row 3
+    // at itemHeight*3, not 0). Without this translate, every row painted
+    // at local (0,0) and the open dropdown showed all rows' text stacked
+    // on top of each other at the very top of the list instead of one row
+    // per line - translating first makes every (0,0)-based rect below
+    // land at the item's actual position regardless of which owner-draw
+    // type it is.
+    g.TranslateTransform(static_cast<Gdiplus::REAL>(dis->rcItem.left), static_cast<Gdiplus::REAL>(dis->rcItem.top));
 
     if (dis->CtlType == ODT_STATIC) {
         Gdiplus::RectF rect(0.0f, 0.0f, static_cast<Gdiplus::REAL>(dis->rcItem.right - dis->rcItem.left),
