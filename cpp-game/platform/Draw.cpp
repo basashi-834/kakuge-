@@ -638,7 +638,7 @@ void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Colo
     ratio = std::max(0.0, std::min(1.0, ratio));
     RectF rect(x, y, w, h);
     GraphicsPath path;
-    AddRoundedRect(path, rect, 0.0f); // hard-edged bar, no rounding, no glow (spec)
+    AddRoundedRect(path, rect, 0.0f); // hard-edged bar, no rounding
 
     SolidBrush bg(emptyColor);
     g.FillPath(&bg, &path);
@@ -655,8 +655,18 @@ void DrawBar(Graphics& g, float x, float y, float w, float h, double ratio, Colo
         g.SetClip(&oldClip, CombineModeReplace);
     }
 
-    Pen pen(borderColor, 2.0f);
-    g.DrawPath(&pen, &path);
+    // Glossy top sheen + a beveled two-tone frame (dark outer/light inner
+    // hairline) instead of a single flat border - per the user's classic-
+    // Capcom-HUD reference screenshots, whose bars read as a metallic
+    // beveled casing rather than a flat outline.
+    DrawGlossCap(g, rect);
+    Pen outerPen(borderColor, 2.0f);
+    g.DrawPath(&outerPen, &path);
+    RectF innerRect(x + 1.5f, y + 1.5f, w - 3.0f, h - 3.0f);
+    if (innerRect.Width > 0 && innerRect.Height > 0) {
+        Pen innerPen(Color(90, 255, 255, 255), 1.0f);
+        g.DrawRectangle(&innerPen, innerRect);
+    }
 }
 
 void DrawHPBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror, Color borderColor) {
@@ -667,6 +677,44 @@ void DrawHPBar(Graphics& g, float x, float y, float w, float h, double ratio, bo
 void DrawGaugeBar(Graphics& g, float x, float y, float w, float h, double ratio, bool mirror, Color borderColor) {
     const auto& pal = GetPalette();
     DrawBar(g, x, y, w, h, ratio, pal.Gauge, pal.GaugeEmpty, mirror, borderColor);
+}
+
+// Placeholder portrait bust drawn in the HP bar's outer corner, matching
+// the reference screenshots' portrait-then-bar layout. This project has no
+// image-generation tool and no per-character portrait art exists, so this
+// is a generic procedural mark (silhouette head + headband + shoulders in
+// the character's accent color) rather than a likeness - it fills the
+// reference layout's slot without claiming to be real art. If per-character
+// portrait PNGs are ever added (e.g. `sprites/<charId>/portrait.png`,
+// following Sprites.h's existing load/cache pattern), swap this for a
+// `g.DrawImage` call keyed off the fighter's character id.
+static void DrawPortraitBust(Graphics& g, float x, float y, float size, Color accent, Color borderColor) {
+    RectF box(x, y, size, size);
+    GraphicsPath boxPath;
+    AddRoundedRect(boxPath, box, 0.0f);
+    SolidBrush boxBg(Color(255, 34, 32, 40));
+    g.FillPath(&boxBg, &boxPath);
+
+    Region oldClip;
+    g.GetClip(&oldClip);
+    Region boxClip(&boxPath);
+    g.SetClip(&boxClip, CombineModeReplace);
+
+    float headR = size * 0.24f;
+    float cx = x + size / 2.0f;
+    float headY = y + size * 0.16f;
+    SolidBrush skin(Color(255, 222, 170, 130));
+    g.FillEllipse(&skin, cx - headR, headY, headR * 2.0f, headR * 2.0f);
+    SolidBrush band(accent);
+    g.FillRectangle(&band, RectF(cx - headR, headY + headR * 0.35f, headR * 2.0f, headR * 0.5f));
+
+    SolidBrush shoulderBrush(Color(255, 60, 62, 74));
+    g.FillEllipse(&shoulderBrush, cx - size * 0.44f, y + size * 0.62f, size * 0.88f, size * 0.6f);
+
+    g.SetClip(&oldClip, CombineModeReplace);
+
+    Pen border(borderColor, 1.5f);
+    g.DrawPath(&border, &boxPath);
 }
 
 // Player name, drawn as a tiny caption directly under their HP bar - the
@@ -687,10 +735,20 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     // flush against the top, and a bolder bar than this project's
     // previous flat/thin default.
     float barY = 9.0f, barH = 10.0f;
-    float p1BarX = 3.0f, barW = 140.0f;
-    float p2BarX = VirtualW - 3.0f - barW;
+    // Portrait bust sits in the outer corner (screen edge side), with the
+    // HP bar starting just inside it and running toward center - matches
+    // the reference screenshots' portrait+bar composition rather than the
+    // previous plain edge-to-edge bar.
+    float portraitSize = 22.0f, portraitGap = 3.0f;
+    float portraitY = barY - 6.0f;
+    float p1PortraitX = 2.0f;
+    float p1BarX = p1PortraitX + portraitSize + portraitGap, barW = 115.0f;
+    float p2BarX = VirtualW - 2.0f - portraitSize - portraitGap - barW;
+    float p2PortraitX = VirtualW - 2.0f - portraitSize;
     DrawHPBar(g, p1BarX, barY, barW, barH, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false, pal.ArenaLine);
     DrawHPBar(g, p2BarX, barY, barW, barH, bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP), true, pal.ArenaLine);
+    DrawPortraitBust(g, p1PortraitX, portraitY, portraitSize, pal.Accent, pal.ArenaLine);
+    DrawPortraitBust(g, p2PortraitX, portraitY, portraitSize, pal.Accent, pal.ArenaLine);
     DrawNameTag(g, p1BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player1.Stats.Name), false);
     DrawNameTag(g, p2BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player2.Stats.Name), true);
 

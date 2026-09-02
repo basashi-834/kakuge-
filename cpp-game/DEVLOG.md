@@ -185,6 +185,50 @@ mirrored for `facing < 0` via GDI+'s 3-point `DrawImage` overload
 flipped asset. Block/Throw/WakeUp/Dead intentionally have no sprite slot
 (outside the user's requested pose list) and always use line art.
 
+## HUD visual reskin (Capcom-style reference screenshots)
+
+User asked to bring the in-match HUD's visual *style* (not just position/
+size, which was already handled by the world-scale rework above) closer to
+two SFIII-Third-Strike/CvS2-style reference screenshots (ornate/metallic
+beveled HP bars, small character portrait busts at the bar's outer end).
+What was matched vs. deliberately not attempted, and why:
+
+- **Matched**: bar now has a `DrawGlossCap` top-sheen plus a two-tone
+  beveled frame (2px outer `borderColor` + 1px translucent-white inner
+  hairline) in `DrawBar()` (`platform/Draw.cpp`) instead of a single flat
+  border - both `DrawHPBar`/`DrawGaugeBar` inherit it since they delegate
+  to `DrawBar`. A small portrait bust box (`DrawPortraitBust`) was added at
+  the bar's outer corner (screen-edge side), with the bar itself shrunk
+  and shifted inward to make room (`portraitSize=22, portraitGap=3`;
+  `barW` 140->115; P1 bar now starts at canvas x=27 instead of x=3, P2
+  mirrored) - matches the reference layout's "portrait-then-bar"
+  composition. Verified visually via Wine/Xvfb screenshot + pixel-zoomed
+  crops (see "Sandbox gotcha" note below - the first verification attempt
+  was actually looking at a stale pre-rebuild `Kakuge.exe` still running
+  from earlier in the session; had to `kill` it and relaunch to see the
+  real result).
+- **NOT attempted, on purpose**: the portrait bust is a **generic
+  procedural placeholder** (silhouette head + red headband + shoulders,
+  same shape for every character, colored from `pal.Accent`) - not a real
+  per-character portrait illustration. This session has no image-
+  generation tool (same limitation already noted for sprite art above);
+  real portraits would need actual art files supplied by the user, at
+  which point `DrawPortraitBust` should be swapped for a `g.DrawImage`
+  call keyed off the fighter's character id, following the exact
+  load/cache pattern `Sprites.h`/`.cpp` already established. Also not
+  attempted: move-list side panels and round-win pip indicators seen in
+  the reference images - round-win state isn't currently tracked/rendered
+  anywhere in `BattleSystem`, so pips would need new state, not just a
+  drawing change; flagged as a possible future follow-up, not done here.
+- **Sandbox gotcha reconfirmed**: a Wine process from earlier in the same
+  session was still running when a new verification pass started later -
+  it was executing the *old* pre-rebuild `.exe`, so the first screenshot
+  looked like none of the day's edits had taken effect. Always check
+  `ps aux | grep Kakuge` and compare the running process's start time
+  against the `.exe`'s mtime (or just unconditionally `pkill` any stale
+  instance) before trusting a Wine screenshot as reflecting the latest
+  build.
+
 ## Known follow-ups (flagged, not yet acted on)
 
 - CPU AI's per-move `EffectiveRange` values (55-100 world units) weren't
