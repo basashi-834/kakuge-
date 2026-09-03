@@ -77,14 +77,43 @@ endforeach()
 # ---------------------------------------------------------------------
 # SDL2 を探す
 # ---------------------------------------------------------------------
-# vcpkg で「.\vcpkg install sdl2:x64-windows」を済ませ、設定コマンドに
-# -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake を
-# 付けていれば、この 1 行で SDL2 が見つかります。
+# SDL2 の入手方法は 2 通りあり、どちらでも下の find_package で見つかります。
 #
+#  ルートA（Git 不要・おすすめ）:
+#      libsdl.org から SDL2-devel-2.xx.x-VC.zip をダウンロードして解凍し、
+#      できた SDL2-2.xx.x フォルダを、この CMakeLists.txt と同じ場所
+#      （または 1 つ上の階層）に置くだけ。下の自動検出が拾います。
+#
+#  ルートB（vcpkg を使う。Git が必要）:
+#      「.\vcpkg install sdl2:x64-windows」を済ませ、設定コマンドに
+#      -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake
+#      を付ける。
+#
+# ---- ルートA のための自動検出 ----
+# vcpkg を使っていないときだけ、近くに置かれた SDL2 フォルダを探します。
+# 公式の VC 版 zip には cmake\sdl2-config.cmake が同梱されているので、
+# それがあるフォルダを CMAKE_PREFIX_PATH に足せば find_package が
+# 見つけてくれます（この 1 手間で -D オプションが不要になります）。
+if(NOT DEFINED SDL2_DIR AND NOT VCPKG_TOOLCHAIN)
+    file(GLOB _kakuge_sdl2_candidates
+         "${CMAKE_CURRENT_SOURCE_DIR}/SDL2"
+         "${CMAKE_CURRENT_SOURCE_DIR}/SDL2-[0-9]*"
+         "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2"
+         "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2-[0-9]*")
+    foreach(_cand IN LISTS _kakuge_sdl2_candidates)
+        if(EXISTS "${_cand}/cmake/sdl2-config.cmake")
+            message(STATUS "SDL2 をこの場所で見つけました: ${_cand}")
+            list(APPEND CMAKE_PREFIX_PATH "${_cand}")
+            break()
+        endif()
+    endforeach()
+endif()
+
 # ここで「Could NOT find SDL2」と言われたら、原因はほぼ次のどれかです:
-#   - vcpkg install sdl2:x64-windows がまだ / 失敗している
-#   - -DCMAKE_TOOLCHAIN_FILE=... の指定を忘れている、パスが違う
-#   - 32bit でビルドしようとしている（sdl2:x86-windows が必要）
+#   - ルートA: SDL2 フォルダの置き場所が違う（cmake\sdl2-config.cmake が
+#     入っているフォルダを、この CMakeLists.txt の隣に置いてください）
+#   - ルートB: vcpkg install がまだ / -DCMAKE_TOOLCHAIN_FILE= の指定漏れ
+#   - build フォルダに古い設定が残っている（build を削除してやり直す）
 find_package(SDL2 CONFIG REQUIRED)
 
 # SDL_RenderGeometry（三角形を並べて自由な形を塗る関数。このゲームの

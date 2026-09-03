@@ -15,7 +15,7 @@
 |---|---|
 | 言語 | C++17 |
 | ライブラリ | **SDL2 のみ**（2.0.18 以降。`SDL_RenderGeometry` を使用） |
-| ビルド環境 | Windows + Visual Studio（MSVC / vcpkg / CMake） |
+| ビルド環境 | Windows + Visual Studio（MSVC / CMake）。SDL2 は直接DL または vcpkg |
 | コメント | 初心者向けに日本語で厚めに |
 
 SDL2 以外のライブラリは一切使いません。そのため、
