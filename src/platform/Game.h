@@ -34,6 +34,7 @@
 #include "engine/BattleSystem.h"
 #include "engine/DataManager.h"
 #include "engine/Settings.h"
+#include "platform/Editor.h"
 #include "platform/Figure.h"
 #include "platform/Renderer.h"
 
@@ -47,7 +48,8 @@ enum class Screen {
     Game,            // 対戦中
     Result,          // 結果
     Settings,        // 設定（解像度）
-    Controls         // 操作説明
+    Controls,        // 操作説明
+    Editor           // キャラクターエディタ
 };
 
 // 画面上の押せるボタン 1 個。
@@ -127,6 +129,10 @@ private:
     // ---- 設定画面 ----
     int pendingResIndex_ = 0;
 
+    // ---- キャラクターエディタ ----
+    // 画面を開いたときだけ作ります（使わない間はメモリを使わない）。
+    std::unique_ptr<Editor> editor_;
+
     // ---- 時間の管理 ----
     std::chrono::steady_clock::time_point lastTick_;
     double accumulator_ = 0.0;
@@ -153,6 +159,7 @@ private:
     void GoResult();
     void GoSettings();
     void GoControls();
+    void GoEditor();
     void ApplySettings();
 
     // ---- 各画面の描画（Screens.cpp）----
@@ -164,6 +171,7 @@ private:
     void DrawResult();
     void DrawSettings();
     void DrawControls();
+    void DrawEditor();
 
     // ---- 共通の部品 ----
     void DrawButtons();

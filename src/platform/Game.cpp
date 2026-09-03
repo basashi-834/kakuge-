@@ -33,7 +33,8 @@ enum Action {
     ActDummyMode,     // 練習相手の行動の切り替え
     ActResPrev,       // 解像度をひとつ前へ
     ActResNext,       // 解像度をひとつ次へ
-    ActResApply       // 解像度を適用
+    ActResApply,      // 解像度を適用
+    ActEditor         // キャラクターエディタへ
 };
 
 // ---------------------------------------------------------------------
@@ -142,6 +143,11 @@ void Game::HandleEvents() {
             case SDL_KEYUP:
                 heldKeys_.erase(e.key.keysym.sym);
                 break;
+            case SDL_TEXTINPUT:
+                // 名前などの文字入力（エディタ画面でのみ使います）。
+                // SDL は日本語入力なども含めて UTF-8 で渡してくれます。
+                if (current_ == Screen::Editor && editor_) editor_->HandleText(e.text.text);
+                break;
             case SDL_MOUSEMOTION:
                 OnMouseMove(e.motion.x, e.motion.y);
                 break;
@@ -184,6 +190,22 @@ RawInput Game::BuildPlayerInput() const {
 }
 
 void Game::OnKeyDown(SDL_Keycode key) {
+    // キャラクターエディタは独自のキー操作を持つので、先に渡します。
+    if (current_ == Screen::Editor && editor_) {
+        // Shift を押しているかは、SDL に今の状態を聞きます。
+        bool shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
+        if (editor_->HandleKey(key, shift)) {
+            if (editor_->WantsExit()) {
+                editor_->ClearExitRequest();
+                // 編集結果をゲーム側にも反映させるため読み直します。
+                dm_->ReloadAll();
+                GoTitle();
+            }
+            return;
+        }
+        return; // エディタ画面では、ほかのメニュー操作は行わない
+    }
+
     // 対戦画面だけは専用のキーがあります。
     if (current_ == Screen::Game) {
         if (key == SDLK_ESCAPE) {
@@ -284,6 +306,7 @@ void Game::DoAction(int action) {
         case ActTraining: GoCharacterSelect(true); break;
         case ActControls: GoControls(); break;
         case ActSettings: GoSettings(); break;
+        case ActEditor: GoEditor(); break;
         case ActQuit: running_ = false; break;
         case ActBackToTitle: GoTitle(); break;
 
@@ -355,15 +378,17 @@ void Game::GoTitle() {
     battle_.reset();
     buttons_.clear();
     focusIndex_ = 0;
-    // 5 つのボタンを縦に並べます。最後の EXIT の下端（96 + 4*21 + 18 = 198）が
-    // 画面下の帯（y=210 から）にかからないように間隔を決めています。
-    const float bw = 150, bh = 18, bx = (VirtualW - bw) / 2.0f;
-    const float by = 96, step = 21;
+    // 6 つのボタンを縦に並べます。最後の EXIT の下端
+    //（92 + 5*18 + 15 = 197）が画面下の帯（y=210 から）に
+    // かからないように間隔を決めています。
+    const float bw = 150, bh = 15, bx = (VirtualW - bw) / 2.0f;
+    const float by = 92, step = 18;
     AddButton(bx, by, bw, bh, "VERSUS (VS CPU)", ActVersus, true);
     AddButton(bx, by + step, bw, bh, "TRAINING", ActTraining, false);
-    AddButton(bx, by + step * 2, bw, bh, "CONTROLS", ActControls, false);
-    AddButton(bx, by + step * 3, bw, bh, "SETTINGS", ActSettings, false);
-    AddButton(bx, by + step * 4, bw, bh, "EXIT", ActQuit, false);
+    AddButton(bx, by + step * 2, bw, bh, "CHARACTER EDITOR", ActEditor, false);
+    AddButton(bx, by + step * 3, bw, bh, "CONTROLS", ActControls, false);
+    AddButton(bx, by + step * 4, bw, bh, "SETTINGS", ActSettings, false);
+    AddButton(bx, by + step * 5, bw, bh, "EXIT", ActQuit, false);
 }
 
 void Game::GoCharacterSelect(bool training) {
@@ -443,6 +468,17 @@ void Game::GoControls() {
     AddButton(VirtualW / 2.0f - 50, 196, 100, 18, "BACK", ActBackToTitle, false);
 }
 
+// キャラクターエディタを開く。
+// 開くたびに作り直すのは、ほかの画面で編集内容が変わっている
+// 可能性があるためです（新規作成したキャラクターなど）。
+void Game::GoEditor() {
+    current_ = Screen::Editor;
+    buttons_.clear();
+    battle_.reset();
+    editor_ = std::make_unique<Editor>();
+    editor_->Open(dm_.get());
+}
+
 void Game::ApplySettings() {
     const auto& presets = ResolutionPresets();
     int idx = std::clamp(pendingResIndex_, 0, static_cast<int>(presets.size()) - 1);
@@ -457,6 +493,13 @@ void Game::ApplySettings() {
 // 更新（1 フレームぶんの計算）
 // ---------------------------------------------------------------------
 void Game::Update(double dt) {
+    // SDL の文字入力は、エディタで名前を編集しているときだけ有効に
+    // します。常に有効だと、対戦中のキーまで文字として届いてしまい、
+    // 無駄な処理が増えます（IME が勝手に開くこともあります）。
+    bool wantText = (current_ == Screen::Editor && editor_ && editor_->IsTextEditing());
+    if (wantText && !SDL_IsTextInputActive()) SDL_StartTextInput();
+    else if (!wantText && SDL_IsTextInputActive()) SDL_StopTextInput();
+
     if (current_ == Screen::VS) {
         // 対戦前の演出。1.2 秒たったら試合開始。
         vsTimer_ += dt;
@@ -554,6 +597,7 @@ void Game::Render() {
         case Screen::Result: DrawResult(); break;
         case Screen::Settings: DrawSettings(); break;
         case Screen::Controls: DrawControls(); break;
+        case Screen::Editor: DrawEditor(); break;
     }
     int ww = 0, wh = 0;
     SDL_GetWindowSize(window_, &ww, &wh);

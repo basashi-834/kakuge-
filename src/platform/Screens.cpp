@@ -248,14 +248,32 @@ void Game::DrawGame() {
     r_.FillGradientRect(0, 0, VirtualW, static_cast<float>(OriginY),
                         Color(74, 72, 78), Color(48, 46, 48));
 
-    // 奥の建物のシルエット。カメラの動きの半分だけずらして描くと、
-    // 手前の地面より遅く流れて、奥行きが感じられます（多重スクロール）。
-    double parallax = -CameraDrawX() * 0.35;
-    for (int i = -4; i <= 4; ++i) {
-        float bx = static_cast<float>(VirtualW / 2 + i * 62 + parallax);
-        float bh = 40.0f + ((i * 37) % 5) * 8.0f;
-        r_.FillRect(bx - 22, static_cast<float>(OriginY) - bh, 44, bh, Color(38, 37, 40));
-        r_.FillRect(bx - 22, static_cast<float>(OriginY) - bh, 44, 2, Color(52, 50, 54));
+    // 奥の建物のシルエット。
+    //
+    // 2 段重ねにして、奥の層はカメラの動きに対してゆっくり、
+    // 手前の層は速く流します（多重スクロール）。速さが違うと
+    // 人の目は「奥行きがある」と感じます。
+    // また、地面（Y=200）に対してキャラクターは 95px しかないため、
+    // 画面上部が空いてしまいます。奥の層を高くして、その空白を
+    // 埋めています（暗い色なので、手前のキャラクターの邪魔はしません）。
+    struct Layer { double speed; int spacing; float minH; float stepH; int width; Color body; Color top; };
+    const Layer layers[2] = {
+        // 奥: ゆっくり流れる高いビル群
+        {0.15, 78, 88.0f, 14.0f, 56, Color(45, 44, 48), Color(55, 53, 58)},
+        // 手前: 速く流れる低いビル群
+        {0.35, 62, 46.0f, 10.0f, 44, Color(34, 33, 36), Color(48, 46, 50)},
+    };
+    for (const auto& L : layers) {
+        double parallax = -CameraDrawX() * L.speed;
+        for (int i = -5; i <= 5; ++i) {
+            float bx = static_cast<float>(VirtualW / 2 + i * L.spacing + parallax);
+            // ビルの高さは i から決めます。乱数だと毎フレーム形が
+            // 変わってちらついてしまうためです。
+            float bh = L.minH + ((i * 37) % 5 + 5) % 5 * L.stepH;
+            float bw = static_cast<float>(L.width);
+            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY) - bh, bw, bh, L.body);
+            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY) - bh, bw, 2, L.top);
+        }
     }
 
     // 地面
@@ -425,6 +443,14 @@ void Game::DrawControls() {
     DrawPixelText(r_, "236 = DOWN, DOWN-FORWARD, FORWARD", 18, y + 6, 1.0f, pal.Ink45);
 
     DrawButtons();
+}
+
+// ---------------------------------------------------------------------
+// キャラクターエディタ
+// ---------------------------------------------------------------------
+// 中身は platform/Editor.cpp が全部持っているので、ここは橋渡しだけです。
+void Game::DrawEditor() {
+    if (editor_) editor_->Draw(r_);
 }
 
 } // namespace kakuge

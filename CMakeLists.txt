@@ -166,6 +166,7 @@ set(KAKUGE_SOURCES
     src/platform/Hud.cpp
     src/platform/Paths.cpp
     src/platform/Game.cpp
+    src/platform/Editor.cpp
     src/platform/Screens.cpp
 )
 
