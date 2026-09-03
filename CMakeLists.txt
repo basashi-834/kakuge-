@@ -94,13 +94,20 @@ endforeach()
 # 公式の VC 版 zip には cmake\sdl2-config.cmake が同梱されているので、
 # それがあるフォルダを CMAKE_PREFIX_PATH に足せば find_package が
 # 見つけてくれます（この 1 手間で -D オプションが不要になります）。
-if(NOT DEFINED SDL2_DIR AND NOT VCPKG_TOOLCHAIN)
+# 条件が「NOT SDL2_DIR」であって「NOT DEFINED SDL2_DIR」でないのが重要です。
+# find_package が一度失敗すると、SDL2_DIR には "SDL2_DIR-NOTFOUND" という
+# 値がキャッシュに残ります。この状態は「定義済み」なので、
+# NOT DEFINED で判定すると 2 回目以降この探索が丸ごと飛ばされ、
+# SDL2 を正しい場所に置いても永久に見つからなくなります。
+# CMake では末尾が -NOTFOUND の値は偽なので、NOT SDL2_DIR なら
+# 「未設定」と「見つからなかった」の両方を拾えます。
+set(_kakuge_sdl2_found FALSE)
+if(NOT SDL2_DIR AND NOT VCPKG_TOOLCHAIN)
     file(GLOB _kakuge_sdl2_candidates
          "${CMAKE_CURRENT_SOURCE_DIR}/SDL2"
          "${CMAKE_CURRENT_SOURCE_DIR}/SDL2-[0-9]*"
          "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2"
          "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2-[0-9]*")
-    set(_kakuge_sdl2_found FALSE)
     foreach(_cand IN LISTS _kakuge_sdl2_candidates)
         if(EXISTS "${_cand}/cmake/sdl2-config.cmake")
             message(STATUS "SDL2 をこの場所で見つけました: ${_cand}")
@@ -131,12 +138,52 @@ if(NOT DEFINED SDL2_DIR AND NOT VCPKG_TOOLCHAIN)
     endif()
 endif()
 
-# ここで「Could NOT find SDL2」と言われたら、原因はほぼ次のどれかです:
-#   - ルートA: SDL2 フォルダの置き場所が違う（cmake\sdl2-config.cmake が
-#     入っているフォルダを、この CMakeLists.txt の隣に置いてください）
-#   - ルートB: vcpkg install がまだ / -DCMAKE_TOOLCHAIN_FILE= の指定漏れ
-#   - build フォルダに古い設定が残っている（build を削除してやり直す）
-find_package(SDL2 CONFIG REQUIRED)
+# ---- SDL2 を探す ----
+# QUIET で一度試し、見つからなかったときだけ自前のエラーを出します。
+#
+# いきなり REQUIRED にしないのは、find_package の既定のエラーが
+# 「SDL2Config.cmake が無い」としか言わず、初めての人には何をすれば
+# よいか分からないからです。かといって find_package の前で自前に
+# 判定してしまうと、Linux のようにシステムに SDL2 が入っている環境
+# （SDL2_DIR を指定しなくても見つかる）を誤って弾いてしまいます。
+# 「まず探させて、駄目だったときだけ説明する」のが正しい順番です。
+find_package(SDL2 CONFIG QUIET)
+
+if(NOT SDL2_FOUND)
+    # 実際に何が置かれているかを一覧にして見せる
+    file(GLOB _kakuge_nearby RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+         "${CMAKE_CURRENT_SOURCE_DIR}/*")
+    set(_kakuge_dirs "")
+    foreach(_e IN LISTS _kakuge_nearby)
+        if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${_e}")
+            string(APPEND _kakuge_dirs "    ${_e}\n")
+        endif()
+    endforeach()
+    message(FATAL_ERROR
+        "SDL2 が見つかりませんでした。\n"
+        "\n"
+        "このゲームは SDL2 の「開発用パッケージ」を必要とします。\n"
+        "次のどちらかを行ってから、もう一度やり直してください。\n"
+        "\n"
+        "【ルートA】SDL2 を直接置く（Git 不要・おすすめ）\n"
+        "  1. 次のリンクからダウンロード（7MB ほど）:\n"
+        "     https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-devel-2.32.10-VC.zip\n"
+        "  2. 解凍してできた SDL2-2.32.10 フォルダを、次の場所に置く:\n"
+        "     ${CMAKE_CURRENT_SOURCE_DIR}\n"
+        "     （CMakeLists.txt と同じ階層です）\n"
+        "  3. 置いたフォルダの直下に cmake\\sdl2-config.cmake があることを確認\n"
+        "     ※ 二重フォルダ（SDL2-2.32.10\\SDL2-2.32.10\\...）になりがちです\n"
+        "\n"
+        "【ルートB】vcpkg を使う（Git が必要）\n"
+        "  .\\vcpkg install sdl2:x64-windows を実行し、設定コマンドに\n"
+        "  -DCMAKE_TOOLCHAIN_FILE=C:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake を付ける\n"
+        "\n"
+        "--- 今この場所にあるフォルダ ---\n"
+        "${_kakuge_dirs}"
+        "\n"
+        "※ 置き直したのにこのエラーが出る場合は、build フォルダを\n"
+        "  まるごと削除してから、もう一度 cmake -B build -S . を実行してください。")
+endif()
 
 # SDL_RenderGeometry（三角形を並べて自由な形を塗る関数。このゲームの
 # キャラクター描画の土台）は SDL 2.0.18 で追加された関数です。
