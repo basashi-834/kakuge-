@@ -2,7 +2,13 @@
 // Entry point: window class registration, GDI+ startup/shutdown, WndProc,
 // message loop, and the fixed-timestep game loop timer. Native-Windows-
 // only, zero-install (Win32 + GDI+ ship with every Windows 10/11 desktop).
+// Both build scripts pass -DNOMINMAX/-D NOMINMAX (windows.h would
+// otherwise define min/max as macros and break std::min/max/clamp across
+// platform/); this guard keeps the file self-contained if it's ever
+// compiled by hand without that flag, without redefining the macro.
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 #include <windowsx.h>
 #include <gdiplus.h>

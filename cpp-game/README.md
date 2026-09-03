@@ -23,13 +23,25 @@ Windows 11 のスマートアプリコントロール(Smart App Control)が有�
 
 1. **スマートアプリコントロールをオフにする**: Windows セキュリティ → アプリとブラウザー コントロール →
    スマートアプリコントロールの設定 → 「オフ」。一度オフにすると Windows を初期化しない限り再度オンには
-   できないので、ご自身の開発・テスト用 PC で使う前提の選択肢です。
+   できないので、ご自身の開発・テスト用 PC で使う前提の選択肢です。Microsoft 自身、スマートアプリ
+   コントロールは開発者向けの機能ではないとしており、自作アプリを継続的にテストする PC ではこれが定石です。
 2. **コード署名する**: 認証局発行のコード署名証明書(OV/EV)で署名すれば通ります(自己署名は不可)。証明書を
    用意できる場合は `signtool sign` をビルド手順に組み込めます。
 3. 評価モードまたはオフの環境で実行する。
 
 それまで動いていたのに急に出るようになった場合は、スマートアプリコントロールが「評価モード」から自動的に
 「オン」へ切り替わったのが原因です(評価モード中は Windows が利用状況を見て自動判断します)。
+
+### 「自分でコンパイルすれば回避できる?」
+
+**おそらく回避できません。** スマートアプリコントロールは「その実行ファイルがどこで作られたか」ではなく、
+「その実行ファイル自体が信頼された証明書で署名されているか」「そのファイルのハッシュが Microsoft の
+評価データベース(Intelligent Security Graph)で既知の安全なものか」で判定します。自分でビルドした
+バイナリは署名が無く、ハッシュも生成したてで未知なので、ダウンロードした場合と同じ条件になります。
+
+ただし検証自体は数分で済みますし、ソースからビルドできること自体に別の利点(中身を確認できる、
+自由に改造できる)もあるので、下の「ソースコードから再ビルドしたい場合」の手順を用意してあります。
+なお、コンパイラ(Visual Studio Build Tools / MSYS2)自体は署名済みなので、インストールは問題なく通ります。
 
 ## なぜ C++ に切り替えたか
 
@@ -97,12 +109,15 @@ cpp-game/
     │   ├─ WinMain.cpp    エントリポイント、ウィンドウ・メッセージループ・音声再生
     │   ├─ App.h/.cpp     画面遷移・ゲームループ・入力集約
     │   ├─ Screens.cpp    Title/CharacterSelect/VS/Game/Result/Settings 画面
-    │   ├─ Editor.cpp     キャラクターエディター(ネイティブコントロール使用)
-    │   ├─ Draw.h/.cpp    GDI+ 描画ヘルパー(人型キャラ・HUD・バー等)
+    │   ├─ Editor.cpp     キャラクターエディター(独自描画UI、ネイティブコントロール不使用)
+    │   ├─ Draw.h/.cpp    GDI+ 描画ヘルパー(図形キャラ・HUD・バー等)
+    │   ├─ HudSkin.h/.cpp HUD の画像スキン読み込み(Data/hud/)
+    │   ├─ Sprites.h/.cpp キャラクターのスプライト画像読み込み(Data/sprites/)
     │   └─ Layout.h / Palette.h  座標変換・配色
-    ├─ tests/EngineTests.cpp  ゲームロジックのユニットテスト(30項目)
+    ├─ tests/EngineTests.cpp  ゲームロジックのユニットテスト(53項目)
     ├─ third_party/nlohmann/  JSON ライブラリ(ヘッダオンリー、同梱)
-    ├─ build_windows.sh   Windows向け .exe クロスビルドスクリプト
+    ├─ build_windows.sh   MinGW-w64 ビルド(Linux クロス / MSYS2 どちらでも)
+    ├─ build_windows_msvc.bat  Visual Studio (MSVC) ビルド用バッチ
     └─ build_linux_tests.sh  ロジックテストのネイティブビルド・実行スクリプト
 ```
 
@@ -114,8 +129,8 @@ Win32 API・GDI+ に依存する部分は platform/ にすべて隔離されて�
 ## テストについて
 
 `src/tests/EngineTests.cpp` は状態機械・判定・ガード・コマンド入力・キャンセル猶予・データ保存/読込・
-新規キャラクター作成など **30項目** を検証する自動テストです(旧 PowerShell 版のテストを1:1で C++ に移植し、
-新機能のテストを追加したもの)。開発中、Linux 上で毎回このテストを実行し、**30/30 成功**を確認しています。
+新規キャラクター作成・当たり判定仕様(GameSpec)など **53項目** を検証する自動テストです(旧 PowerShell 版のテストを1:1で C++ に移植し、
+新機能のテストを追加したもの)。開発中、Linux 上で毎回このテストを実行し、**53/53 成功**を確認しています。
 
 ```
 cd src
@@ -266,13 +281,60 @@ cd src
 アンインストールしたい場合は `Kakuge.exe` とその周辺フォルダを削除し、
 `%APPDATA%\Kakuge\` フォルダも削除してください。
 
-## ソースコードから再ビルドしたい場合(任意)
+## ソースコードから再ビルドしたい場合(Windows でのビルド手順)
 
-あなたの PC でビルドする必要は基本的にありません(`Kakuge.exe` はそのまま動きます)。
-もし将来ソースを変更して再ビルドしたい場合は、Linux + mingw-w64 環境で以下を実行してください
-(Windows 側には何もインストール不要です。ビルドは開発環境側で行い、生成された `.exe` だけを配布します)。
+同梱の `Kakuge.exe` はそのままで動きます(ビルドは必須ではありません)。ソースを変更したい場合や、
+自分の PC でコンパイルして確かめたい場合は、以下のどちらかの方法でビルドできます。
+どちらも同じ `src/` 以下のソースから同じものが作れます。ビルド後は生成された `Kakuge.exe` の隣に
+`Data`(と、音を鳴らすなら `Audio`)フォルダを置いてください。
+
+### 方法A: Visual Studio Build Tools(Windows・無料)
+
+1. [Visual Studio ダウンロードページ](https://visualstudio.microsoft.com/downloads/) から
+   **Build Tools for Visual Studio** を入手し、ワークロード「**C++ によるデスクトップ開発**」を選んで
+   インストールします(Visual Studio Community でも可)。
+2. スタートメニューから「**x64 Native Tools Command Prompt for VS 20xx**」を開きます
+   (このプロンプトでないと `cl.exe` にパスが通りません)。
+3. ソースのフォルダへ移動して実行します。
+
+```bat
+cd  ソースを展開したフォルダ\src
+build_windows_msvc.bat
+```
+
+`build\Kakuge.exe` が生成されます。静的リンク(`/MT`)なので、VC++ 再頒布可能パッケージは不要です。
+
+### 方法B: MSYS2 + MinGW-w64(Windows)
+
+配布版 `Kakuge.exe` と同じコンパイラ(MinGW-w64)で作る方法です。
+
+1. [MSYS2](https://www.msys2.org/) をインストールします。
+2. スタートメニューから「**MSYS2 MINGW64**」シェルを開き、コンパイラを入れます。
 
 ```bash
-cd src
-./build_windows.sh   # build/Kakuge.exe が生成されます
+pacman -S --needed mingw-w64-x86_64-gcc
 ```
+
+3. ソースのフォルダへ移動して実行します(`/c/Users/...` のようなパス表記になります)。
+
+```bash
+cd  ソースを展開したフォルダ/src
+./build_windows.sh
+```
+
+### 方法C: Linux から クロスコンパイル(この配布版を作っている方法)
+
+```bash
+sudo apt install mingw-w64      # 環境に応じて
+cd src
+./build_windows.sh              # build/Kakuge.exe が生成されます
+./build_linux_tests.sh          # エンジンのテスト(Windows 不要、Linux 上で実行)
+```
+
+### ビルドに必要なもの
+
+- C++17 対応コンパイラ(MSVC / MinGW-w64 GCC)
+- Windows SDK(Build Tools に同梱。GDI+ / Win32 API を使用)
+- 外部ライブラリの追加取得は不要です。JSON ライブラリ(nlohmann/json)は `src/third_party/` に同梱済みで、
+  それ以外の依存はありません。
+
