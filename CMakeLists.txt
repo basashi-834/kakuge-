@@ -100,13 +100,35 @@ if(NOT DEFINED SDL2_DIR AND NOT VCPKG_TOOLCHAIN)
          "${CMAKE_CURRENT_SOURCE_DIR}/SDL2-[0-9]*"
          "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2"
          "${CMAKE_CURRENT_SOURCE_DIR}/../SDL2-[0-9]*")
+    set(_kakuge_sdl2_found FALSE)
     foreach(_cand IN LISTS _kakuge_sdl2_candidates)
         if(EXISTS "${_cand}/cmake/sdl2-config.cmake")
             message(STATUS "SDL2 をこの場所で見つけました: ${_cand}")
             list(APPEND CMAKE_PREFIX_PATH "${_cand}")
+            set(_kakuge_sdl2_found TRUE)
             break()
         endif()
     endforeach()
+
+    # よくある間違い: SDL2 のつもりで SDL3 を落としてきてしまった場合。
+    # 公式サイトの「最新リリース」は今 SDL3 なので、ふつうに探すと
+    # SDL3 のほうに行き着きます。放っておくと下の find_package が
+    # 「Could NOT find SDL2」とだけ言って止まり、原因が分かりません。
+    # SDL2 と SDL3 は関数名から違う別物なので、入れ替えでは動きません。
+    if(NOT _kakuge_sdl2_found)
+        file(GLOB _kakuge_sdl3_candidates
+             "${CMAKE_CURRENT_SOURCE_DIR}/SDL3*"
+             "${CMAKE_CURRENT_SOURCE_DIR}/../SDL3*")
+        if(_kakuge_sdl3_candidates)
+            message(WARNING
+                "SDL3 のフォルダが見つかりましたが、このゲームに必要なのは SDL2 です。\n"
+                "  見つかった場所: ${_kakuge_sdl3_candidates}\n"
+                "SDL3 は SDL2 の後継ですが、関数名から異なる別物なので入れ替えでは動きません。\n"
+                "次のリンクから SDL2 の開発用パッケージを取得してください:\n"
+                "  https://github.com/libsdl-org/SDL/releases/download/release-2.32.10/SDL2-devel-2.32.10-VC.zip\n"
+                "詳しくは BUILD_WINDOWS.md の「手順 A-1」を参照してください。")
+        endif()
+    endif()
 endif()
 
 # ここで「Could NOT find SDL2」と言われたら、原因はほぼ次のどれかです:
