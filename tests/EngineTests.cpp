@@ -591,6 +591,30 @@ int main(int argc, char** argv) {
         bs.ResolveMaxDistance();
         Check("上限より近ければ位置を動かさない",
               bs.Player1.PositionX == 0 && bs.Player2.PositionX == 100);
+
+        // ---- KO された体が滑り続けないこと ----
+        // 以前は、死亡後に吹き飛び速度を 0 に近づける処理も、
+        // ステージ端で止める処理も通らなかったため、死体が同じ速さで
+        // 滑り続け、やがて画面の外へ出ていっていました
+        //（トレーニングモードのように KO で試合が終わらない場面）。
+        bs.Player1.PositionX = 0.0;
+        bs.Player1.PositionY = 0.0;
+        bs.Player1.VelocityX = -300.0; // 左へ強く吹き飛んだところで KO
+        bs.Player1.IsDead = true;
+        bs.Player1.SM.ChangeState(CharState::Dead, "");
+        RawInput none;
+        for (int i = 0; i < 60; ++i) bs.Player1.FrameStep(1.0 / 60.0, none);
+        Check("KO された体は滑って止まる（速度が 0 に戻る）",
+              std::abs(bs.Player1.VelocityX) < 0.001);
+
+        // 端の外へ吹き飛ばされても、壁の内側で止まる。
+        bs.Player1.PositionX = BattleSystem::StageMinX + 40;
+        bs.Player1.VelocityX = -900.0;
+        for (int i = 0; i < 120; ++i) bs.Player1.FrameStep(1.0 / 60.0, none);
+        Check("KO された体はステージの外へ出ない",
+              bs.Player1.PushboxRect().Left() >= BattleSystem::StageMinX - 0.001);
+        bs.Player1.IsDead = false;
+        bs.Player1.SM.ChangeState(CharState::Idle, "");
     }
 
     // =================================================================

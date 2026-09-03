@@ -206,12 +206,29 @@ public:
     // 毎フレームの処理の入口（BattleSystem から 1/60 秒ごとに呼ばれる）
     // =================================================================
     void FrameStep(double dt, const RawInput& raw) {
-        // 死亡後は落下だけさせて終わり（操作も技も受け付けない）。
+        // 死亡後は倒れるだけで、操作も技も受け付けません。
+        //
+        // ただし「落として終わり」にすると、KO したときの吹き飛び速度が
+        // そのまま残り続けます。ダウン中や のけぞり中と違って速度を
+        // 0 に近づける処理が無く、ステージ端で止める処理も通らないため、
+        // 死体が同じ速さで滑り続け、やがて画面の外へ出ていってしまいます
+        //（トレーニングモードのように KO で試合が終わらない場面で
+        //  はっきり分かります）。
+        //
+        // そこで、生きているときと同じ 2 つを死亡後にも掛けます。
+        //   ・地面に着いていれば、吹き飛び速度を 0 に近づける（滑って止まる）
+        //   ・ステージの外へは出さない
         if (IsDead) {
             VelocityY += Stats.Gravity * dt;
             PositionX += VelocityX * dt;
             PositionY += VelocityY * dt;
             if (PositionY > GroundY) { PositionY = GroundY; VelocityY = 0.0; }
+            // 減り方はダウン中（Knockdown）と同じにします。倒れた体の
+            // 滑り方が、KO かダウンかで変わるのは不自然なためです。
+            if (PositionY >= GroundY - 0.01) {
+                VelocityX = MoveToward(VelocityX, 0.0, 339.1 / Constants::Fps);
+            }
+            ClampToStage();
             return;
         }
 

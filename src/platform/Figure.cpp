@@ -65,11 +65,11 @@ void DrawDisc(Renderer& r, const FigureStyle& st, Color fill,
 // ---------------------------------------------------------------------
 // キャラクター 1 体を描く
 // ---------------------------------------------------------------------
-// 描く順番が重要です。あとから描いたものが上に重なるので、
-//   奥の脚 → 胴 → 奥の腕 → 手前の脚 → 頭 → 手前の腕
-// の順で描くと、自然な前後関係になります。
-// 奥の腕を胴のあとに描いているのは、腕が胴に隠れず
-// 「両手で構えている」形がはっきり見えるようにするためです。
+// 描く順番が重要です。あとから描いたものが上に重なります。
+//   手前の脚 → 手前の腕 → 胴 → 奥の脚 → 頭 → 奥の腕
+// 手前側の手足を先に描いて胴で覆い、奥側の手足を胴の上に重ねる
+// 並びです。奥の腕がいちばん上に来るので、構えた両腕が胴に
+// 隠れず、小さな画面でも姿勢が読み取れます。
 void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const HumanoidPose& pose) {
     double s = pose.heightScale * kCharScale; // フィギュア単位 → 画面ピクセル
     int f = pose.facing < 0 ? -1 : 1;         // 向き（座標の左右反転に使う）
@@ -169,10 +169,55 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
         // 片脚だけ地面に立っている絵になります。
     }
 
-    // ---- 奥の脚 ----
-    DrawLimb(r, st, st.dark, hipBackX, hipY, kneeBX, kneeBY, limbT, ow);
-    DrawLimb(r, st, st.dark, kneeBX, kneeBY, footBX, footBY, limbT, ow);
-    DrawDisc(r, st, st.outline, footBX - f * 2.0 * s, footBY - 3.0 * s, 4.5 * s, 0.0);
+    // ---- 腕の関節の位置を決める ----
+    // 描く順番（下の「重ねる順」）が腕・脚・胴で入り組んでいるので、
+    // 位置の計算だけを先にまとめて済ませ、あとは順番どおりに
+    // 描くだけにしてあります。
+    //
+    // 手前の腕
+    double shFrontX = cx + f * 18.0 * s, shFrontY = shoulderY + 4.0 * s;
+    double elX, elY, hdX, hdY;
+    if (pose.armReach > 0) {
+        // パンチ: 前方に大きく伸ばす
+        elX = cx + f * 34.0 * s; elY = shoulderY + 8.0 * s;
+        hdX = cx + f * (46.0 + pose.armReach * 0.8) * s;
+        hdY = shoulderY + 4.0 * s - std::min(pose.armReach, 20.0) * 0.2 * s;
+    } else if (pose.guardRaise > 0) {
+        elX = cx + f * 26.0 * s; elY = shoulderY + 12.0 * s;
+        hdX = cx + f * 22.0 * s; hdY = shoulderY - 8.0 * s;
+    } else {
+        elX = cx + f * 30.0 * s; elY = shoulderY + 16.0 * s;
+        hdX = cx + f * 27.0 * s; hdY = shoulderY + 2.0 * s + bob;
+    }
+    // 奥の腕
+    double shBackX = cx - f * 18.0 * s, shBackY = shoulderY + 4.0 * s;
+    double elBackX, elBackY, hdBackX, hdBackY;
+    if (pose.guardRaise > 0) {
+        // ガード: 顔の前に構える
+        elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s;
+        hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s;
+    } else {
+        // 構え: 肘は体の横に下ろし、前腕だけを前へ出します。
+        // 肘を胴の内側に入れて前腕を前へ振り出すと、腕が背中側へ
+        // 回り込まず、自然な構えに見えます。
+        elBackX = cx - f * 4.0 * s;  elBackY = shoulderY + 24.0 * s;
+        hdBackX = cx + f * 24.0 * s; hdBackY = shoulderY + 18.0 * s - bob;
+    }
+
+    // =================================================================
+    // ここから重ねる順（あとに描いたものが上に乗ります）
+    //   手前の脚 → 手前の腕 → 胴 → 奥の脚 → 頭 → 奥の腕
+    // =================================================================
+
+    // ---- 手前の脚 ----
+    DrawLimb(r, st, st.body, hipFrontX, hipY, kneeFX, kneeFY, limbT, ow);
+    DrawLimb(r, st, st.body, kneeFX, kneeFY, footFX, footFY, limbT, ow);
+    DrawDisc(r, st, st.outline, footFX + f * 2.0 * s, footFY - 3.0 * s, 4.5 * s, 0.0);
+
+    // ---- 手前の腕 ----
+    DrawLimb(r, st, st.body, shFrontX, shFrontY, elX, elY, armT, ow);
+    DrawLimb(r, st, st.body, elX, elY, hdX, hdY, armT, ow);
+    DrawDisc(r, st, st.skin, hdX, hdY, 6.0 * s, ow);
 
     // ---- 胴（肩が広く腰が狭い台形）----
     {
@@ -206,40 +251,10 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
                    st.outline, static_cast<float>(ow));
     }
 
-    // ---- 奥の腕（胴より前面に出す）----
-    // 描く順番の中で、この腕だけは「胴のあと」に来ます。
-    //
-    // 以前は胴より先に描いていたため、腕の大部分が胴に隠れ、
-    // 肩から拳の先だけが胴の脇からのぞく形になっていました。
-    // 実際に構えるときは、奥の腕も体の前に回して構えます。
-    // 胴のあとに描くと腕が丸ごと見えるようになり、
-    // 「両手で構えている」ことが小さな画面でも分かります。
-    //
-    // 前後関係は「奥の脚 → 胴 → 奥の腕 → 手前の脚 → 頭 → 手前の腕」。
-    // 奥の腕は暗い色（st.dark）のままにしてあるので、胴の上に
-    // 乗っていても手前の腕と見分けが付き、奥行きは失われません。
-    double shBackX = cx - f * 18.0 * s, shBackY = shoulderY + 4.0 * s;
-    double elBackX, elBackY, hdBackX, hdBackY;
-    if (pose.guardRaise > 0) {
-        // ガード: 顔の前に構える
-        elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s;
-        hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s;
-    } else {
-        // 構え: 肘は体の横に下ろし、前腕だけを前へ出します。
-        //
-        // 肘を胴の内側に入れて前腕を前へ振り出すと、腕が背中側へ
-        // 回り込まず、自然な構えに見えます。
-        elBackX = cx - f * 4.0 * s;  elBackY = shoulderY + 24.0 * s;
-        hdBackX = cx + f * 24.0 * s; hdBackY = shoulderY + 18.0 * s - bob;
-    }
-    DrawLimb(r, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
-    DrawLimb(r, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);
-    DrawDisc(r, st, st.skin, hdBackX, hdBackY, 5.5 * s, ow);
-
-    // ---- 手前の脚（胴の上に重なる）----
-    DrawLimb(r, st, st.body, hipFrontX, hipY, kneeFX, kneeFY, limbT, ow);
-    DrawLimb(r, st, st.body, kneeFX, kneeFY, footFX, footFY, limbT, ow);
-    DrawDisc(r, st, st.outline, footFX + f * 2.0 * s, footFY - 3.0 * s, 4.5 * s, 0.0);
+    // ---- 奥の脚 ----
+    DrawLimb(r, st, st.dark, hipBackX, hipY, kneeBX, kneeBY, limbT, ow);
+    DrawLimb(r, st, st.dark, kneeBX, kneeBY, footBX, footBY, limbT, ow);
+    DrawDisc(r, st, st.outline, footBX - f * 2.0 * s, footBY - 3.0 * s, 4.5 * s, 0.0);
 
     // ---- 頭 ----
     {
@@ -265,24 +280,14 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
                    static_cast<float>(2.4 * s), static_cast<float>(2.4 * s), st.belt);
     }
 
-    // ---- 手前の腕 ----
-    double shFrontX = cx + f * 18.0 * s, shFrontY = shoulderY + 4.0 * s;
-    double elX, elY, hdX, hdY;
-    if (pose.armReach > 0) {
-        // パンチ: 前方に大きく伸ばす
-        elX = cx + f * 34.0 * s; elY = shoulderY + 8.0 * s;
-        hdX = cx + f * (46.0 + pose.armReach * 0.8) * s;
-        hdY = shoulderY + 4.0 * s - std::min(pose.armReach, 20.0) * 0.2 * s;
-    } else if (pose.guardRaise > 0) {
-        elX = cx + f * 26.0 * s; elY = shoulderY + 12.0 * s;
-        hdX = cx + f * 22.0 * s; hdY = shoulderY - 8.0 * s;
-    } else {
-        elX = cx + f * 30.0 * s; elY = shoulderY + 16.0 * s;
-        hdX = cx + f * 27.0 * s; hdY = shoulderY + 2.0 * s + bob;
-    }
-    DrawLimb(r, st, st.body, shFrontX, shFrontY, elX, elY, armT, ow);
-    DrawLimb(r, st, st.body, elX, elY, hdX, hdY, armT, ow);
-    DrawDisc(r, st, st.skin, hdX, hdY, 6.0 * s, ow);
+    // ---- 奥の腕（いちばん上）----
+    // 奥の腕だけは、頭も含めたすべての上に重ねます。
+    // 胴に隠れないので、「両手で構えている」ことが小さな画面でも
+    // はっきり分かります。暗い色（st.dark）のままにしてあるので、
+    // 上に乗っていても手前の腕と見分けが付きます。
+    DrawLimb(r, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
+    DrawLimb(r, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);
+    DrawDisc(r, st, st.skin, hdBackX, hdBackY, 5.5 * s, ow);
 }
 
 // ---------------------------------------------------------------------
