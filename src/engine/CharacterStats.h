@@ -16,6 +16,7 @@
 
 #include "core/Json.h"
 #include "engine/Boxes.h"
+#include "engine/Constants.h"
 
 namespace kakuge {
 
@@ -30,6 +31,23 @@ public:
     double WalkForwardSpeed = 220.0;  // 前進の速さ
     double WalkBackwardSpeed = 170.0; // 後退の速さ（前進より遅いのが定番）
     double DashSpeed = 420.0;         // 前ダッシュの速さ
+
+    // ---- 前へ踏み込む方式（前・前 と 2 回入れたとき）----
+    // 格闘ゲームの前進には大きく 2 つの流儀があります。
+    //
+    //   "dash" … 走り出して、一定時間ずっと速く進む。
+    //            距離を自分で調節できるかわりに、止まるまで隙が続く。
+    //   "step" … キャラクター 1 体ぶんだけ、決まった距離を前へ跳ぶ。
+    //            毎回まったく同じ距離なので間合いを覚えやすい。
+    //
+    // どちらが正しいということはなく、ゲームの性格の違いです。
+    // キャラクターごとに選べるようにしてあります。
+    std::string ForwardMoveType = "dash";
+    // "step" のときに進む距離。既定はキャラクターの見た目の幅
+    //（＝「キャラクター 1 体ぶん」）です。
+    double StepDistance = GameSpec::CharacterVisualWidth;
+    // "step" にかけるフレーム数。短いほど鋭く、長いほど重く見えます。
+    int StepFrames = 12;
 
     // ジャンプの初速度。上方向がマイナスなので負の値です。
     // 重力 Gravity で毎フレーム下向きに加速され、やがて落ちてきます。
@@ -62,6 +80,11 @@ public:
         s.WalkForwardSpeed = obj.GetNumber("walkForwardSpeed", 220.0);
         s.WalkBackwardSpeed = obj.GetNumber("walkBackwardSpeed", 170.0);
         s.DashSpeed = obj.GetNumber("dashSpeed", 420.0);
+        s.ForwardMoveType = obj.GetString("forwardMoveType", "dash");
+        if (s.ForwardMoveType != "step") s.ForwardMoveType = "dash"; // 未知の値は dash 扱い
+        s.StepDistance = obj.GetNumber("stepDistance", GameSpec::CharacterVisualWidth);
+        s.StepFrames = obj.GetInt("stepFrames", 12);
+        if (s.StepFrames < 1) s.StepFrames = 1;
         s.JumpVelocity = obj.GetNumber("jumpVelocity", -900.0);
         s.Gravity = obj.GetNumber("gravity", 2400.0);
 
@@ -125,6 +148,9 @@ public:
         j.Set("walkForwardSpeed", Json(WalkForwardSpeed));
         j.Set("walkBackwardSpeed", Json(WalkBackwardSpeed));
         j.Set("dashSpeed", Json(DashSpeed));
+        j.Set("forwardMoveType", Json(ForwardMoveType));
+        j.Set("stepDistance", Json(StepDistance));
+        j.Set("stepFrames", Json(StepFrames));
         j.Set("jumpVelocity", Json(JumpVelocity));
         j.Set("gravity", Json(Gravity));
 

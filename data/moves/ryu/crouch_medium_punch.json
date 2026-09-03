@@ -1,6 +1,6 @@
 {
     "id": "crouch_medium_punch",
-    "name": "シャガミ チュウパンチ",
+    "name": "しゃがみ中パンチ",
     "startup": 6,
     "active": 3,
     "recovery": 10,

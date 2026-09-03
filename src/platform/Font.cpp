@@ -10,7 +10,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iterator>
+
+#include "core/TrueType.h"
 
 namespace kakuge {
 
@@ -204,6 +207,30 @@ bool Contains(const std::uint32_t* list, size_t count, std::uint32_t v) {
     return false;
 }
 
+// ---------------------------------------------------------------------
+// パソコンの日本語フォント
+// ---------------------------------------------------------------------
+// 日本語を描く大きさ（ピクセル）。
+//
+// 12 という数字は「漢字が読める最小」と「画面に収まる最大」の
+// ちょうど境目です。11 以下だと「発」「直」のような画数の多い字が
+// つぶれて読めません。13 以上にすると、384px 幅の画面に項目名と
+// 数値を 1 行で並べられなくなります。
+constexpr int kJpPixelSize = 12;
+
+TrueTypeFont& JpFont() {
+    static TrueTypeFont font;
+    return font;
+}
+
+// ベースライン（文字が並ぶ下の線）を、行の上端から何ピクセル下に置くか。
+// 漢字の上端がちょうど行の上端に来るように決めます。こうすると
+// 英数字（5x7）と日本語の「上端」がそろい、混ざった行がガタつきません。
+int JpBaseline() {
+    int ascent = JpFont().Ascent(kJpPixelSize);
+    return ascent > 1 ? ascent - 1 : ascent;
+}
+
 const char* const* FindGlyph(char c) {
     if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 32); // 小文字→大文字
     for (const auto& entry : kGlyphTable) {
@@ -251,8 +278,11 @@ std::uint32_t Utf8Decode(const std::string& text, size_t index, int& lengthOut) 
 // 濁点つきの字は 2 つのグリフ（素の字＋点）になるので、
 // 描く側が 1 文字＝1 グリフだと思い込まないよう、ここで束にして返します。
 struct ResolvedChar {
+    // 内蔵のドット表を使う場合
     const char* const* rows[2] = {nullptr, nullptr}; // 描くグリフ（最大 2 つ）
     int cols[2] = {0, 0};                            // それぞれの横のドット数
+    // パソコンのフォントを使う場合（こちらが入っていれば優先）
+    const TrueTypeFont::Glyph* ttf[2] = {nullptr, nullptr};
     int advance[2] = {0, 0};                         // それぞれの送り幅
     int count = 0;
 };
@@ -261,6 +291,16 @@ void PushGlyph(ResolvedChar& out, const char* const* rows, int cols, int advance
     if (out.count >= 2) return;
     out.rows[out.count] = rows;
     out.cols[out.count] = cols;
+    out.ttf[out.count] = nullptr;
+    out.advance[out.count] = advance;
+    out.count++;
+}
+
+void PushTtfGlyph(ResolvedChar& out, const TrueTypeFont::Glyph* g, int advance) {
+    if (out.count >= 2) return;
+    out.rows[out.count] = nullptr;
+    out.cols[out.count] = 0;
+    out.ttf[out.count] = g;
     out.advance[out.count] = advance;
     out.count++;
 }
@@ -274,6 +314,20 @@ ResolvedChar ResolveChar(std::uint32_t cp) {
         return out;
     }
 
+    // パソコンの日本語フォントが読めていれば、そちらで描きます。
+    // 漢字もひらがなも、置き換えなしでそのまま出せます。
+    if (JpFont().IsLoaded()) {
+        if (const TrueTypeFont::Glyph* g = JpFont().GetGlyph(cp, kJpPixelSize)) {
+            // 送り幅はフォントが持っている値に 1 ドットの隙間を足します。
+            // 隙間が無いと、隣り合う漢字がくっついて 1 文字に見えます。
+            int advance = g->advance > 0 ? g->advance + 1 : kJpPixelSize + 1;
+            PushTtfGlyph(out, g, advance);
+            return out;
+        }
+        // このフォントに無い文字は、下の内蔵カナに任せます。
+    }
+
+    // ---- ここから下は内蔵のカナ（フォントが読めない環境用）----
     // ひらがな（U+3041-U+3096）はカタカナに置き換える。
     if (cp >= 0x3041 && cp <= 0x3096) cp += 0x60;
 
@@ -311,6 +365,30 @@ ResolvedChar ResolveChar(std::uint32_t cp) {
 
 } // namespace
 
+bool InitJapaneseFont(const std::string& dataDir) {
+    namespace fs = std::filesystem;
+    // data フォルダに置かれたフォントを最優先で探します。
+    // 好きな書体に差し替えたいときは、ここに置くだけで済みます。
+    std::string preferred;
+    for (const char* name : {"font.ttf", "font.ttc", "font.otf"}) {
+        std::error_code ec;
+        fs::path candidate = fs::path(dataDir) / name;
+        if (fs::exists(candidate, ec)) { preferred = candidate.string(); break; }
+    }
+    return LoadSystemJapaneseFont(JpFont(), preferred);
+}
+
+std::string JapaneseFontPath() {
+    return JpFont().IsLoaded() ? JpFont().Path() : std::string();
+}
+
+int JapaneseLineHeight() {
+    // 内蔵のカナは 8 ドット。パソコンのフォントを使うときは、
+    // ベースラインの下（はらい）まで含めた高さにします。
+    if (!JpFont().IsLoaded()) return 8;
+    return JpBaseline() + 2;
+}
+
 float PixelTextWidth(const std::string& text, float dot) {
     int cols = 0;
     for (size_t i = 0; i < text.size();) {
@@ -333,6 +411,26 @@ void DrawPixelText(Renderer& r, const std::string& text, float x, float y, float
         i += static_cast<size_t>(len);
 
         for (int g = 0; g < rc.count; ++g) {
+            // ---- パソコンのフォントで描く場合 ----
+            if (const TrueTypeFont::Glyph* tg = rc.ttf[g]; tg != nullptr) {
+                // bearingY は「ベースラインから字の上端までの高さ」なので、
+                // 上端の位置は「行の上端 ＋ ベースライン － bearingY」です。
+                float gx = cursorX + tg->bearingX * dot;
+                float gy = y + (JpBaseline() - tg->bearingY) * dot;
+                for (int row = 0; row < tg->height; ++row) {
+                    int col = 0;
+                    while (col < tg->width) {
+                        if (!tg->Get(col, row)) { col++; continue; }
+                        int runStart = col;
+                        while (col < tg->width && tg->Get(col, row)) col++;
+                        r.FillRect(gx + runStart * dot, gy + row * dot,
+                                   (col - runStart) * dot, dot, color);
+                    }
+                }
+                cursorX += rc.advance[g] * dot;
+                continue;
+            }
+
             const char* const* rows = rc.rows[g];
             if (rows != nullptr) {
                 // 点をひとつずつ四角形として描きます。

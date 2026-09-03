@@ -55,6 +55,11 @@ bool Game::Init() {
     dm_->ReloadAll();
     settings_ = dm_->LoadSettings();
 
+    // パソコンに入っている日本語フォントを探します。
+    // 見つかれば漢字もひらがなもそのまま出せます。見つからなくても
+    // 内蔵のカナ表示に切り替わるだけなので、失敗しても先へ進みます。
+    InitJapaneseFont(GetBaseDataDir().string());
+
     window_ = SDL_CreateWindow("Kakuge - 2D Fighting Game",
                                SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                settings_.Width, settings_.Height,
@@ -371,8 +376,8 @@ void Game::DoAction(int action) {
             break;
 
         case ActDummyMode: {
-            // CPU → 立ち → しゃがみ → ジャンプ → CPU ... と順に切り替え
-            int m = (static_cast<int>(p2DummyMode_) + 1) % 4;
+            // CPU → 立ち → しゃがみ → ジャンプ → ガード → CPU ... と順に切り替え
+            int m = (static_cast<int>(p2DummyMode_) + 1) % 5;
             p2DummyMode_ = static_cast<DummyMode>(m);
             if (battle_ && battle_->CpuAI) battle_->CpuAI->Mode = p2DummyMode_;
             break;
@@ -584,7 +589,7 @@ void Game::Update(double dt) {
             AddButton(bx, by + 20, bw, bh,
                       std::string("AUTO HEAL: ") + (trainingAutoHeal_ ? "ON" : "OFF"),
                       ActToggleHeal, false);
-            const char* modeNames[4] = {"CPU", "STAND", "CROUCH", "JUMP"};
+            const char* modeNames[5] = {"CPU", "STAND", "CROUCH", "JUMP", "GUARD"};
             AddButton(bx, by + 40, bw, bh,
                       std::string("DUMMY: ") + modeNames[static_cast<int>(p2DummyMode_)],
                       ActDummyMode, false);

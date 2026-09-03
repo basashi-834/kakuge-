@@ -99,13 +99,30 @@ public:
     int Startup = 1;    // 発生
     int Active = 1;     // 持続
     int Recovery = 1;   // 硬直
-    int TotalFrame = 0; // 全体（0 なら上の 3 つの合計を使う）
+    int TotalFrame = 0; // 全体（＝発生＋持続＋硬直。表示用の写し）
+
+    // 技全体の長さ。技の進行判定（MoveExecutor::GetPhase）はこの値を
+    // 使うので、有利不利の計算もこれに合わせます。TotalFrame は
+    // 画面表示のための写しなので、計算にはこちらを使ってください。
+    int TotalFrames() const { return Startup + Active + Recovery; }
 
     // ---- 当たったときの効果 ----
     int Damage = 0;     // ダメージ
     int Hitstun = 0;    // 当てたとき相手が動けないフレーム数
     int Blockstun = 0;  // ガードされたとき相手が動けないフレーム数
-    int Hitstop = 0;    // ヒット時に両者の時間が止まるフレーム数（打撃感の演出）
+    // ---- ストップ（当たった瞬間、双方の時間が止まる時間）----
+    // ヒットとガードで長さを分けます。ガードストップのほうが短いのが
+    // 一般的で、「ガードすると手応えが軽い」という差になります。
+    // どちらも攻撃側・防御側の双方に同時に掛かり、同時に解けるので、
+    // 有利不利（硬直差）には一切影響しません。
+    int Hitstop = 0;    // ヒット時に両者の時間が止まるフレーム数
+    int Guardstop = 0;  // ガード時に両者の時間が止まるフレーム数
+
+    // ガードストップの既定値。JSON に書かれていなければ、
+    // ヒットストップから 2 フレーム引いた値（最低 1）にします。
+    static int DefaultGuardstop(int hitstop) {
+        return hitstop > 0 ? std::max(1, hitstop - 2) : 0;
+    }
     std::string GuardType = "High";  // どうガードできるか
     double ChipDamagePercent = 0.0;  // ガードされたときの削りダメージの割合
 
@@ -175,11 +192,31 @@ public:
         return nullptr;
     }
 
-    // 有利フレーム / 不利フレーム。
+    // -----------------------------------------------------------------
+    // 有利フレーム / 不利フレーム（硬直差）
+    // -----------------------------------------------------------------
+    // 定義:
+    //     硬直差 ＝ 防御側の硬直フレーム数 － 攻撃側の残り全体フレーム数
+    //
     // 「+2」なら当てたあと自分が 2 フレーム早く動ける（有利）、
-    // 「-5」なら 5 フレーム遅い（不利＝反撃される）という意味です。
-    int OnHitAdvantage() const { return Hitstun - Recovery; }
-    int OnBlockAdvantage() const { return Blockstun - Recovery; }
+    // 「-5」なら 5 フレーム遅い（不利＝反撃が確定する）という意味です。
+    //
+    // ストップ（ヒットストップ / ガードストップ）は双方に同時に掛かり、
+    // 同時に解けるので、この式には出てきません。
+    //
+    // 「残り全体フレーム数」は、当たった瞬間から技が終わるまでの数です。
+    // 持続の 1 フレーム目で当てた場合（＝最も一般的な、表に載る値）は
+    //     残り ＝ 全体 － 発生 ＝ 持続 ＋ 硬直
+    // になります。持続の後半で当てるほど残りが減り、そのぶん有利に
+    // なります（いわゆる「持続当て」）。
+    int RemainingFramesAt(int contactFrame) const {
+        return std::max(0, TotalFrames() - contactFrame);
+    }
+    // 持続 1 フレーム目で当てたときの残り（表に載せる標準の値）。
+    int RemainingFramesOnEarliestHit() const { return Active + Recovery; }
+
+    int OnHitAdvantage() const { return Hitstun - RemainingFramesOnEarliestHit(); }
+    int OnBlockAdvantage() const { return Blockstun - RemainingFramesOnEarliestHit(); }
 
     // -----------------------------------------------------------------
     // JSON からの読み込み
@@ -197,6 +234,7 @@ public:
         m.Hitstun = obj.GetInt("hitstun", 0);
         m.Blockstun = obj.GetInt("blockstun", 0);
         m.Hitstop = obj.GetInt("hitstop", 0);
+        m.Guardstop = obj.GetInt("guardstop", DefaultGuardstop(m.Hitstop));
         m.GuardType = obj.GetString("guardType", "High");
         m.ChipDamagePercent = obj.GetNumber("chipDamagePercent", 0.0);
 
@@ -309,6 +347,7 @@ public:
         j.Set("hitstun", Json(Hitstun));
         j.Set("blockstun", Json(Blockstun));
         j.Set("hitstop", Json(Hitstop));
+        j.Set("guardstop", Json(Guardstop));
         j.Set("guardType", Json(GuardType));
         j.Set("chipDamagePercent", Json(ChipDamagePercent));
 

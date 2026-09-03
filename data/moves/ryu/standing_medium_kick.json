@@ -1,6 +1,6 @@
 {
     "id": "standing_medium_kick",
-    "name": "タチ チュウキック",
+    "name": "立ち中キック",
     "startup": 8,
     "active": 3,
     "recovery": 12,

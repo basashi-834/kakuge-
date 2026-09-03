@@ -21,14 +21,17 @@
 // 最後に「RESULT: N passed, 0 failed」と出れば成功です。
 // 失敗があると終了コードが 1 になるので、自動化にも組み込めます。
 // =====================================================================
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <utility>
 #include <random>
 #include <string>
 #include <vector>
 
+#include "core/TrueType.h"
 #include "engine/BattleSystem.h"
 #include "engine/Boxes.h"
 #include "engine/CPUAI.h"
@@ -630,6 +633,465 @@ int main(int argc, char** argv) {
         Check("強い技ほどヒットストップが長い",
               stop("standing_light") < stop("standing_medium") &&
               stop("standing_medium") < stop("standing_heavy"));
+    }
+
+
+    // =================================================================
+    std::cout << "\n=== ストップ（ヒットストップ / ガードストップ）===\n";
+    // =================================================================
+    // 仕様:
+    //   1. 接触した瞬間、攻撃側・防御側の双方に同じ長さのストップが掛かる
+    //      （ヒットならヒットストップ、ガードならガードストップ）。
+    //   2. ストップ中は座標もアニメーションもタイマーも完全に停止する。
+    //      入力（先行入力）だけは受け付ける。
+    //   3. ストップが解けた瞬間から、ノックバックと硬直の消費が始まる。
+    //   4. ストップの長さは硬直差に影響しない。
+    // ここではその 4 つを、実際に試合を回して確かめます。
+    {
+        // 1 試合を組み立てるための道具。密着させた状態から始めます。
+        struct Rig {
+            BattleSystem bs;
+            void Start(const CharacterStats& cs,
+                       const std::unordered_map<std::string, MoveData>* ms,
+                       DummyMode dummy) {
+                bs.StartMatch(cs, ms, cs, ms, 99);
+                bs.TrainingMode = true;          // KO や時間切れで終わらせない
+                bs.TrainingAutoHeal = false;     // 体力回復で状態が変わらないように
+                bs.CpuAI->Mode = dummy;
+                bs.Player1.PositionX = -18;
+                bs.Player2.PositionX = 18;
+            }
+        };
+
+        // 技を 1 回出して、攻撃側・防御側それぞれが「動けるようになる」
+        // フレーム番号を測る。硬直差 = 防御側 - 攻撃側。
+        struct Measured {
+            int contactFrame = -1;      // 当たったフレーム
+            int attackerFrameAtContact = -1; // そのときの技の経過フレーム
+            int attackerFree = -1;
+            int defenderFree = -1;
+            bool blocked = false;
+            int advantage = 0;
+        };
+        auto run = [&](const std::string& moveId, DummyMode dummy) {
+            const MoveData* mv = dm.GetMove("ryu", moveId);
+            const CharacterStats* cs = dm.GetCharacter("ryu");
+            Rig rig;
+            rig.Start(*cs, dm.GetMoveset("ryu"), dummy);
+            Measured m;
+            RawInput in;
+            if (moveId.rfind("crouch_", 0) == 0) in.Down = true; // しゃがみ技
+            in.Buttons.Set(mv->Button, true);
+            bool released = false;
+            for (int f = 0; f < 300; ++f) {
+                rig.bs.Update(1.0 / 60.0, in);
+                if (!released) { in.Buttons.Set(mv->Button, false); released = true; }
+                bool defenderReacting = rig.bs.Player2.SM.CurrentState == CharState::Hitstun ||
+                                        (rig.bs.Player2.SM.CurrentState == CharState::Block &&
+                                         rig.bs.Player2.BlockstunTimer > 0);
+                if (m.contactFrame < 0 && defenderReacting) {
+                    m.contactFrame = f;
+                    m.blocked = rig.bs.Player2.BlockstunTimer > 0;
+                    m.attackerFrameAtContact = rig.bs.Player1.SM.CurrentFrame;
+                }
+                if (m.contactFrame >= 0) {
+                    // 攻撃側が自由になった＝技が終わった。
+                    if (m.attackerFree < 0 && rig.bs.Player1.SM.IsActionable()) m.attackerFree = f;
+                    // 防御側が自由になった＝のけぞり／ガード硬直が切れた。
+                    //
+                    // ここで「状態が Idle になったか」で判定してはいけません。
+                    // 後ろを入れっぱなしにしていると、硬直が切れたあとも
+                    // ガード姿勢（Block 状態）に留まります。それは本人が
+                    // 選んで構えているだけで、硬直しているわけではありません。
+                    // 硬直差はあくまで「硬直が切れたフレーム」で測ります。
+                    if (m.defenderFree < 0 && rig.bs.Player2.HitstunTimer <= 0 &&
+                        rig.bs.Player2.BlockstunTimer <= 0) m.defenderFree = f;
+                }
+                if (m.attackerFree >= 0 && m.defenderFree >= 0) break;
+            }
+            m.advantage = m.defenderFree - m.attackerFree;
+            return m;
+        };
+
+        // ---- ガードストップはヒットストップより短い ----
+        {
+            bool allShorter = true, allPositive = true;
+            for (const char* id : {"standing_light", "standing_medium", "standing_heavy",
+                                   "standing_light_kick", "standing_heavy_kick"}) {
+                const MoveData* mv = dm.GetMove("ryu", id);
+                if (mv->Guardstop >= mv->Hitstop) allShorter = false;
+                if (mv->Guardstop < 1) allPositive = false;
+            }
+            Check("ガードストップはヒットストップより短い", allShorter);
+            Check("ガードストップは 1F 以上ある", allPositive);
+            Check("ガードストップの既定値は ヒットストップ-2（最低 1）",
+                  MoveData::DefaultGuardstop(8) == 6 && MoveData::DefaultGuardstop(2) == 1 &&
+                  MoveData::DefaultGuardstop(1) == 1 && MoveData::DefaultGuardstop(0) == 0);
+        }
+
+        // ---- 硬直差が定義どおりか（ヒット）----
+        {
+            bool ok = true;
+            std::string detail;
+            for (const char* id : {"standing_light", "standing_medium", "standing_light_kick",
+                                   "standing_medium_kick"}) {
+                const MoveData* mv = dm.GetMove("ryu", id);
+                Measured m = run(id, DummyMode::Stand);
+                // 定義: 硬直差 = 防御側の硬直F - 攻撃側の残り全体F
+                int expected = mv->Hitstun - mv->RemainingFramesAt(m.attackerFrameAtContact);
+                if (m.advantage != expected) {
+                    ok = false;
+                    detail += std::string(" ") + id + "(" + std::to_string(m.advantage) +
+                              "!=" + std::to_string(expected) + ")";
+                }
+            }
+            Check("ヒット時の硬直差が定義どおり（実測 = 硬直F - 残り全体F）" + detail, ok);
+        }
+
+        // ---- 表に出す値（持続 1F 目で当てた場合）と実測が一致するか ----
+        {
+            bool ok = true;
+            for (const char* id : {"standing_light", "standing_medium", "standing_light_kick",
+                                   "standing_medium_kick"}) {
+                const MoveData* mv = dm.GetMove("ryu", id);
+                Measured m = run(id, DummyMode::Stand);
+                // 持続 1F 目で当たっているなら、表の値と一致するはず
+                if (m.attackerFrameAtContact == mv->Startup && m.advantage != mv->OnHitAdvantage()) {
+                    ok = false;
+                }
+            }
+            Check("エディタに出る有利フレームが実測と一致する", ok);
+        }
+
+        // ---- 硬直差（ガード）----
+        {
+            bool ok = true;
+            std::string detail;
+            for (const char* id : {"standing_light", "standing_medium", "standing_light_kick"}) {
+                const MoveData* mv = dm.GetMove("ryu", id);
+                Measured m = run(id, DummyMode::Guard);
+                if (!m.blocked) { ok = false; detail += std::string(" ") + id + "(ガードせず)"; continue; }
+                int expected = mv->Blockstun - mv->RemainingFramesAt(m.attackerFrameAtContact);
+                if (m.advantage != expected) {
+                    ok = false;
+                    detail += std::string(" ") + id + "(" + std::to_string(m.advantage) +
+                              "!=" + std::to_string(expected) + ")";
+                }
+            }
+            Check("ガード時の硬直差が定義どおり" + detail, ok);
+        }
+
+        // ---- ストップの長さを変えても硬直差が変わらない ----
+        {
+            const CharacterStats* cs = dm.GetCharacter("ryu");
+            // 技のコピーを作り、ヒットストップだけ変えて比べます。
+            std::unordered_map<std::string, MoveData> ms = *dm.GetMoveset("ryu");
+            auto advantageWithStop = [&](int hitstop) {
+                ms["standing_light"].Hitstop = hitstop;
+                ms["standing_light"].Guardstop = MoveData::DefaultGuardstop(hitstop);
+                BattleSystem bs;
+                bs.StartMatch(*cs, &ms, *cs, &ms, 99);
+                bs.TrainingMode = true; bs.TrainingAutoHeal = false;
+                bs.CpuAI->Mode = DummyMode::Stand;
+                bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+                RawInput in;
+                in.Buttons.LP = true;
+                int atk = -1, def = -1, contact = -1;
+                for (int f = 0; f < 300; ++f) {
+                    bs.Update(1.0 / 60.0, in);
+                    in.Buttons.LP = false;
+                    if (contact < 0 && bs.Player2.SM.CurrentState == CharState::Hitstun) contact = f;
+                    if (contact >= 0) {
+                        if (atk < 0 && bs.Player1.SM.IsActionable()) atk = f;
+                        if (def < 0 && bs.Player2.HitstunTimer <= 0) def = f;
+                    }
+                    if (atk >= 0 && def >= 0) break;
+                }
+                return def - atk;
+            };
+            int a0 = advantageWithStop(0);
+            int a4 = advantageWithStop(4);
+            int a15 = advantageWithStop(15);
+            Check("ストップの長さは硬直差に影響しない (" + std::to_string(a0) + "/" +
+                      std::to_string(a4) + "/" + std::to_string(a15) + ")",
+                  a0 == a4 && a4 == a15);
+        }
+
+        // ---- ストップ中は完全停止する ----
+        {
+            const CharacterStats* cs = dm.GetCharacter("ryu");
+            const auto* ms = dm.GetMoveset("ryu");
+            BattleSystem bs;
+            bs.StartMatch(*cs, ms, *cs, ms, 99);
+            bs.TrainingMode = false; // 制限時間が止まることも見たいので通常モード
+            bs.CpuAI->Mode = DummyMode::Stand;
+            bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+
+            RawInput in;
+            in.Buttons.LP = true;
+            bool moved = false, animAdvanced = false, timerAdvanced = false, clockAdvanced = false;
+            int stopFramesSeen = 0;
+            double px1 = 0, px2 = 0;
+            int frame1 = 0, frame2 = 0, hitstun = 0, roundTime = 0;
+            bool prevStopped = false;
+            int knockbackStartFrame = -1, stopEndFrame = -1;
+            for (int f = 0; f < 120; ++f) {
+                bool stoppedNow = bs.IsStopped();
+                if (stoppedNow) {
+                    // 止まっている間、前フレームからの変化を調べる
+                    if (prevStopped) {
+                        stopFramesSeen++;
+                        if (bs.Player1.PositionX != px1 || bs.Player2.PositionX != px2) moved = true;
+                        if (bs.Player1.SM.CurrentFrame != frame1 ||
+                            bs.Player2.SM.CurrentFrame != frame2) animAdvanced = true;
+                        if (bs.Player2.HitstunTimer != hitstun) timerAdvanced = true;
+                        if (bs.FramesLeft != roundTime) clockAdvanced = true;
+                    }
+                    px1 = bs.Player1.PositionX; px2 = bs.Player2.PositionX;
+                    frame1 = bs.Player1.SM.CurrentFrame; frame2 = bs.Player2.SM.CurrentFrame;
+                    hitstun = bs.Player2.HitstunTimer;
+                    roundTime = bs.FramesLeft;
+                } else if (prevStopped) {
+                    stopEndFrame = f;               // ストップが解けた最初のフレーム
+                }
+                prevStopped = stoppedNow;
+
+                double before = bs.Player2.PositionX;
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.LP = false;
+                if (knockbackStartFrame < 0 && bs.Player2.PositionX != before &&
+                    bs.Player2.SM.CurrentState == CharState::Hitstun) {
+                    knockbackStartFrame = f;
+                }
+            }
+            Check("ストップが実際に発生している (" + std::to_string(stopFramesSeen) + "F)",
+                  stopFramesSeen > 0);
+            Check("ストップ中は座標が動かない", !moved);
+            Check("ストップ中はアニメーションのコマが進まない", !animAdvanced);
+            Check("ストップ中はのけぞりタイマーが減らない", !timerAdvanced);
+            Check("ストップ中は試合の制限時間も止まる", !clockAdvanced);
+            Check("ノックバックはストップが解けたフレームから始まる (" +
+                      std::to_string(knockbackStartFrame) + " == " +
+                      std::to_string(stopEndFrame) + ")",
+                  knockbackStartFrame >= 0 && knockbackStartFrame == stopEndFrame);
+        }
+
+        // ---- ストップ中の先行入力 ----
+        {
+            const CharacterStats* cs = dm.GetCharacter("ryu");
+            const auto* ms = dm.GetMoveset("ryu");
+            BattleSystem bs;
+            bs.StartMatch(*cs, ms, *cs, ms, 99);
+            bs.TrainingMode = true; bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Stand;
+            bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+
+            RawInput in;
+            in.Buttons.LP = true;
+            bool pressedDuringStop = false;
+            std::string moveAfterStop;
+            for (int f = 0; f < 60; ++f) {
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.LP = false;
+                in.Buttons.MP = false;
+                if (bs.IsStopped() && !pressedDuringStop) {
+                    // 止まっている最中に中パンチを 1 フレームだけ押す
+                    in.Buttons.MP = true;
+                    pressedDuringStop = true;
+                } else if (pressedDuringStop && !bs.IsStopped()) {
+                    if (bs.Player1.SM.CurrentMove == "standing_medium") {
+                        moveAfterStop = bs.Player1.SM.CurrentMove;
+                        break;
+                    }
+                }
+            }
+            Check("ストップ中に押したボタンが、解けた直後に技として出る",
+                  moveAfterStop == "standing_medium");
+        }
+    }
+
+
+    // =================================================================
+    std::cout << "\n=== 前へ踏み込む方式（ダッシュ / ステップ）===\n";
+    // =================================================================
+    {
+        const CharacterStats* base = dm.GetCharacter("ryu");
+        const auto* ms = dm.GetMoveset("ryu");
+
+        // 前・前 と入れて踏み込ませ、進んだ距離と掛かったフレーム数を測る。
+        auto runForward = [&](const CharacterStats& cs, int frames) {
+            BattleSystem bs;
+            bs.StartMatch(cs, ms, cs, ms, 99);
+            bs.TrainingMode = true; bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Stand;
+            // 押し合いにも「離れすぎの制限」にも掛からない距離に置きます。
+            // 上限（300）より離して置くと、毎フレーム自動で詰められて
+            // しまい、踏み込んだ距離を正しく測れません。
+            bs.Player1.PositionX = -100; bs.Player2.PositionX = 100;
+            double start = bs.Player1.PositionX;
+            RawInput in;
+            // 前 → 離す → 前 で「前・前」の 2 回入力になります。
+            for (int f = 0; f < frames; ++f) {
+                in.Right = (f == 0) || (f >= 2);
+                bs.Update(1.0 / 60.0, in);
+            }
+            return bs.Player1.PositionX - start;
+        };
+
+        // ---- ステップ: 決まった距離で必ず止まる ----
+        {
+            CharacterStats stepper = *base;
+            stepper.ForwardMoveType = "step";
+            stepper.StepDistance = GameSpec::CharacterVisualWidth; // キャラ 1 体ぶん
+            stepper.StepFrames = 12;
+            // ステップが終わるだけの時間を回す（レバーは入れっぱなし）
+            double moved = runForward(stepper, 14);
+            Check("ステップはキャラ 1 体ぶん（52px）進む (" +
+                      std::to_string(static_cast<int>(std::lround(moved))) + "px)",
+                  std::abs(moved - GameSpec::CharacterVisualWidth) < 2.0);
+
+            // 距離を変えたらそのぶんだけ進む
+            stepper.StepDistance = 100.0;
+            double moved2 = runForward(stepper, 14);
+            Check("ステップ距離を変えるとそのとおりに進む (" +
+                      std::to_string(static_cast<int>(std::lround(moved2))) + "px)",
+                  std::abs(moved2 - 100.0) < 2.0);
+
+            // フレーム数を変えても距離は変わらない（速さが変わるだけ）
+            stepper.StepDistance = GameSpec::CharacterVisualWidth;
+            stepper.StepFrames = 6;
+            double moved3 = runForward(stepper, 8);
+            Check("ステップのフレーム数を変えても距離は同じ",
+                  std::abs(moved3 - GameSpec::CharacterVisualWidth) < 2.0);
+        }
+
+        // ---- ステップは途中でレバーを離しても最後まで進む ----
+        {
+            CharacterStats stepper = *base;
+            stepper.ForwardMoveType = "step";
+            stepper.StepFrames = 12;
+            BattleSystem bs;
+            bs.StartMatch(stepper, ms, stepper, ms, 99);
+            bs.TrainingMode = true; bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Stand;
+            bs.Player1.PositionX = -100; bs.Player2.PositionX = 100;
+            double start = bs.Player1.PositionX;
+            RawInput in;
+            for (int f = 0; f < 14; ++f) {
+                in.Right = (f == 0) || (f == 2); // 2 回入れたらすぐ離す
+                bs.Update(1.0 / 60.0, in);
+            }
+            double moved = bs.Player1.PositionX - start;
+            Check("レバーを離してもステップは最後まで進みきる (" +
+                      std::to_string(static_cast<int>(std::lround(moved))) + "px)",
+                  std::abs(moved - stepper.StepDistance) < 2.0);
+        }
+
+        // ---- ダッシュ: 押している間ずっと速い ----
+        {
+            CharacterStats dasher = *base;
+            dasher.ForwardMoveType = "dash";
+            double moved = runForward(dasher, 14);
+            // ダッシュは「速さ×時間」なので、ステップの決まった距離とは
+            // 一致しません。歩きより速いことだけを確かめます。
+            CharacterStats walker = *base;
+            walker.ForwardMoveType = "dash";
+            BattleSystem bs;
+            bs.StartMatch(walker, ms, walker, ms, 99);
+            bs.TrainingMode = true; bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Stand;
+            bs.Player1.PositionX = -100; bs.Player2.PositionX = 100;
+            double start = bs.Player1.PositionX;
+            RawInput in; in.Right = true; // 入れっぱなし＝ただの歩き
+            for (int f = 0; f < 14; ++f) bs.Update(1.0 / 60.0, in);
+            double walked = bs.Player1.PositionX - start;
+            Check("ダッシュは歩きより速く進む (" +
+                      std::to_string(static_cast<int>(std::lround(moved))) + "px > " +
+                      std::to_string(static_cast<int>(std::lround(walked))) + "px)",
+                  moved > walked);
+        }
+
+        // ---- 設定の読み書き ----
+        {
+            CharacterStats cs = *base;
+            cs.ForwardMoveType = "step";
+            cs.StepDistance = 77.0;
+            cs.StepFrames = 9;
+            CharacterStats back = CharacterStats::FromJson(cs.ToJson());
+            Check("前進方式が JSON に保存・復元される",
+                  back.ForwardMoveType == "step" && std::abs(back.StepDistance - 77.0) < 0.001 &&
+                  back.StepFrames == 9);
+
+            Json bad = cs.ToJson();
+            bad.Set("forwardMoveType", Json(std::string("teleport")));
+            Check("知らない前進方式は dash 扱いになる",
+                  CharacterStats::FromJson(bad).ForwardMoveType == "dash");
+        }
+    }
+
+
+    // =================================================================
+    std::cout << "\n=== 日本語フォントの読み込み（TrueType）===\n";
+    // =================================================================
+    // パソコンに入っているフォントを読むので、環境によっては
+    // 見つからないことがあります。その場合は「内蔵のカナに戻る」ことだけ
+    // 確かめて、あとは飛ばします（失敗にはしません）。
+    {
+        TrueTypeFont font;
+        bool found = LoadSystemJapaneseFont(font, std::string());
+        if (!found) {
+            std::cout << "  （日本語フォントが見つからない環境のため、"
+                         "内蔵のカナ表示に切り替わります）\n";
+            Check("フォントが無くても読み込みは安全に失敗する", !font.IsLoaded());
+        } else {
+            std::cout << "  使用フォント: " << font.Path() << "\n";
+            Check("日本語フォントを読み込めた", font.IsLoaded());
+            Check("ひらがな・カタカナ・漢字が入っている",
+                  font.HasGlyph(0x3042) && font.HasGlyph(0x30A2) && font.HasGlyph(0x6C34));
+            Check("英数字も入っている", font.HasGlyph('A') && font.HasGlyph('0'));
+
+            // 12 ピクセルで描いたときの形をざっと確かめます。
+            const int size = 12;
+            const TrueTypeFont::Glyph* g = font.GetGlyph(0x751F, size); // 「生」
+            bool shaped = g != nullptr && g->width > 4 && g->width <= size + 2 &&
+                          g->height > 4 && g->height <= size + 2;
+            Check("漢字が 12px の枠に収まる大きさで描ける", shaped);
+
+            if (g != nullptr) {
+                int ink = 0;
+                for (int y = 0; y < g->height; ++y) {
+                    for (int x = 0; x < g->width; ++x) if (g->Get(x, y)) ink++;
+                }
+                // 真っ白（1 つも点が無い）でも、真っ黒（全部点）でもないこと。
+                int total = g->width * g->height;
+                Check("漢字の中身が塗られている（白紙でも塗りつぶしでもない）",
+                      ink > total / 10 && ink < total * 9 / 10);
+            }
+
+            // 同じ字を 2 回頼んだら、同じものが返る（覚えている）。
+            const TrueTypeFont::Glyph* again = font.GetGlyph(0x751F, size);
+            Check("同じ字は覚えておいて使い回す", g == again);
+
+            // 送り幅は全角ぶん（およそ 1 文字ぶん）
+            Check("全角の送り幅がだいたい 1 文字ぶん",
+                  g != nullptr && g->advance >= size - 2 && g->advance <= size + 2);
+
+            // 使われていない領域の文字は「無い」と答える
+            Check("フォントに無い文字は nullptr を返す",
+                  font.GetGlyph(0x0F0000, size) == nullptr);
+        }
+
+        // 壊れたファイルを渡しても落ちない
+        TrueTypeFont broken;
+        fs::path junk = tempUserDir / "not-a-font.ttf";
+        {
+            std::ofstream out(junk, std::ios::binary);
+            out << "this is definitely not a font file";
+        }
+        Check("フォントでないファイルは読み込みに失敗する（落ちない）",
+              !broken.LoadFromFile(junk.string()));
+        Check("存在しないファイルも安全に失敗する",
+              !broken.LoadFromFile((tempUserDir / "missing.ttf").string()));
     }
 
     // 一時フォルダを片付ける

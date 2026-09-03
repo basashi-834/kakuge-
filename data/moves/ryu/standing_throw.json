@@ -1,6 +1,6 @@
 {
     "id": "standing_throw",
-    "name": "ナゲ",
+    "name": "投げ",
     "startup": 3,
     "active": 2,
     "recovery": 22,

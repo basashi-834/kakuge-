@@ -101,6 +101,11 @@ private:
         bool hasRange = false;
         int decimals = 0; // 表示する小数桁数
 
+        // 単位（"PX/S" など）。数値のうしろに小さく出します。
+        // 「67.1」だけを見ても何の 67.1 なのか分からないので、
+        // 単位が無いと調整のしようがありません。
+        std::string unit;
+
         // 文字項目
         std::function<std::string()> getText;
         std::function<void(const std::string&)> setText;

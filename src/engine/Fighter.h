@@ -63,6 +63,12 @@ struct HitResult {
     bool blocked = false;  // ガードされた
     bool whiffed = false;  // 無敵などで当たらなかった
     CounterKind counter = CounterKind::None;
+    // この当たりで発生したストップの長さ（ヒットなら Hitstop、
+    // ガードなら Guardstop）。攻撃側にも同じ値を掛けるため、
+    // 呼び出し元（BattleSystem）に返します。
+    // 「どちらにも同じ値を同時に掛ける」ことが、ストップを
+    // 有利不利に影響させないための条件です。
+    int stopFrames = 0;
 };
 
 class Fighter {
@@ -92,11 +98,15 @@ public:
     // 各種タイマー（すべてフレーム単位。0 になったら効果終了）
     int HitstunTimer = 0;   // のけぞり
     int BlockstunTimer = 0; // ガード硬直
-    int HitstopTimer = 0;   // ヒットストップ（両者の時間が止まる）
+    // ストップ（ヒットストップ / ガードストップ）の残り。
+    // 0 より大きい間、このキャラクターの時間は完全に止まります
+    //（アニメーション・座標・すべてのタイマーが進みません）。
+    int HitstopTimer = 0;
     int KnockdownTimer = 0; // ダウン
     int WakeupTimer = 0;    // 起き上がり
     int ThrownTimer = 0;    // 投げられ中
     int DashTimer = 0;      // ダッシュ中
+    int StepTimer = 0;      // ステップ中（決まった距離だけ前へ踏み込む）
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;   // 試合開始からの総フレーム数
 
@@ -122,8 +132,33 @@ public:
     bool LastHitBlocked = false;
     CounterKind LastCounterKind = CounterKind::None;
 
+    // ---- 先行入力（バッファ）----
+    // 動けない間（ストップ中・のけぞり中・技の硬直中）に押したボタンを
+    // 少しの間だけ覚えておき、動けるようになった瞬間に技を出します。
+    //
+    // これが無いと、ヒットストップ中に押したボタンは「押した瞬間」を
+    // 逃して消えてしまい、目押しでしかコンボがつながらなくなります。
+    // 実機の格闘ゲームがどれも持っている仕組みです。
+    struct BufferedPress {
+        std::string button;
+        int clock = 0; // 押したときの BufferClock
+    };
+    std::vector<BufferedPress> InputQueue;
+    // 先行入力を覚えておく長さ。長すぎると「押していないのに技が出る」、
+    // 短すぎると「押したのに出ない」。6 フレーム（0.1 秒）が目安です。
+    static constexpr int InputBufferFrames = 6;
+    // 先行入力の寿命を数える時計。ストップ中は進めません
+    //（止まっている間に先行入力が期限切れになってしまわないように）。
+    int BufferClock = 0;
+
     ButtonsHeld HeldButtonsPrev;      // 前フレームのボタン状態（押した瞬間の検出用）
-    int LastForwardTapFrame = -999;   // 前入力した最後のフレーム（ダッシュ判定用）
+    // ---- 「前・前」の検出用 ----
+    // 前を「入れた瞬間」だけを数えます。押しっぱなしを数えてしまうと、
+    // 前に歩こうとしただけで毎回ダッシュになってしまいます
+    //（1 フレーム目に 1 回目、2 フレーム目に 2 回目と数えられるため）。
+    int LastForwardTapFrame = -999;   // 前を入れた最後のフレーム
+    bool ForwardHeldPrev = false;     // 前フレームに前を入れていたか
+    bool ForwardTappedNow = false;    // 今フレームに前を「入れ直した」か
 
     static constexpr double GroundY = 0.0;
     static constexpr int DashInputWindow = 14;   // 前・前 をこのフレーム以内に入れるとダッシュ
@@ -149,7 +184,12 @@ public:
         IsDead = false;
         CurrentMoveData = nullptr;
         HitstunTimer = BlockstunTimer = HitstopTimer = 0;
-        KnockdownTimer = WakeupTimer = ThrownTimer = DashTimer = 0;
+        InputQueue.clear();
+        BufferClock = 0;
+        KnockdownTimer = WakeupTimer = ThrownTimer = DashTimer = StepTimer = 0;
+        LastForwardTapFrame = -999;
+        ForwardHeldPrev = false;
+        ForwardTappedNow = false;
         Gauge.Value = 0.0;
         InputBuf.Clear();
         SM.ChangeState(CharState::Idle, "");
@@ -192,20 +232,60 @@ public:
         }
         InputBuf.RecordFrame(FrameCounter, digit, pressed);
 
-        // 2) ヒットストップ中は、入力の記録以外すべて止める。
-        //    これが「殴った瞬間に画面が一瞬止まる」あの打撃感の正体です。
+        // 2) ストップ（ヒットストップ / ガードストップ）中は、
+        //    入力の受け付け以外をすべて止める。
+        //
+        //    ここで return するので、この下にある
+        //      SM.Tick()          … アニメーションのコマ送り
+        //      HandleStateLogic() … のけぞり・硬直などのカウントダウン
+        //      ApplyPhysics()     … 座標の更新（ノックバックもここ）
+        //    がすべて動きません。つまり「完全停止」です。
+        //    ノックバックはストップが解けた次のフレームから始まります。
+        //
+        //    入力だけは上で記録済みなので、止まっている間に押した
+        //    ボタンも先行入力として拾えます。
         if (HitstopTimer > 0) {
             HitstopTimer -= 1;
+            PushBufferedPresses(pressed); // 止まっている間の入力も覚える
             return;
         }
 
-        // 3) 状態を 1 フレーム進め、状態ごとの処理をして、物理を適用する
+        // 3) 「前を入れ直したか」を判定する。ここでやるのは、
+        //    どの状態にいても（技の最中でも、のけぞり中でも）
+        //    レバーの前フレームとの差を正しく取り続けるためです。
+        bool forwardNow = IsHoldingForward(raw);
+        ForwardTappedNow = forwardNow && !ForwardHeldPrev;
+        ForwardHeldPrev = forwardNow;
+
+        // 4) 先行入力の管理。止まっていないフレームだけ時計を進めます。
+        BufferClock += 1;
+        PushBufferedPresses(pressed);
+        ExpireBufferedPresses();
+
+        // 5) 状態を 1 フレーム進め、状態ごとの処理をして、物理を適用する
         SM.Tick();
         HandleStateLogic(raw, pressed);
         ApplyPhysics(dt);
         ClampToStage();
         UpdateFacing();
     }
+
+    // 押されたボタンを先行入力に積む。
+    void PushBufferedPresses(const std::vector<std::string>& pressed) {
+        for (const auto& b : pressed) InputQueue.push_back({b, BufferClock});
+    }
+
+    // 古くなった先行入力を捨てる。
+    void ExpireBufferedPresses() {
+        InputQueue.erase(std::remove_if(InputQueue.begin(), InputQueue.end(),
+                                        [this](const BufferedPress& p) {
+                                            return (BufferClock - p.clock) > InputBufferFrames;
+                                        }),
+                         InputQueue.end());
+    }
+
+    // ストップ中かどうか（BattleSystem が「全部止める」判断に使います）。
+    bool IsStopped() const { return HitstopTimer > 0; }
 
     // 「今フレームで新しく押されたボタン」だけを取り出す。
     // 押しっぱなしを除くのが大事です。除かないと、ボタンを押している
@@ -324,6 +404,18 @@ public:
         }
     }
 
+    // このキャラクターの前進が「ステップ」方式か。
+    bool UsesStep() const { return Stats.ForwardMoveType == "step"; }
+
+    // ステップの速さ（px/秒）。
+    // 「決めた距離を、決めたフレーム数でちょうど進みきる」速さを
+    // 逆算します。距離とフレーム数のどちらを変えても、進む距離は
+    // 必ず StepDistance になります。
+    double StepSpeed() const {
+        int frames = std::max(1, Stats.StepFrames);
+        return Stats.StepDistance * Constants::Fps / frames;
+    }
+
     // 値を目標へ step ずつ近づける（行き過ぎないように）。
     static double MoveToward(double current, double target, double step) {
         if (current < target) return std::min(current + step, target);
@@ -333,6 +425,24 @@ public:
 
     // 地上での移動・ジャンプ・しゃがみ・ガード姿勢の処理。
     void HandleGroundMovement(const RawInput& raw) {
+        // ---- ステップ中は操作を受け付けない ----
+        // ステップは「キャラクター 1 体ぶん前へ踏み込む」決まった動きです。
+        // 途中でレバーを離しても最後まで進みきるのが肝心で、そのおかげで
+        // 「ステップ 1 回でどれだけ近づけるか」を体で覚えられます。
+        // 逆にここで入力を見てしまうと、進む距離が毎回変わってしまい、
+        // ダッシュと変わらないものになります。
+        //
+        // なお技でキャンセルすることはできます（TryStartMove が
+        // この関数より先に呼ばれるため）。踏み込んでから殴る、という
+        // 使い方ができるのはそのおかげです。
+        if (StepTimer > 0) {
+            StepTimer -= 1;
+            VelocityX = StepSpeed() * Facing;
+            SM.ChangeState(CharState::WalkForward, "");
+            if (StepTimer <= 0) VelocityX = 0.0;
+            return;
+        }
+
         IsCrouchingGuard = raw.Down && IsHoldingBack(raw);
 
         // 上入力 → ジャンプ。斜めに入れれば前ジャンプ・後ろジャンプ。
@@ -354,12 +464,34 @@ public:
         }
 
         if (IsHoldingForward(raw)) {
-            // 前入力。短い間に 2 回入れるとダッシュになります
+            // 前入力。短い間に 2 回入れると、前へ踏み込みます
             //（DashInputWindow フレーム以内の 2 回目を検出）。
-            if ((FrameCounter - LastForwardTapFrame) <= DashInputWindow && DashTimer <= 0) {
-                DashTimer = DashDuration;
+            // 踏み込み方はキャラクターの設定で 2 通りあります。
+            // 2 回目の「入れ直し」が、前回から DashInputWindow フレーム
+            // 以内なら踏み込みます。押しっぱなしは 1 回目のままなので、
+            // ただの前歩きになります。
+            bool doubleTapped = ForwardTappedNow &&
+                                (FrameCounter - LastForwardTapFrame) <= DashInputWindow;
+            if (doubleTapped && DashTimer <= 0 && StepTimer <= 0) {
+                if (UsesStep()) {
+                    StepTimer = std::max(1, Stats.StepFrames);
+                    // 「前・前」の記録を消します。消さないと、ステップ中は
+                    // この関数を通らない（上で return する）ので前入力の
+                    // 時刻が古いまま残り、ステップが終わった直後に
+                    // もう一度成立して 2 回連続で飛んでしまいます。
+                    LastForwardTapFrame = -999;
+                } else {
+                    DashTimer = DashDuration;
+                }
             }
-            LastForwardTapFrame = FrameCounter;
+            if (StepTimer <= 0 && ForwardTappedNow) LastForwardTapFrame = FrameCounter;
+            if (StepTimer > 0) {
+                // 踏み込んだ最初のフレーム。次のフレームからは上の
+                // 「ステップ中」の分岐が処理を引き継ぎます。
+                VelocityX = StepSpeed() * Facing;
+                SM.ChangeState(CharState::WalkForward, "");
+                return;
+            }
             double spd = Stats.WalkForwardSpeed;
             if (DashTimer > 0) spd = Stats.DashSpeed;
             VelocityX = spd * Facing;
@@ -393,7 +525,24 @@ public:
     // 必殺技が永遠に出せません。
     bool TryStartMove(const RawInput& raw, const std::vector<std::string>& pressed) {
         (void)raw;
-        if (pressed.empty() || Moveset == nullptr) return false;
+        if (Moveset == nullptr) return false;
+
+        // 「今フレーム押されたボタン」と「先行入力で覚えているボタン」を
+        // 合わせて候補にします。動けない間に押したボタンが、
+        // 動けるようになった瞬間に技として出るのはこの合成のおかげです。
+        std::vector<std::string> usable = pressed;
+        for (const auto& p : InputQueue) {
+            if (std::find(usable.begin(), usable.end(), p.button) == usable.end()) {
+                usable.push_back(p.button);
+            }
+        }
+        // 投げ（LP＋LK の同時押し）も先行入力から復元します。
+        bool hasLP = std::find(usable.begin(), usable.end(), "LP") != usable.end();
+        bool hasLK = std::find(usable.begin(), usable.end(), "LK") != usable.end();
+        bool hasThrow = std::find(usable.begin(), usable.end(), "Throw") != usable.end();
+        if (hasLP && hasLK && !hasThrow) usable.push_back("Throw");
+
+        if (usable.empty()) return false;
         std::string stance = CurrentStance();
 
         std::vector<const MoveData*> superCandidates, specialCandidates, normalCandidates;
@@ -409,7 +558,7 @@ public:
             }
         }
         // 通常技（ボタンだけ。姿勢が一致するものだけ）
-        for (const auto& btn : pressed) {
+        for (const auto& btn : usable) {
             for (const auto& kv : *Moveset) {
                 const MoveData& move = kv.second;
                 if (move.InputCommand.empty() && move.Button == btn && move.Stance == stance) {
@@ -473,6 +622,11 @@ public:
         // キャラクターが前に滑っていくように見えてしまいます。
         // 空中技は逆に、ジャンプの勢いを保つのが自然なのでそのままです。
         if (CurrentStance() != "air") VelocityX = 0.0;
+
+        // 先行入力を空にします。消さないと、1 回の押しがバッファに
+        // 残ったまま、キャンセル可能時間帯に入った瞬間もう一度技を
+        // 出してしまいます（押していないのに 2 回出る）。
+        InputQueue.clear();
 
         SM.ChangeState(CharState::Attack, move.Id);
         PendingSounds.push_back("attack");
@@ -550,7 +704,13 @@ public:
         if (move.GuardType != Constants::GuardThrow) blocked = CheckGuard(move);
         if (blocked) counter = CounterKind::None; // ガードできたならカウンターではない
 
-        HitstopTimer = move.Hitstop;
+        // ストップの長さ。ヒットとガードで別の値です。
+        // ここでは自分（防御側）に掛けるだけで、攻撃側には触りません。
+        // 攻撃側にも同じ値を同じフレームに掛けるのは呼び出し元
+        //（BattleSystem::ApplyStop）の仕事です。1 か所にまとめておけば、
+        // 「片方だけ長く止まって有利不利がずれる」ことが起こりません。
+        int stopFrames = blocked ? move.Guardstop : move.Hitstop;
+        HitstopTimer = std::max(HitstopTimer, stopFrames);
 
         if (blocked) {
             // ---- ガードされた ----
@@ -597,7 +757,7 @@ public:
         }
         LastHitBlocked = blocked;
         LastCounterKind = counter;
-        return {blocked, false, counter};
+        return {blocked, false, counter, stopFrames};
     }
 
     void EnterKnockdown(bool hard, int customFrames) {

@@ -1,6 +1,6 @@
 {
     "id": "standing_light",
-    "name": "タチ ジャクパンチ",
+    "name": "立ち弱パンチ",
     "startup": 4,
     "active": 3,
     "recovery": 7,

@@ -1,6 +1,6 @@
 {
     "id": "standing_heavy",
-    "name": "タチ キョウパンチ",
+    "name": "立ち強パンチ",
     "startup": 7,
     "active": 3,
     "recovery": 13,

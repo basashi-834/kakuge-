@@ -405,7 +405,21 @@ void Game::DrawSettings() {
     // 形に合わせて変わるので、固定の文字列にはできません。
     std::string canvas = "CANVAS " + std::to_string(VirtualW) + "X" +
                          std::to_string(VirtualH) + "  (NO BLACK BARS)";
-    DrawPixelTextCentered(r_, canvas, 0, VirtualH - 14, VirtualW, 10, 1.0f, pal.Ink45);
+    DrawPixelTextCentered(r_, canvas, 0, VirtualH - 24, VirtualW, 10, 1.0f, pal.Ink45);
+
+    // 日本語をどのフォントで出しているか。エディタの字が読めないとき、
+    // 「フォントを見つけられていない」のか「別の問題」なのかが分かります。
+    std::string fontPath = JapaneseFontPath();
+    std::string fontLine;
+    if (fontPath.empty()) {
+        fontLine = "JP FONT: BUILT-IN KANA (NO SYSTEM FONT FOUND)";
+    } else {
+        // 長いパスは末尾（ファイル名）だけ出します。
+        size_t slash = fontPath.find_last_of("/\\");
+        fontLine = "JP FONT: " + (slash == std::string::npos ? fontPath
+                                                             : fontPath.substr(slash + 1));
+    }
+    DrawPixelTextCentered(r_, fontLine, 0, VirtualH - 13, VirtualW, 10, 1.0f, pal.Ink45);
 }
 
 // ---------------------------------------------------------------------
@@ -427,7 +441,7 @@ void Game::DrawControls() {
         {"U / I / O",  "PUNCH  L/M/H"},
         {"J / K / L",  "KICK   L/M/H"},
         {"U + J",      "THROW"},
-        {"D,D",        "DASH FORWARD"},
+        {"D,D",        "DASH / STEP FWD"},
         {"236 + P",    "FIREBALL"},
         {"623 + P",    "ANTI-AIR SPECIAL"},
         {"214 + K",    "HURRICANE KICK"},

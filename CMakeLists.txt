@@ -206,6 +206,7 @@ endif()
 set(KAKUGE_SOURCES
     src/main.cpp
     src/core/Json.cpp
+    src/core/TrueType.cpp
     src/platform/Renderer.cpp
     src/platform/Font.cpp
     src/platform/Figure.cpp
@@ -279,7 +280,7 @@ set_target_properties(Kakuge PROPERTIES
 # ください。ビルド後は build/bin/EngineTests.exe を実行するだけです。
 option(KAKUGE_BUILD_TESTS "エンジンの単体テストもビルドする" ON)
 if(KAKUGE_BUILD_TESTS)
-    add_executable(EngineTests tests/EngineTests.cpp src/core/Json.cpp)
+    add_executable(EngineTests tests/EngineTests.cpp src/core/Json.cpp src/core/TrueType.cpp)
     target_include_directories(EngineTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
     # コントローラのテストだけは SDL2 を使います（仮想ジョイスティックを

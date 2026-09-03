@@ -1,6 +1,6 @@
 {
     "id": "standing_light_kick",
-    "name": "タチ ジャクキック",
+    "name": "立ち弱キック",
     "startup": 5,
     "active": 3,
     "recovery": 8,

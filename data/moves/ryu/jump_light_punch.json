@@ -1,6 +1,6 @@
 {
     "id": "jump_light_punch",
-    "name": "ジャンプ ジャクパンチ",
+    "name": "ジャンプ弱パンチ",
     "startup": 4,
     "active": 5,
     "recovery": 8,

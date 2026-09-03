@@ -66,6 +66,7 @@ public:
         if (Mode == DummyMode::Stand) return RawInput{};
         if (Mode == DummyMode::Crouch) { RawInput r; r.Down = true; return r; }
         if (Mode == DummyMode::Jump) { RawInput r; r.Up = true; return r; }
+        if (Mode == DummyMode::Guard) return HoldBack(); // 後ろを入れ続ける
 
         // コマンド入力中なら、その続きを出す
         if (!PendingSequence.empty()) {

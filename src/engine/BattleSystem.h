@@ -160,18 +160,53 @@ public:
     // =================================================================
     // 1 フレーム（1/60 秒）ぶんの試合進行
     // =================================================================
+    // 今フレーム、時間が止まっているか。
+    //
+    // どちらか一方でも止まっていれば「止まっている」と扱います。
+    // 押し合いも離れすぎの制限も 2 人まとめて座標を動かす処理なので、
+    // 片方だけ止まっている状態で動かすと、止まっているはずの
+    // キャラクターが押されて動いてしまいます。
+    bool IsStopped() const { return Player1.IsStopped() || Player2.IsStopped(); }
+
+    // ストップを攻撃側・防御側の双方へ、同じ長さで、同じフレームに掛ける。
+    //
+    // ここが「ストップは有利不利に影響しない」ことの根拠です。
+    // 双方が同時に止まり、同時に解けるので、止まっていた時間は
+    // 両者から等しく差し引かれ、硬直差は変わりません。
+    static void ApplyStop(Fighter& attacker, Fighter& defender, int frames) {
+        if (frames <= 0) return;
+        attacker.HitstopTimer = std::max(attacker.HitstopTimer, frames);
+        defender.HitstopTimer = std::max(defender.HitstopTimer, frames);
+    }
+
     void Update(double dt, const RawInput& p1RawInput) {
         if (!MatchActive) return;
         AllEffects.clear();
         AllSounds.clear();
 
+        // ---- 今フレームは止まっているか ----
+        // 判定は FrameStep より前に取ります。FrameStep の中で
+        // 各自のストップ残量が 1 減るので、あとで見ると
+        // 「最後の 1 フレームだけ動いてしまう」ズレが出ます。
+        const bool stopped = IsStopped();
+
         // 1) 2 人ぶんの入力処理。順番は必ず 1P → 2P。
+        //    ストップ中でも呼びます。中で入力の記録だけ行い、
+        //    状態も座標も進めずに戻ってきます（先行入力のため）。
         RawInput p2Input = CpuAI->Decide();
         Player1.FrameStep(dt, p1RawInput);
         Player2.FrameStep(dt, p2Input);
 
+        // 画面揺れと「FIGHT」表示は見た目だけのものなので、
+        // ストップ中も進めます（止めると揺れが不自然に固まります）。
         if (ShakeFrames > 0) ShakeFrames -= 1;
         if (RoundStartFlashFrames > 0) RoundStartFlashFrames -= 1;
+
+        // ---- ストップ中はここから先を全部やらない ----
+        // 押し合い・離れすぎの制限・当たり判定・飛び道具・制限時間。
+        // どれも座標かタイマーを動かすので、止まっている間は
+        // 1 つも動かしてはいけません。
+        if (stopped) return;
 
         // 2) 押し合い → 2b) 離れすぎの制限 → 3) 4) 当たり判定
         ResolvePushboxes();
@@ -351,8 +386,9 @@ public:
                                   defender.SM.CurrentState == CharState::Knockdown);
         HitResult result = defender.ReceiveHit(move, attacker);
 
-        // ヒットストップは攻撃側にも掛かります（両者が同時に止まる）。
-        if (move.Hitstop > attacker.HitstopTimer) attacker.HitstopTimer = move.Hitstop;
+        // ストップは攻撃側にも同じ長さで掛かります（両者が同時に止まる）。
+        // ヒットなら Hitstop、ガードなら Guardstop。
+        ApplyStop(attacker, defender, result.stopFrames);
 
         double gain = move.MeterGain;
         if (result.blocked) gain *= 0.5;
@@ -397,7 +433,12 @@ public:
                     for (const auto& hr : target->HurtboxRects()) {
                         if (projRect.Intersects(hr)) {
                             proj.HasHit = true;
-                            target->ReceiveHit(*proj.Move, *proj.Owner);
+                            HitResult hit = target->ReceiveHit(*proj.Move, *proj.Owner);
+                            // 飛び道具は撃った本人から離れているので、
+                            // 止まるのは当たった側と（消える）飛び道具だけです。
+                            // 撃った本人まで止めると、画面の反対側で
+                            // 何もしていないのに固まって不自然になります。
+                            (void)hit;
                             alive = false; // 当たったら消える
                             break;
                         }

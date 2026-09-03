@@ -1,6 +1,6 @@
 {
     "id": "crouch_heavy",
-    "name": "シャガミ キョウキック",
+    "name": "しゃがみ強キック",
     "startup": 9,
     "active": 4,
     "recovery": 20,

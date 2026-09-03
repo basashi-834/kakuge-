@@ -1,6 +1,6 @@
 {
     "id": "jump_heavy_punch",
-    "name": "ジャンプ キョウパンチ",
+    "name": "ジャンプ強パンチ",
     "startup": 6,
     "active": 7,
     "recovery": 12,

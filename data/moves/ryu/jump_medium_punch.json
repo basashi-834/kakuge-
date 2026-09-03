@@ -1,6 +1,6 @@
 {
     "id": "jump_medium_punch",
-    "name": "ジャンプ チュウパンチ",
+    "name": "ジャンプ中パンチ",
     "startup": 5,
     "active": 6,
     "recovery": 10,
