@@ -410,7 +410,7 @@ void App::DrawGame(Graphics& g) {
     // screen edge (1P left, 2P right) rather than floating over the hit.
     for (const auto& fx : Effects) DrawCounterEdgeLabel(g, fx);
 
-    DrawHUD(g, *Battle, LastP1Combo, LastP2Combo, std::max(P1ComboFade, P2ComboFade));
+    DrawHUD(g, *Battle, LastP1Combo, LastP2Combo, std::max(P1ComboFade, P2ComboFade), BaseDataDir, UserDir);
     if (DebugVisible && IsTrainingMode) DrawDebugOverlay(g, *Battle);
 
     g.Restore(shakeState);

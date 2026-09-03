@@ -9,7 +9,7 @@ cd "$(dirname "$0")"
 mkdir -p build
 
 CXX=x86_64-w64-mingw32-g++
-SRC="platform/WinMain.cpp platform/App.cpp platform/Screens.cpp platform/Editor.cpp platform/Draw.cpp platform/Sprites.cpp"
+SRC="platform/WinMain.cpp platform/App.cpp platform/Screens.cpp platform/Editor.cpp platform/Draw.cpp platform/Sprites.cpp platform/HudSkin.cpp"
 FLAGS="-std=c++17 -O2 -municode -Ithird_party -Wall -Wextra"
 LIBS="-mwindows -lgdiplus -lgdi32 -luser32 -lshell32 -lole32 -lcomctl32 -lcomdlg32 -lwinmm -static -static-libgcc -static-libstdc++"
 

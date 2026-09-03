@@ -62,6 +62,19 @@ at any output resolution - it is a deliberate, explicit design choice (see
   hand computation (see the camera zoom/headroom math below) when
   interactive verification isn't available, and say so plainly rather than
   claiming untested things work.
+- **Wine delivers the first mouse click on a freshly resized window
+  late.** Verified with a click counter drawn in the Editor header: the
+  first `xdotool click` after entering the Character Editor (which
+  resizes the window) produced NO `WM_LBUTTONDOWN` at the time, and the
+  *next* click then delivered two. A custom dropdown therefore looked
+  like it never opened (open, then immediately closed by the late
+  duplicate) while text fields looked fine (focusing twice is
+  idempotent). Not an app bug - a second click on the same spot behaves
+  normally. When a Wine screenshot suggests a click-driven widget is
+  broken, click it twice with a pause before concluding anything.
+- `pkill -f "<pattern containing the exe name>"` from a Bash tool call
+  kills the tool call's own shell (its command line contains the
+  pattern) - use a bracketed pattern like `"[K]akuge.exe"`.
 - Native engine tests (`./build_linux_tests.sh`) build/run on Linux with no
   Wine dependency and are fast/reliable - run them after every engine
   change regardless of whether Wine verification is possible.
@@ -318,6 +331,61 @@ band heights) read from it. What changed, and the gotchas:
   `HurtboxPart` data directly, so it's unaffected.
 - Tests: 23 new checks under "Collision spec (GameSpec)" in
   `tests/EngineTests.cpp` pin all of the above (53 total).
+
+## Filled-shape character, HUD image skin, custom-drawn Editor (round after the collision spec)
+
+Four user requests handled together; the decisions worth keeping:
+
+- **Debug overlay looked like boxes were missing.** All three box kinds
+  were drawn as 1px outlines, and the standing pushbox (30 wide) shares
+  its vertical edges with the torso hurtbox (30 wide) - whichever drew
+  last simply covered the other, and a fireball's hitbox is on the
+  *projectile*, not the thrower, so it never showed. Fix in
+  `DrawDebugOverlay`: translucent fills + outlines, pushbox outline
+  dashed, hurt -> push -> hit draw order, projectile hitboxes included, a
+  color legend above the gauge band, and the `f=` readout capped at 99
+  (per the user - two digits is all a state's frame count needs).
+- **Character is now solid shapes, not line art.** The user dropped the
+  pixel/line-art requirement ("図形で形が分かればいい"), which is also what
+  finally makes the spec's ~55px width reachable - a thin stroke figure
+  couldn't be widened without turning into a box (see the reverted
+  attempt above). `DrawHumanoid` (`platform/Draw.cpp`) now draws filled
+  capsule limbs, a gi torso polygon with belt/lapel, a skin-tone head with
+  hair cap + headband, hands/feet, anti-aliased regardless of the target
+  Graphics (restored after). Same 108-unit height convention and
+  `HumanoidPose` API (six positional fields unchanged) so Select/VS/Result/
+  Editor call sites didn't move; three named flags were added: `crouch`
+  (a real folded-leg pose instead of scaling the figure down), `jump`
+  (tucked legs), `idleFrame` (4-frame breathing bob). Knockdown/Dead are a
+  lying-down figure built from the same helpers.
+- **HUD skin** (`platform/HudSkin.h`/`.cpp`, `Data/hud/README.txt`): the
+  user will design the HP bars, portraits, timer and gauges as images.
+  Each element is optional (procedural fallback when its PNG is absent),
+  P2 is the P1 image mirrored, and the fill has three modes in priority
+  order: `hp_unit.png` = ONE PERCENT tiled 100x with ceil(hp%) copies
+  drawn (the user's proposed approach), else `hp_fill.png` clipped to the
+  ratio, else a flat accent fill. `DrawHUD` gained baseDataDir/userDir
+  params to reach the cache.
+- **Character Editor rewritten with no native controls.** The user found
+  the native-control form sluggish even after the create-once fix.
+  `platform/Editor.cpp` is now a custom widget set (Label/Field/Dropdown/
+  Button/Check) bound to draft structs (`EditorStatsDraft`,
+  `EditorMoveDraft`, hitbox/hurtbox drafts) through getter/setter
+  closures, painted in one pass into the back buffer and repainted only
+  on interaction. Text input goes through a new `WM_CHAR` -> `App::OnChar`
+  path (Backspace/Delete/arrows/Home/End/Tab/Enter/Esc in
+  `EditorKeyDown`), dropdowns are an overlay list drawn last (wheel-
+  scrollable, `WM_MOUSEWHEEL` -> `App::OnMouseWheel`), MessageBox popups
+  became a 2.5s status line in the header (`EditorSetStatus`; `OnTimer`
+  clears it). `WM_COMMAND`/`WM_DRAWITEM`/`WM_CTLCOLOREDIT` handling and
+  every HWND member are gone. Frame-count fields clamp to 0..99. The
+  drag-in-preview logic in `App.cpp` is unchanged apart from calling the
+  widget hit-test first. Gotcha: fields write to the draft on every
+  keystroke, so a numeric field mid-edit ("-", "") keeps the last valid
+  value rather than erroring; the edit buffer is what's displayed while
+  focused.
+- Native `GetOpenFileNameW` is still used for BROWSE (system file
+  picker, not a form control) - deliberate.
 
 ## Sprite art system (`platform/Sprites.h`/`.cpp`)
 

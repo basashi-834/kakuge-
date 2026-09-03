@@ -83,9 +83,11 @@ void DrawDiagonalShine(Gdiplus::Graphics& g, const Gdiplus::RectF& rect);
 Gdiplus::Color TagColor(const std::string& tag);
 Gdiplus::Color MoveTint(const Fighter& fighter);
 
-// Line-art humanoid fighter (head+headband, torso, two-segment arms/legs) -
-// same silhouette design as the WinForms edition's Draw-Humanoid, styled
-// after the user's karate reference sketch.
+// Filled-shape humanoid fighter (head+headband, gi torso with belt,
+// capsule arms/legs) - see DrawHumanoid's comment in Draw.cpp. The first
+// six fields keep their old positional order so existing brace-init call
+// sites ({scale, facing, reach, kick, lean, guard}) are unchanged; the
+// pose flags after them are set by name.
 struct HumanoidPose {
     double heightScale = 1.0;
     int facing = 1;
@@ -93,6 +95,9 @@ struct HumanoidPose {
     double legKick = 0.0;
     double leanBack = 0.0;
     double guardRaise = 0.0;
+    bool crouch = false;   // folded legs, lowered torso (real crouch pose, not a scaled-down figure)
+    bool jump = false;     // tucked legs (feet drawn above the anchor point)
+    int idleFrame = 0;     // 0-3 standing-idle breathing cycle (bob + fist drift)
 };
 void DrawHumanoid(Gdiplus::Graphics& g, double sx, double sy, Gdiplus::Color color, const HumanoidPose& pose = {});
 
@@ -124,7 +129,9 @@ void DrawGaugeBar(Gdiplus::Graphics& g, float x, float y, float w, float h, doub
 
 // HUD: HP bars, round timer box, gauge bars, combo counter (new - matches
 // the reference mockup's "COMBO / N HIT" box).
-void DrawHUD(Gdiplus::Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade);
+// baseDataDir/userDir reach the optional image skin (see HudSkin.h).
+void DrawHUD(Gdiplus::Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade,
+             const fs::path& baseDataDir, const fs::path& userDir);
 
 void DrawDebugOverlay(Gdiplus::Graphics& g, const BattleSystem& bs);
 

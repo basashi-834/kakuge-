@@ -27,7 +27,7 @@ void App::Init(HWND hwnd, const fs::path& baseDataDir, const fs::path& userDir) 
 }
 
 void App::Shutdown() {
-    DestroyEditorControls();
+    if (Current == Screen::Editor) LeaveEditor();
 }
 
 ViewTransform App::CurrentTransform() const {
@@ -118,17 +118,10 @@ void App::OnPaint() {
                         static_cast<REAL>(VirtualW * t.scale), static_cast<REAL>(VirtualH * t.scale));
         g.DrawImage(LowResBuffer.get(), destRect, 0, 0, static_cast<REAL>(VirtualW), static_cast<REAL>(VirtualH), UnitPixel);
     } else {
-        // Editor: native controls own the form area below, but the header
-        // bar itself is drawn with GDI+ (in real window pixels, not the
-        // low-res pixel-art pipeline, since it sits alongside native
-        // controls that use real pixel coordinates) so the screen reads as
-        // part of the same app instead of a bare Win32 dialog.
-        SolidBrush headerBg(pal.Accent);
-        g.FillRectangle(&headerBg, 0, 0, w, kEditorHeaderHeight);
-        Font headerFont(UiFontFamily(), 20, FontStyleBold, UnitPixel);
-        DrawTextCentered(g, L"CHARACTER EDITOR", headerFont, RectF(0, 0, static_cast<REAL>(w), static_cast<REAL>(kEditorHeaderHeight)), pal.White);
-        DrawEditorPreview(g);
-        DrawMotionImagePreview(g);
+        // Editor: a custom-drawn form at real window-pixel scale (not the
+        // low-res pixel-art pipeline - a data-entry form needs the room),
+        // painted in one pass here. See Editor.cpp.
+        DrawEditor(g, w, h);
     }
 
     // Single blit of the fully-rendered frame onto the real window surface
@@ -167,10 +160,9 @@ void EditorSelectedBox(App& app, double** cx, double** cy, double** bw, double**
 
 void App::OnLButtonDown(int x, int y) {
     if (Current == Screen::Editor) {
-        // Native controls handle their own clicks; the only thing this
-        // window proc needs to do is start a drag if the click landed
-        // inside the hitbox/hurtbox preview canvas (drawn directly in real
-        // window pixels by DrawEditorPreview, not a child control).
+        // Widgets first (fields/dropdowns/buttons); a click that no widget
+        // took may start a drag inside the hitbox/hurtbox preview canvas.
+        if (EditorMouseDown(x, y)) return;
         double *cxp, *cyp, *bwp, *bhp;
         EditorSelectedBox(*this, &cxp, &cyp, &bwp, &bhp);
         if (!cxp) return; // nothing selected to drag (e.g. move has no hitboxes)
@@ -216,7 +208,8 @@ void App::OnLButtonDown(int x, int y) {
 }
 
 void App::OnMouseMove(int x, int y) {
-    if (Current != Screen::Editor || (!EditorDragging && !EditorDragResizing)) return;
+    if (Current != Screen::Editor) return;
+    if (!EditorDragging && !EditorDragResizing) { EditorMouseMove(x, y); return; }
     double dxWorld = (x - EditorDragStartMouseX) / EditorPreviewScale;
     double dyWorld = (y - EditorDragStartMouseY) / EditorPreviewScale;
 
@@ -232,13 +225,20 @@ void App::OnMouseMove(int x, int y) {
         *bh = std::max(8.0, EditorDragStartH + dyWorld * 2.0);
     }
     ClampBoxToPreview(*cx, *cy, *bw, *bh);
-    if (EditorDragTargetIsHurtbox) SyncHurtboxFieldsFromDraft(); else SyncHitboxFieldsFromDraft();
     InvalidateRect(Hwnd, nullptr, FALSE);
 }
 
 void App::OnLButtonUp(int, int) {
     EditorDragging = false;
     EditorDragResizing = false;
+}
+
+void App::OnMouseWheel(int delta) {
+    if (Current == Screen::Editor) EditorWheel(delta);
+}
+
+void App::OnChar(wchar_t c) {
+    if (Current == Screen::Editor) EditorChar(c);
 }
 
 void App::OnKeyDown(int vk) {
@@ -260,6 +260,8 @@ void App::OnKeyDown(int vk) {
         HeldKeys.insert(vk);
     } else if (Current == Screen::VS) {
         GoTo(Screen::Game);
+    } else if (Current == Screen::Editor) {
+        EditorKeyDown(vk);
     }
 }
 
@@ -284,6 +286,15 @@ RawInput App::CollectP1Input() const {
 }
 
 void App::OnTimer() {
+    if (Current == Screen::Editor) {
+        // The editor repaints only on interaction - except to clear a
+        // status message once it expires.
+        if (!EditorStatus.empty() && std::chrono::steady_clock::now() >= EditorStatusUntil) {
+            EditorStatus.clear();
+            InvalidateRect(Hwnd, nullptr, FALSE);
+        }
+        return;
+    }
     if (Current == Screen::VS) {
         VsTimer += 0.015;
         if (VsTimer > 1.8) GoTo(Screen::Game);
@@ -337,23 +348,6 @@ void App::OnTimer() {
     }
 
     InvalidateRect(Hwnd, nullptr, FALSE);
-}
-
-void App::OnCommand(int controlId, int notifyCode, HWND ctrl) {
-    if (Current == Screen::Editor) {
-        extern void Editor_OnCommand(App&, int, int, HWND);
-        Editor_OnCommand(*this, controlId, notifyCode, ctrl);
-    }
-}
-
-void App::OnDrawItem(DRAWITEMSTRUCT* dis) {
-    // ODT_BUTTON (owner-draw buttons), ODT_STATIC (pixel-font labels) and
-    // ODT_COMBOBOX (palette-styled dropdowns) all route to the same
-    // handler - see Editor_OnDrawItem's dispatch on dis->CtlType.
-    if (Current == Screen::Editor) {
-        extern void Editor_OnDrawItem(DRAWITEMSTRUCT*);
-        Editor_OnDrawItem(dis);
-    }
 }
 
 } // namespace kakuge

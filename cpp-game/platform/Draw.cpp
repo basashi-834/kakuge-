@@ -1,6 +1,7 @@
 // platform/Draw.cpp
 #include "Draw.h"
 #include "Sprites.h"
+#include "HudSkin.h"
 #include <algorithm>
 #include <cmath>
 
@@ -375,98 +376,176 @@ Color MoveTint(const Fighter& fighter) {
 }
 
 // ---------------------------------------------------------------------
-// Humanoid fighter - line art (head+headband, torso, two-segment limbs).
+// Humanoid fighter - filled-shape figure (head, torso, capsule limbs).
 // ---------------------------------------------------------------------
-void DrawHumanoid(Graphics& g, double sx, double sy, Color color, const HumanoidPose& pose) {
-    double s = pose.heightScale * kCharScale;
-    double legH = 46.0 * s, torsoH = 38.0 * s, headR = 12.0 * s;
-    double hipY = sy - legH;
-    double shoulderY = hipY - torsoH;
-    double neckY = shoulderY - 2;
-    double headCenterY = neckY - headR;
-    double cx = sx + (pose.leanBack * 0.35);
-    int facing = pose.facing;
+// Replaced the earlier thin line-art stick figure per the user's request
+// to drop the "pixel line art" constraint: the body is now solid shapes
+// (filled polygons/capsules with a dark outline), so it reads as a real
+// silhouette at the spec's 55x88 size instead of a wireframe. Geometry is
+// in "figure units" where the standing figure is 108 units tall (head 24
+// + neck 2 + torso 38 + legs 46) and s = heightScale*kCharScale converts
+// units to canvas pixels - unchanged from the line-art version so every
+// existing call site (Select/VS/Result portraits, the Editor preview,
+// DrawFighter) keeps its sizing. Standing width is ~66 units (~54px at
+// kCharScale), matching GameSpec::CharacterVisualWidth. Drawn with anti-
+// aliasing on regardless of the target Graphics' mode (the user relaxed
+// the no-AA rule for the character), restored afterwards.
+namespace {
+struct FigureStyle {
+    Color body, outline, skin, belt, band, dark;
+};
 
-    Pen bodyPen(color, static_cast<REAL>(3.2 * s));
-    bodyPen.SetLineJoin(LineJoinRound);
-    Pen limbPen(color, static_cast<REAL>(5.5 * s));
-    limbPen.SetStartCap(LineCapRound);
-    limbPen.SetEndCap(LineCapRound);
-    Pen headPen(color, static_cast<REAL>(2.6 * s));
-    Color bandColor(255, 230, 45, 40);
-    Pen bandPen(bandColor, static_cast<REAL>(3.0 * s));
-
-    // back leg (static stance)
-    double backHipX = cx - (5 * s);
-    double backKneeX = backHipX - (2 * s);
-    double backKneeY = hipY + (legH * 0.55);
-    g.DrawLine(&limbPen, static_cast<REAL>(backHipX), static_cast<REAL>(hipY), static_cast<REAL>(backKneeX), static_cast<REAL>(backKneeY));
-    g.DrawLine(&limbPen, static_cast<REAL>(backKneeX), static_cast<REAL>(backKneeY), static_cast<REAL>(cx - 12 * s), static_cast<REAL>(sy));
-
-    // front leg (kicks forward/up when legKick > 0)
-    double frontHipX = cx + (5 * s);
-    if (pose.legKick > 0) {
-        double kneeX = frontHipX + (facing * 10 * s);
-        double kneeY = hipY + (legH * 0.35);
-        double footX = frontHipX + (facing * (16 + pose.legKick) * s);
-        double footY = hipY - (std::min(pose.legKick, 30.0) * 0.5 * s);
-        g.DrawLine(&limbPen, static_cast<REAL>(frontHipX), static_cast<REAL>(hipY), static_cast<REAL>(kneeX), static_cast<REAL>(kneeY));
-        g.DrawLine(&limbPen, static_cast<REAL>(kneeX), static_cast<REAL>(kneeY), static_cast<REAL>(footX), static_cast<REAL>(footY));
-    } else {
-        double kneeX = frontHipX + (2 * s);
-        double kneeY = hipY + (legH * 0.55);
-        g.DrawLine(&limbPen, static_cast<REAL>(frontHipX), static_cast<REAL>(hipY), static_cast<REAL>(kneeX), static_cast<REAL>(kneeY));
-        g.DrawLine(&limbPen, static_cast<REAL>(kneeX), static_cast<REAL>(kneeY), static_cast<REAL>(cx + 12 * s), static_cast<REAL>(sy));
-    }
-
-    // torso (outline, slight taper)
-    double torsoTopW = 24.0 * s, torsoBotW = 20.0 * s;
-    PointF pts[4] = {
-        PointF(static_cast<REAL>(cx - torsoTopW / 2), static_cast<REAL>(shoulderY)),
-        PointF(static_cast<REAL>(cx + torsoTopW / 2), static_cast<REAL>(shoulderY)),
-        PointF(static_cast<REAL>(cx + torsoBotW / 2), static_cast<REAL>(hipY)),
-        PointF(static_cast<REAL>(cx - torsoBotW / 2), static_cast<REAL>(hipY)),
+FigureStyle MakeFigureStyle(Color body) {
+    auto shade = [](Color c, double f) {
+        return Color(c.GetA(), static_cast<BYTE>(std::clamp(static_cast<int>(c.GetR() * f), 0, 255)),
+                     static_cast<BYTE>(std::clamp(static_cast<int>(c.GetG() * f), 0, 255)),
+                     static_cast<BYTE>(std::clamp(static_cast<int>(c.GetB() * f), 0, 255)));
     };
-    g.DrawPolygon(&bodyPen, pts, 4);
+    FigureStyle st;
+    st.body = body;
+    st.outline = shade(body, 0.45);
+    st.skin = Color(body.GetA(), 236, 194, 156);
+    st.belt = Color(body.GetA(), 34, 30, 32);
+    st.band = Color(body.GetA(), 232, 44, 38);
+    st.dark = shade(body, 0.7);
+    return st;
+}
 
-    // back arm (static, guard-ish)
-    double backShoulderX = cx - (10 * s);
-    double backElbowX = backShoulderX - (3 * s);
-    double backElbowY = shoulderY + (14 * s);
-    g.DrawLine(&limbPen, static_cast<REAL>(backShoulderX), static_cast<REAL>(shoulderY + 2 * s), static_cast<REAL>(backElbowX), static_cast<REAL>(backElbowY));
-    g.DrawLine(&limbPen, static_cast<REAL>(backElbowX), static_cast<REAL>(backElbowY), static_cast<REAL>(backElbowX - 2 * s), static_cast<REAL>(backElbowY + 12 * s));
+// A limb segment as a rounded "capsule": a thick round-capped line, drawn
+// twice (outline color slightly wider underneath, body color on top).
+void DrawCapsule(Graphics& g, const FigureStyle& st, Color fill, double x1, double y1, double x2, double y2, double thickness, double outlineW) {
+    Pen outer(st.outline, static_cast<REAL>(thickness + outlineW * 2));
+    outer.SetStartCap(LineCapRound); outer.SetEndCap(LineCapRound);
+    g.DrawLine(&outer, static_cast<REAL>(x1), static_cast<REAL>(y1), static_cast<REAL>(x2), static_cast<REAL>(y2));
+    Pen inner(fill, static_cast<REAL>(thickness));
+    inner.SetStartCap(LineCapRound); inner.SetEndCap(LineCapRound);
+    g.DrawLine(&inner, static_cast<REAL>(x1), static_cast<REAL>(y1), static_cast<REAL>(x2), static_cast<REAL>(y2));
+}
 
-    // front arm (punches forward when armReach > 0, raised when guardRaise > 0)
-    double frontShoulderX = cx + (10 * s);
-    if (pose.armReach > 0) {
-        double elbowX = frontShoulderX + (facing * 10 * s);
-        double elbowY = shoulderY + (6 * s);
-        double handX = frontShoulderX + (facing * (14 + pose.armReach) * s);
-        double handY = shoulderY + (2 * s) - (std::min(pose.armReach, 20.0) * 0.25 * s);
-        g.DrawLine(&limbPen, static_cast<REAL>(frontShoulderX), static_cast<REAL>(shoulderY + 2 * s), static_cast<REAL>(elbowX), static_cast<REAL>(elbowY));
-        g.DrawLine(&limbPen, static_cast<REAL>(elbowX), static_cast<REAL>(elbowY), static_cast<REAL>(handX), static_cast<REAL>(handY));
-    } else if (pose.guardRaise > 0) {
-        double elbowX = frontShoulderX + (facing * 4 * s);
-        double elbowY = shoulderY + (2 * s);
-        double handX = frontShoulderX + (facing * 8 * s);
-        double handY = shoulderY - (10 * s);
-        g.DrawLine(&limbPen, static_cast<REAL>(frontShoulderX), static_cast<REAL>(shoulderY + 2 * s), static_cast<REAL>(elbowX), static_cast<REAL>(elbowY));
-        g.DrawLine(&limbPen, static_cast<REAL>(elbowX), static_cast<REAL>(elbowY), static_cast<REAL>(handX), static_cast<REAL>(handY));
+void DrawDisc(Graphics& g, const FigureStyle& st, Color fill, double cx, double cy, double r, double outlineW) {
+    SolidBrush ob(st.outline);
+    g.FillEllipse(&ob, static_cast<REAL>(cx - r - outlineW), static_cast<REAL>(cy - r - outlineW), static_cast<REAL>((r + outlineW) * 2), static_cast<REAL>((r + outlineW) * 2));
+    SolidBrush fb(fill);
+    g.FillEllipse(&fb, static_cast<REAL>(cx - r), static_cast<REAL>(cy - r), static_cast<REAL>(r * 2), static_cast<REAL>(r * 2));
+}
+} // namespace
+
+void DrawHumanoid(Graphics& g, double sx, double sy, Color color, const HumanoidPose& pose) {
+    SmoothingMode prevMode = g.GetSmoothingMode();
+    g.SetSmoothingMode(SmoothingModeAntiAlias);
+
+    double s = pose.heightScale * kCharScale;
+    int f = pose.facing < 0 ? -1 : 1;
+    FigureStyle st = MakeFigureStyle(color);
+    double ow = std::max(0.6, 1.4 * s);   // outline width (px)
+    double limbT = 13.0 * s;               // leg thickness
+    double armT = 11.0 * s;
+    double headR = 12.0 * s;
+
+    // Vertical stack (units): legs 46, torso 38, neck 2, head 24.
+    double legH = 46.0 * s, torsoH = 38.0 * s;
+    if (pose.crouch) { legH = 24.0 * s; torsoH = 26.0 * s; }
+    double bob = (pose.idleFrame == 1 || pose.idleFrame == 2) ? 1.0 * s : 0.0;
+    double hipY = sy - legH + bob;
+    double shoulderY = hipY - torsoH;
+    double headCY = shoulderY - 2.0 * s - headR;
+    double cx = sx + (pose.leanBack * 0.35);
+
+    // ---- legs ----
+    double hipBackX = cx - f * 8.0 * s, hipFrontX = cx + f * 8.0 * s;
+    double kneeBX, kneeBY, footBX, footBY, kneeFX, kneeFY, footFX, footFY;
+    if (pose.crouch) {
+        kneeBX = cx - f * 24.0 * s; kneeBY = hipY + 6.0 * s; footBX = cx - f * 20.0 * s; footBY = sy;
+        kneeFX = cx + f * 24.0 * s; kneeFY = hipY + 6.0 * s; footFX = cx + f * 22.0 * s; footFY = sy;
+    } else if (pose.jump) {
+        kneeBX = cx - f * 14.0 * s; kneeBY = hipY + 16.0 * s; footBX = cx - f * 6.0 * s; footBY = hipY + 30.0 * s;
+        kneeFX = cx + f * 18.0 * s; kneeFY = hipY + 14.0 * s; footFX = cx + f * 12.0 * s; footFY = hipY + 30.0 * s;
     } else {
-        double elbowX = frontShoulderX + (3 * s);
-        double elbowY = shoulderY + (14 * s);
-        g.DrawLine(&limbPen, static_cast<REAL>(frontShoulderX), static_cast<REAL>(shoulderY + 2 * s), static_cast<REAL>(elbowX), static_cast<REAL>(elbowY));
-        g.DrawLine(&limbPen, static_cast<REAL>(elbowX), static_cast<REAL>(elbowY), static_cast<REAL>(elbowX + 2 * s), static_cast<REAL>(elbowY + 12 * s));
+        kneeBX = cx - f * 13.0 * s; kneeBY = hipY + legH * 0.52; footBX = cx - f * 20.0 * s; footBY = sy;
+        kneeFX = cx + f * 12.0 * s; kneeFY = hipY + legH * 0.52; footFX = cx + f * 20.0 * s; footFY = sy;
+        if (pose.legKick > 0) {
+            kneeFX = cx + f * 22.0 * s; kneeFY = hipY + 10.0 * s;
+            footFX = cx + f * (30.0 + pose.legKick * 0.9) * s;
+            footFY = hipY + 6.0 * s - std::min(pose.legKick, 34.0) * 0.55 * s;
+        }
+    }
+    // Back leg first (drawn under everything).
+    DrawCapsule(g, st, st.dark, hipBackX, hipY, kneeBX, kneeBY, limbT, ow);
+    DrawCapsule(g, st, st.dark, kneeBX, kneeBY, footBX, footBY, limbT, ow);
+    DrawDisc(g, st, st.outline, footBX - f * 2.0 * s, footBY - 3.0 * s, 4.5 * s, 0.0);
+
+    // ---- back arm (guard, low) ----
+    double shBackX = cx - f * 18.0 * s, shBackY = shoulderY + 4.0 * s;
+    double elBackX, elBackY, hdBackX, hdBackY;
+    if (pose.guardRaise > 0) { elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s; hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s; }
+    else { elBackX = cx - f * 26.0 * s; elBackY = shoulderY + 18.0 * s; hdBackX = cx - f * 12.0 * s; hdBackY = shoulderY + 24.0 * s - bob; }
+    DrawCapsule(g, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
+    DrawCapsule(g, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);
+    DrawDisc(g, st, st.skin, hdBackX, hdBackY, 5.5 * s, ow);
+
+    // ---- torso ----
+    {
+        PointF pts[4] = {
+            PointF(static_cast<REAL>(cx - 22.0 * s), static_cast<REAL>(shoulderY)),
+            PointF(static_cast<REAL>(cx + 22.0 * s), static_cast<REAL>(shoulderY)),
+            PointF(static_cast<REAL>(cx + 15.0 * s), static_cast<REAL>(hipY + 4.0 * s)),
+            PointF(static_cast<REAL>(cx - 15.0 * s), static_cast<REAL>(hipY + 4.0 * s)),
+        };
+        SolidBrush fill(st.body);
+        g.FillPolygon(&fill, pts, 4);
+        Pen outline(st.outline, static_cast<REAL>(ow * 1.4));
+        outline.SetLineJoin(LineJoinRound);
+        g.DrawPolygon(&outline, pts, 4);
+        // Belt.
+        SolidBrush belt(st.belt);
+        g.FillRectangle(&belt, static_cast<REAL>(cx - 15.0 * s), static_cast<REAL>(hipY - 5.0 * s), static_cast<REAL>(30.0 * s), static_cast<REAL>(5.0 * s));
+        // Gi lapel line (a single dark diagonal) so the torso has a front.
+        Pen lapel(st.outline, static_cast<REAL>(ow));
+        g.DrawLine(&lapel, static_cast<REAL>(cx + f * 12.0 * s), static_cast<REAL>(shoulderY + 2.0 * s), static_cast<REAL>(cx - f * 2.0 * s), static_cast<REAL>(hipY - 6.0 * s));
     }
 
-    // head + headband
-    RectF headRect(static_cast<REAL>(cx - headR), static_cast<REAL>(headCenterY - headR), static_cast<REAL>(headR * 2), static_cast<REAL>(headR * 2));
-    g.DrawEllipse(&headPen, headRect);
-    double bandY = headCenterY - (headR * 0.15);
-    g.DrawLine(&bandPen, static_cast<REAL>(cx - headR + 1 * s), static_cast<REAL>(bandY), static_cast<REAL>(cx + headR - 1 * s), static_cast<REAL>(bandY));
-    double tailX = cx - (facing * headR * 0.6);
-    g.DrawLine(&bandPen, static_cast<REAL>(tailX), static_cast<REAL>(bandY), static_cast<REAL>(tailX - facing * 8 * s), static_cast<REAL>(bandY - 10 * s));
-    g.DrawLine(&bandPen, static_cast<REAL>(tailX), static_cast<REAL>(bandY), static_cast<REAL>(tailX - facing * 4 * s), static_cast<REAL>(bandY - 14 * s));
+    // ---- front leg (over torso bottom) ----
+    DrawCapsule(g, st, st.body, hipFrontX, hipY, kneeFX, kneeFY, limbT, ow);
+    DrawCapsule(g, st, st.body, kneeFX, kneeFY, footFX, footFY, limbT, ow);
+    DrawDisc(g, st, st.outline, footFX + f * 2.0 * s, footFY - 3.0 * s, 4.5 * s, 0.0);
+
+    // ---- head ----
+    double headCX = cx + f * 2.0 * s;
+    DrawDisc(g, st, st.skin, headCX, headCY, headR, ow);
+    {
+        // Hair: darker cap over the top of the head.
+        SolidBrush hair(st.belt);
+        g.FillPie(&hair, static_cast<REAL>(headCX - headR), static_cast<REAL>(headCY - headR), static_cast<REAL>(headR * 2), static_cast<REAL>(headR * 2), 180.0f, 180.0f);
+        // Headband + tails trailing behind.
+        SolidBrush band(st.band);
+        g.FillRectangle(&band, static_cast<REAL>(headCX - headR), static_cast<REAL>(headCY - 5.0 * s), static_cast<REAL>(headR * 2), static_cast<REAL>(5.0 * s));
+        Pen tail(st.band, static_cast<REAL>(3.0 * s));
+        double tx = headCX - f * headR * 0.9, ty = headCY - 3.0 * s;
+        g.DrawLine(&tail, static_cast<REAL>(tx), static_cast<REAL>(ty), static_cast<REAL>(tx - f * 9.0 * s), static_cast<REAL>(ty - 6.0 * s));
+        g.DrawLine(&tail, static_cast<REAL>(tx), static_cast<REAL>(ty), static_cast<REAL>(tx - f * 7.0 * s), static_cast<REAL>(ty + 4.0 * s));
+        // Eye.
+        SolidBrush eye(st.belt);
+        g.FillRectangle(&eye, static_cast<REAL>(headCX + f * 4.0 * s - 1.2 * s), static_cast<REAL>(headCY + 1.0 * s), static_cast<REAL>(2.4 * s), static_cast<REAL>(2.4 * s));
+    }
+
+    // ---- front arm (fist forward / punch / guard) ----
+    double shFrontX = cx + f * 18.0 * s, shFrontY = shoulderY + 4.0 * s;
+    double elX, elY, hdX, hdY;
+    if (pose.armReach > 0) {
+        elX = cx + f * 34.0 * s; elY = shoulderY + 8.0 * s;
+        hdX = cx + f * (46.0 + pose.armReach * 0.8) * s; hdY = shoulderY + 4.0 * s - std::min(pose.armReach, 20.0) * 0.2 * s;
+    } else if (pose.guardRaise > 0) {
+        elX = cx + f * 26.0 * s; elY = shoulderY + 12.0 * s;
+        hdX = cx + f * 22.0 * s; hdY = shoulderY - 8.0 * s;
+    } else {
+        elX = cx + f * 30.0 * s; elY = shoulderY + 16.0 * s;
+        hdX = cx + f * 27.0 * s; hdY = shoulderY + 2.0 * s + bob;
+    }
+    DrawCapsule(g, st, st.body, shFrontX, shFrontY, elX, elY, armT, ow);
+    DrawCapsule(g, st, st.body, elX, elY, hdX, hdY, armT, ow);
+    DrawDisc(g, st, st.skin, hdX, hdY, 6.0 * s, ow);
+
+    g.SetSmoothingMode(prevMode);
 }
 
 namespace {
@@ -552,55 +631,71 @@ void DrawFighter(Graphics& g, const Fighter& fighter, const fs::path& baseDataDi
         return;
     }
 
+    bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
+    // Lying-down figure shared by Knockdown/Dead: a solid body capsule with
+    // the head at the far end (facing side), drawn with the same style
+    // helpers as the standing figure so it reads as the same character.
+    auto drawLying = [&](Color body) {
+        SmoothingMode prev = g.GetSmoothingMode();
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        FigureStyle st = MakeFigureStyle(body);
+        double ow = std::max(0.6, 1.4 * cs);
+        DrawCapsule(g, st, st.dark, sx - facing * 40 * cs, sy - 7 * cs, sx - facing * 6 * cs, sy - 8 * cs, 13.0 * cs, ow); // legs
+        DrawCapsule(g, st, st.body, sx - facing * 8 * cs, sy - 9 * cs, sx + facing * 22 * cs, sy - 10 * cs, 17.0 * cs, ow);  // torso
+        DrawCapsule(g, st, st.body, sx + facing * 4 * cs, sy - 12 * cs, sx + facing * 24 * cs, sy - 22 * cs, 10.0 * cs, ow); // raised arm
+        DrawDisc(g, st, st.skin, sx + facing * 36 * cs, sy - 11 * cs, 11.0 * cs, ow);                                        // head
+        SolidBrush band(st.band);
+        g.FillRectangle(&band, static_cast<REAL>(sx + facing * 36 * cs - 11 * cs), static_cast<REAL>(sy - 15 * cs), static_cast<REAL>(22 * cs), static_cast<REAL>(4 * cs));
+        g.SetSmoothingMode(prev);
+    };
+
+    HumanoidPose pose;
+    pose.heightScale = zoom;
+    pose.facing = facing;
     switch (fighter.SM.CurrentState) {
-        case CharState::Knockdown: {
-            Color c(255, static_cast<BYTE>(std::max(0, bodyColor.GetR() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetG() - 60)), static_cast<BYTE>(std::max(0, bodyColor.GetB() - 60)));
-            Pen pen(c, static_cast<REAL>(3.5 * cs));
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * cs), static_cast<REAL>(sy - 6 * cs), static_cast<REAL>(sx + 44 * cs), static_cast<REAL>(sy - 6 * cs));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * cs), static_cast<REAL>(sy - 24 * cs), static_cast<REAL>(20 * cs), static_cast<REAL>(20 * cs));
+        case CharState::Knockdown:
+            drawLying(Color(255, static_cast<BYTE>(std::max(0, bodyColor.GetR() - 40)), static_cast<BYTE>(std::max(0, bodyColor.GetG() - 40)), static_cast<BYTE>(std::max(0, bodyColor.GetB() - 40))));
             break;
-        }
+        case CharState::Dead:
+            drawLying(Color(255, 205, 202, 200));
+            break;
         case CharState::WakeUp:
-            DrawHumanoid(g, sx, sy, bodyColor, {0.75 * zoom, facing});
-            break;
         case CharState::Crouch:
-            DrawHumanoid(g, sx, sy, bodyColor, {0.72 * zoom, facing});
+            pose.crouch = true;
+            DrawHumanoid(g, sx, sy, bodyColor, pose);
             break;
         case CharState::Block:
-            DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), {zoom, facing, 0, 0, 0, 10});
+            pose.guardRaise = 10;
+            pose.crouch = fighter.IsCrouchingGuard;
+            DrawHumanoid(g, sx, sy, Color(255, 60, 120, 210), pose);
             break;
         case CharState::Hitstun:
-            DrawHumanoid(g, sx, sy, Color(255, 220, 60, 60), {zoom, facing, 0, 0, 8.0 * facing * zoom, 0});
+            pose.leanBack = -8.0 * facing * zoom;
+            pose.jump = airborne;
+            DrawHumanoid(g, sx, sy, Color(255, 220, 60, 60), pose);
             break;
         case CharState::Throw:
-            DrawHumanoid(g, sx, sy, Color(255, 200, 50, 50), {0.85 * zoom, facing});
+            pose.leanBack = -6.0 * facing * zoom;
+            DrawHumanoid(g, sx, sy, Color(255, 200, 50, 50), pose);
             break;
-        case CharState::Dead: {
-            // Lighter than before (was 140,140,140) - the arena ground is
-            // now dark (Screen 03 reference), and the old gray barely read
-            // against it.
-            Color c(255, 220, 218, 216);
-            Pen pen(c, static_cast<REAL>(3.0 * cs));
-            g.DrawLine(&pen, static_cast<REAL>(sx - 44 * cs), static_cast<REAL>(sy - 4 * cs), static_cast<REAL>(sx + 44 * cs), static_cast<REAL>(sy - 4 * cs));
-            g.DrawEllipse(&pen, static_cast<REAL>(sx + facing * 40 * cs), static_cast<REAL>(sy - 20 * cs), static_cast<REAL>(18 * cs), static_cast<REAL>(18 * cs));
-            break;
-        }
         case CharState::Attack: {
             std::string btn = fighter.CurrentMoveData ? fighter.CurrentMoveData->Button : std::string();
             bool isKick = !btn.empty() && btn.back() == 'K';
-            Color tint = MoveTint(fighter);
-            if (isKick) DrawHumanoid(g, sx, sy, tint, {zoom, facing, 0, 34, 0, 0});
-            else DrawHumanoid(g, sx, sy, tint, {zoom, facing, 34, 0, 0, 0});
+            bool crouchMove = fighter.CurrentMoveData && fighter.CurrentMoveData->Stance == "crouch";
+            pose.crouch = crouchMove;
+            pose.jump = airborne;
+            if (isKick) pose.legKick = 34; else pose.armReach = 34;
+            DrawHumanoid(g, sx, sy, MoveTint(fighter), pose);
             break;
         }
-        case CharState::Jump: {
-            Color c(255, static_cast<BYTE>(std::min(255, bodyColor.GetR() + 20)), static_cast<BYTE>(std::min(255, bodyColor.GetG() + 20)), static_cast<BYTE>(std::min(255, bodyColor.GetB() + 20)));
-            DrawHumanoid(g, sx, sy, c, {0.92 * zoom, facing});
+        case CharState::Jump:
+            pose.jump = true;
+            DrawHumanoid(g, sx, sy, bodyColor, pose);
             break;
-        }
         default:
-            // Idle/standing.
-            DrawHumanoid(g, sx, sy, bodyColor, {zoom, facing});
+            // Idle / walking: 4-frame breathing cycle.
+            pose.idleFrame = (fighter.FrameCounter / 8) % 4;
+            DrawHumanoid(g, sx, sy, bodyColor, pose);
             break;
     }
 }
@@ -751,8 +846,47 @@ static void DrawNameTag(Graphics& g, float barX, float barBottom, float barW, co
     else DrawPixelText(g, name, barX, barBottom, 1.0f, pal.ArenaLine);
 }
 
-void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade) {
+namespace {
+// One skinnable bar (HP or super gauge): optional backing image, then the
+// fill - per-percent unit sprites (ceil(ratio*100) copies from the inner
+// end, the rest simply not drawn), else a full fill image clipped to the
+// ratio, else a flat accent fill - then the frame image. Called only when
+// the skin has at least one image for this bar; otherwise DrawHUD keeps
+// the procedural DrawHPBar/DrawGaugeBar.
+void DrawSkinnedBar(Graphics& g, const RectF& bar, double ratio, bool mirror, Image* frame, Image* fill, Image* unit, Image* empty, Color fallbackFill) {
+    ratio = std::clamp(ratio, 0.0, 1.0);
+    if (empty) DrawSkinImage(g, empty, bar, mirror);
+    if (unit) {
+        int count = static_cast<int>(std::ceil(ratio * 100.0 - 1e-9));
+        float slotW = bar.Width / 100.0f;
+        for (int i = 0; i < count; i++) {
+            float x = mirror ? (bar.X + bar.Width - (i + 1) * slotW) : (bar.X + i * slotW);
+            DrawSkinImage(g, unit, RectF(x, bar.Y, slotW, bar.Height), mirror);
+        }
+    } else {
+        float fillW = static_cast<float>(bar.Width * ratio);
+        RectF clip = mirror ? RectF(bar.X + bar.Width - fillW, bar.Y, fillW, bar.Height) : RectF(bar.X, bar.Y, fillW, bar.Height);
+        if (fillW > 0) {
+            if (fill) {
+                Region oldClip;
+                g.GetClip(&oldClip);
+                g.SetClip(clip, CombineModeIntersect);
+                DrawSkinImage(g, fill, bar, mirror);
+                g.SetClip(&oldClip, CombineModeReplace);
+            } else {
+                SolidBrush b(fallbackFill);
+                g.FillRectangle(&b, clip);
+            }
+        }
+    }
+    if (frame) DrawSkinImage(g, frame, RectF(bar.X - 3, bar.Y - 3, bar.Width + 6, bar.Height + 6), mirror);
+}
+} // namespace
+
+void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2ComboDisplay, double comboFade,
+             const fs::path& baseDataDir, const fs::path& userDir) {
     const auto& pal = GetPalette();
+    const HudSkin& skin = GetHudSkin(baseDataDir, userDir);
 
     // Nudged down from the top edge (was barY=3, barH=8) and a touch
     // thicker, per the user's classic-Capcom-HUD reference screenshots -
@@ -770,10 +904,24 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     float p1BarX = p1PortraitX + portraitSize + portraitGap, barW = 115.0f;
     float p2BarX = VirtualW - 2.0f - portraitSize - portraitGap - barW;
     float p2PortraitX = VirtualW - 2.0f - portraitSize;
-    DrawHPBar(g, p1BarX, barY, barW, barH, bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP), false, pal.ArenaLine);
-    DrawHPBar(g, p2BarX, barY, barW, barH, bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP), true, pal.ArenaLine);
-    DrawPortraitBust(g, p1PortraitX, portraitY, portraitSize, pal.Accent, pal.ArenaLine);
-    DrawPortraitBust(g, p2PortraitX, portraitY, portraitSize, pal.Accent, pal.ArenaLine);
+    double p1Ratio = bs.Player1.CurrentHP / static_cast<double>(bs.Player1.Stats.MaxHP);
+    double p2Ratio = bs.Player2.CurrentHP / static_cast<double>(bs.Player2.Stats.MaxHP);
+    if (skin.HasHpArt()) {
+        DrawSkinnedBar(g, RectF(p1BarX, barY, barW, barH), p1Ratio, false, skin.HpFrame.get(), skin.HpFill.get(), skin.HpUnit.get(), skin.HpEmpty.get(), pal.Accent);
+        DrawSkinnedBar(g, RectF(p2BarX, barY, barW, barH), p2Ratio, true, skin.HpFrame.get(), skin.HpFill.get(), skin.HpUnit.get(), skin.HpEmpty.get(), pal.Accent);
+    } else {
+        DrawHPBar(g, p1BarX, barY, barW, barH, p1Ratio, false, pal.ArenaLine);
+        DrawHPBar(g, p2BarX, barY, barW, barH, p2Ratio, true, pal.ArenaLine);
+    }
+    // Portraits: per-character image when the skin has one, else the
+    // procedural bust; an optional frame image goes over either.
+    struct { float x; const Fighter* f; bool mirror; } portraits[] = {{p1PortraitX, &bs.Player1, false}, {p2PortraitX, &bs.Player2, true}};
+    for (const auto& p : portraits) {
+        RectF slot(p.x, portraitY, portraitSize, portraitSize);
+        if (Image* img = skin.Portrait(p.f->Stats.Id)) DrawSkinImage(g, img, slot, p.mirror);
+        else DrawPortraitBust(g, p.x, portraitY, portraitSize, pal.Accent, pal.ArenaLine);
+        if (skin.PortraitFrame) DrawSkinImage(g, skin.PortraitFrame.get(), slot, p.mirror);
+    }
     DrawNameTag(g, p1BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player1.Stats.Name), false);
     DrawNameTag(g, p2BarX, barY + barH + 1.0f, barW, Utf8ToWide(bs.Player2.Stats.Name), true);
 
@@ -793,12 +941,16 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     float boxW = 28, boxH = 18;
     float boxX = (VirtualW - boxW) / 2.0f;
     RectF boxRect(boxX, 5, boxW, boxH);
-    GraphicsPath boxPath;
-    AddRoundedRect(boxPath, boxRect, 0.0f);
-    SolidBrush accentBrush(pal.Accent);
-    g.FillPath(&accentBrush, &boxPath);
-    Pen boxBorder(pal.ArenaLine, 1.0f);
-    g.DrawPath(&boxBorder, &boxPath);
+    if (skin.TimerFrame) {
+        DrawSkinImage(g, skin.TimerFrame.get(), boxRect, false);
+    } else {
+        GraphicsPath boxPath;
+        AddRoundedRect(boxPath, boxRect, 0.0f);
+        SolidBrush accentBrush(pal.Accent);
+        g.FillPath(&accentBrush, &boxPath);
+        Pen boxBorder(pal.ArenaLine, 1.0f);
+        g.DrawPath(&boxBorder, &boxPath);
+    }
     DrawPixelTextCentered(g, timerText, boxRect, 2.0f, pal.White);
     RectF roundLabelRect(VirtualW / 2.0f - 30, 24, 60, 8);
     DrawPixelTextCentered(g, bs.TrainingMode ? L"TRAINING" : L"ROUND 1", roundLabelRect, 1.0f, pal.ArenaTextDim);
@@ -839,8 +991,14 @@ void DrawHUD(Graphics& g, const BattleSystem& bs, int p1ComboDisplay, int p2Comb
     // bottom margin spans 224-206 = 18px), up from the previous 6px-tall
     // bar that only spanned ~13px total.
     float gaugeW = 90.0f, gaugeH = 8.0f, gaugeY = static_cast<float>(VirtualH) - gaugeH - 3.0f;
-    DrawGaugeBar(g, 3, gaugeY, gaugeW, gaugeH, bs.Player1.Gauge.Value / SuperGauge::MaxValue, false, pal.ArenaLine);
-    DrawGaugeBar(g, VirtualW - 3.0f - gaugeW, gaugeY, gaugeW, gaugeH, bs.Player2.Gauge.Value / SuperGauge::MaxValue, true, pal.ArenaLine);
+    double sp1 = bs.Player1.Gauge.Value / SuperGauge::MaxValue, sp2 = bs.Player2.Gauge.Value / SuperGauge::MaxValue;
+    if (skin.HasSpArt()) {
+        DrawSkinnedBar(g, RectF(3, gaugeY, gaugeW, gaugeH), sp1, false, skin.SpFrame.get(), skin.SpFill.get(), skin.SpUnit.get(), skin.SpEmpty.get(), pal.Gauge);
+        DrawSkinnedBar(g, RectF(VirtualW - 3.0f - gaugeW, gaugeY, gaugeW, gaugeH), sp2, true, skin.SpFrame.get(), skin.SpFill.get(), skin.SpUnit.get(), skin.SpEmpty.get(), pal.Gauge);
+    } else {
+        DrawGaugeBar(g, 3, gaugeY, gaugeW, gaugeH, sp1, false, pal.ArenaLine);
+        DrawGaugeBar(g, VirtualW - 3.0f - gaugeW, gaugeY, gaugeW, gaugeH, sp2, true, pal.ArenaLine);
+    }
     DrawPixelText(g, L"SP", 3, gaugeY - 7, 1.0f, pal.ArenaTextDim);
     DrawPixelTextRight(g, L"SP", VirtualW - 3.0f, gaugeY - 7, 1.0f, pal.ArenaTextDim);
 }
@@ -859,30 +1017,59 @@ void DrawWorldRect(Graphics& g, Pen& pen, const RectBox& r) {
 }
 } // namespace
 
+namespace {
+void FillWorldRect(Graphics& g, Brush& brush, const RectBox& r) {
+    REAL left = static_cast<REAL>(std::round(ToScreenX(r.Left())));
+    REAL top = static_cast<REAL>(std::round(ToScreenY(r.Top())));
+    REAL right = static_cast<REAL>(std::round(ToScreenX(r.Right())));
+    REAL bottom = static_cast<REAL>(std::round(ToScreenY(r.Bottom())));
+    g.FillRectangle(&brush, left, top, std::max(1.0f, right - left), std::max(1.0f, bottom - top));
+}
+} // namespace
+
 // Collision-box debug view (F1 in Training Mode - see App::OnKeyDown;
 // never part of the real game screen). Color code per the user's spec:
 // pushbox = blue, hurtbox = green, hitbox = red, throw range = yellow.
+// Every box is drawn as a translucent fill plus an outline, and the
+// pushbox outline is dashed, so boxes that share an edge (the standing
+// pushbox and torso hurtbox are both 30 wide) still both read - with
+// plain 1px outlines the last one drawn simply covered the other, which
+// looked like a box kind was missing. Projectile hitboxes are included
+// (a fireball's hitbox lives on the projectile, not the thrower).
 void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
-    Pen pushPen(Color(255, 60, 120, 255), 1.0f);
-    Pen hurtPen(Color(255, 40, 210, 70), 1.0f);
-    Pen hitPen(Color(255, 235, 35, 35), 1.0f);
-    Pen throwPen(Color(255, 245, 210, 30), 1.0f);
+    Color pushC(255, 60, 120, 255), hurtC(255, 40, 210, 70), hitC(255, 235, 35, 35), throwC(255, 245, 210, 30);
+    Pen pushPen(pushC, 1.0f);
+    pushPen.SetDashStyle(DashStyleDash);
+    Pen hurtPen(hurtC, 1.0f);
+    Pen hitPen(hitC, 1.0f);
+    Pen throwPen(throwC, 1.0f);
+    SolidBrush pushFill(Color(60, 60, 120, 255));
+    SolidBrush hurtFill(Color(55, 40, 210, 70));
+    SolidBrush hitFill(Color(95, 235, 35, 35));
+    SolidBrush throwFill(Color(70, 245, 210, 30));
     Color textColor = GetPalette().ArenaLine; // the arena ground is dark now - needs a light-on-dark color
 
     for (const Fighter* f : {&bs.Player1, &bs.Player2}) {
-        DrawWorldRect(g, pushPen, f->PushboxRect());
-        for (const RectBox& hurt : f->HurtboxRects()) DrawWorldRect(g, hurtPen, hurt);
+        for (const RectBox& hurt : f->HurtboxRects()) { FillWorldRect(g, hurtFill, hurt); DrawWorldRect(g, hurtPen, hurt); }
+        RectBox push = f->PushboxRect();
+        FillWorldRect(g, pushFill, push);
+        DrawWorldRect(g, pushPen, push);
 
         bool throwing = f->SM.CurrentState == CharState::Attack && f->CurrentMoveData != nullptr &&
                         f->CurrentMoveData->GuardType == Constants::GuardThrow;
-        for (const RectBox& hb : f->ActiveHitboxRects) DrawWorldRect(g, throwing ? throwPen : hitPen, hb);
+        for (const RectBox& hb : f->ActiveHitboxRects) {
+            FillWorldRect(g, throwing ? throwFill : hitFill, hb);
+            DrawWorldRect(g, throwing ? throwPen : hitPen, hb);
+        }
         if (throwing && MoveExecutor::GetPhase(*f->CurrentMoveData, f->SM.CurrentFrame) == MovePhase::Active) {
             // The throw's real connect rule is a center-distance check, so
             // show that reach as a box from the fighter's center out to
             // ThrowRange in front of them, pushbox-tall.
             double range = f->CurrentMoveData->ThrowRange;
             double cx = std::round(f->PositionX) + f->Facing * range / 2.0;
-            DrawWorldRect(g, throwPen, RectBox(cx, std::round(f->PositionY) - f->PushboxStandH / 2.0, range, f->PushboxStandH));
+            RectBox reach(cx, std::round(f->PositionY) - f->PushboxStandH / 2.0, range, f->PushboxStandH);
+            FillWorldRect(g, throwFill, reach);
+            DrawWorldRect(g, throwPen, reach);
         }
         // Fixed HUD position (top corner, below the HP bar/name) rather
         // than tracking the character around the stage.
@@ -890,7 +1077,10 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
         float tx = isP1 ? 2.0f : (VirtualW - 190.0f);
         float ty = 34.0f; // just under the 32px top HUD band (GameSpec::HudHeight)
         auto info = f->DebugInfo();
-        std::wstring line1 = L"st=" + Utf8ToWide(info.state) + L" mv=" + Utf8ToWide(info.move) + L" f=" + std::to_wstring(info.frame);
+        // Frame readout caps at 99 per the user (a state's own frame count
+        // never needs more than two digits; Idle would otherwise count up
+        // forever and just add noise).
+        std::wstring line1 = L"st=" + Utf8ToWide(info.state) + L" mv=" + Utf8ToWide(info.move) + L" f=" + std::to_wstring(std::min(info.frame, 99));
         DrawPixelText(g, line1, tx, ty, 1.0f, textColor);
         std::wstring line2 = L"hp=" + std::to_wstring(info.hp) + L" sp=" + std::to_wstring(static_cast<int>(info.gauge));
         DrawPixelText(g, line2, tx, ty + 7, 1.0f, textColor);
@@ -900,6 +1090,22 @@ void DrawDebugOverlay(Graphics& g, const BattleSystem& bs) {
         DrawPixelText(g, line4, tx, ty + 21, 1.0f, textColor);
         std::wstring line5 = L"pos=(" + std::to_wstring(static_cast<int>(info.positionX)) + L"," + std::to_wstring(static_cast<int>(info.positionY)) + L")";
         DrawPixelText(g, line5, tx, ty + 28, 1.0f, textColor);
+    }
+
+    for (const auto& proj : bs.Projectiles) {
+        RectBox r = proj.HitboxRect();
+        FillWorldRect(g, hitFill, r);
+        DrawWorldRect(g, hitPen, r);
+    }
+
+    // Legend, centered just above the bottom gauge band.
+    struct { const wchar_t* name; Color c; } legend[] = {{L"PUSH", pushC}, {L"HURT", hurtC}, {L"HIT", hitC}, {L"THROW", throwC}};
+    float lx = VirtualW / 2.0f - 62.0f, ly = static_cast<float>(VirtualH) - 30.0f;
+    for (const auto& item : legend) {
+        SolidBrush sw(item.c);
+        g.FillRectangle(&sw, lx, ly, 5.0f, 5.0f);
+        DrawPixelText(g, item.name, lx + 7, ly - 1, 1.0f, item.c);
+        lx += 8.0f + PixelTextWidth(item.name, 1.0f) + 8.0f;
     }
 }
 

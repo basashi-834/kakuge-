@@ -1,11 +1,11 @@
 // platform/App.h
-// Central application/screen state machine. Menu-ish screens (Title,
-// Character Select, VS, Result, Settings, and the in-Game pause overlay)
-// are drawn entirely with GDI+ and hit-tested via UiButton rects in
-// virtual-canvas space (see Layout.h) - no native HWND controls needed
-// there. The Character Editor is data-entry heavy, so it alone uses real
-// Win32 child controls (Edit/ComboBox/Button), created on entry and
-// destroyed on exit.
+// Central application/screen state machine. Every screen - including the
+// Character Editor - is drawn entirely with GDI+ and driven by this app's
+// own mouse/keyboard handling; no native Win32 child controls anywhere.
+// Menu screens hit-test UiButton rects in virtual-canvas space (see
+// Layout.h); the Editor uses its own custom-drawn widget set (Editor.cpp)
+// at real window-pixel scale, since a data-entry form needs more room
+// than the 384x224 game canvas offers.
 #pragma once
 #include <windows.h>
 #include <gdiplus.h>
@@ -26,7 +26,7 @@ namespace kakuge {
 enum class Screen { Title, CharacterSelect, VS, Game, Result, Settings, Editor };
 
 // Height of the Editor screen's red GDI+-drawn header bar (real window
-// pixels) - native controls are laid out starting below it.
+// pixels) - the form is laid out below it.
 constexpr int kEditorHeaderHeight = 60;
 
 struct SelectSlotVisual {
@@ -100,44 +100,50 @@ public:
     int PendingResIndex = 0;
 
     // ---- Editor state (see Editor.cpp) ----
+    // The editor is a custom-drawn form: every field edits an in-memory
+    // draft (EditorStatsDraft / EditorMoveDraft / the hitbox & hurtbox
+    // drafts below) and only SAVE CHARACTER / SAVE MOVE write back through
+    // DataManager. Widgets themselves live in Editor.cpp and bind to these
+    // drafts through small getter/setter closures, so there's no per-
+    // control state to keep in sync here.
     bool EditorCreatingNew = false;
     std::string EditorCharId;
     std::string EditorMoveId;
-    std::vector<HWND> EditorControls;
-    HWND EditCharId = nullptr, EditCharName = nullptr, EditMaxHp = nullptr, EditWalkFwd = nullptr,
-         EditWalkBack = nullptr, EditDash = nullptr, EditJumpVel = nullptr, EditGravity = nullptr;
-    HWND ComboCharacter = nullptr, ComboMove = nullptr, ComboTemplate = nullptr;
-    HWND EditMoveName = nullptr, EditStartup = nullptr, EditActive = nullptr, EditRecovery = nullptr,
-         EditDamage = nullptr, EditHitstun = nullptr, EditBlockstun = nullptr, EditHitstop = nullptr;
-    HWND LabelAdvantage = nullptr;
-    HWND BtnSave = nullptr, BtnNewCharacter = nullptr, BtnBack = nullptr, BtnCreateConfirm = nullptr, BtnCreateCancel = nullptr;
+    std::vector<std::string> EditorMoveIds; // dropdown order (sorted by id)
+    CharacterStats EditorStatsDraft;
+    MoveData EditorMoveDraft;
+    std::string EditorNewId, EditorNewName; // "+ NEW CHARACTER" form
+    int EditorTemplateIndex = 0;
     RECT PreEditorWindowRect{};
     bool EditorSizeSaved = false;
 
-    // ---- Move: button binding, cancel window, special-move command builder ----
-    // ComboMoveButton is enabled (and meaningful) only for Normal-tagged
-    // moves - LP/MP/HP/LK/MK/HK direct binding. Specials/supers instead
-    // build an input command (digit sequence + button) below.
-    HWND ComboMoveButton = nullptr;
-    HWND EditCancelStart = nullptr, EditCancelEnd = nullptr;
-    HWND BtnDigit[9] = {}; // numpad-notation direction buttons, indices for digits 1-9 at BtnDigit[d-1]
-    HWND EditCommandPreview = nullptr, BtnCommandClear = nullptr, ComboSpecialButton = nullptr;
-    HWND ChkDynamicHitbox = nullptr;
-    std::string EditorCommandDigits; // e.g. "236", built up by clicking BtnDigit
+    // Widget interaction state: which text field has keyboard focus (and
+    // its live edit buffer + caret), which dropdown is open, hover.
+    int EditorFocusId = -1;
+    std::wstring EditorEditBuffer;
+    int EditorCaret = 0;
+    int EditorOpenDropdown = -1;
+    int EditorDropdownScroll = 0;
+    int EditorHoverId = -1;
+    int EditorMouseX = 0, EditorMouseY = 0;
+    // Transient status line in the header ("Character saved." etc.),
+    // replacing the old modal MessageBox popups.
+    std::wstring EditorStatus;
+    std::chrono::steady_clock::time_point EditorStatusUntil{};
+
+    std::string EditorCommandDigits; // e.g. "236", built up by the numpad buttons
 
     // ---- Motion reference image (see Editor.cpp / App::DrawMotionImagePreview) ----
     // An optional per-move reference image, browsed/attached in the editor
     // and stored on MoveData::MotionImagePath - authoring reference only,
     // not yet drawn in actual gameplay (see MoveData.h's comment on the
-    // field). EditMotionImagePath displays the current path (read-only);
-    // a small thumbnail is custom-painted below it from
+    // field). A small thumbnail is custom-painted from
     // EditorMotionImageCache, reloaded only when the path actually changes
     // so the editor isn't re-decoding the file from disk every repaint.
-    HWND EditMotionImagePath = nullptr, BtnBrowseMotionImage = nullptr, BtnClearMotionImage = nullptr;
     std::string EditorMotionImagePath;
     std::unique_ptr<Gdiplus::Image> EditorMotionImageCache;
     std::string EditorMotionImageCachedPath;
-    Gdiplus::RectF EditorMotionImageRect{40.0f, 756.0f, 320.0f, 136.0f}; // overwritten to match by CreateEditorControls
+    Gdiplus::RectF EditorMotionImageRect{40.0f, 756.0f, 320.0f, 136.0f};
     void BrowseMotionImage();
     void DrawMotionImagePreview(Gdiplus::Graphics& g);
 
@@ -149,24 +155,18 @@ public:
     // currently-selected one (EditorHitboxIndex / EditorHurtPartIndex) is
     // shown in the X/Y/W/H fields and draggable in the preview, but every
     // one is drawn as an outline so the whole set stays visible at once.
-    HWND ComboHitboxIndex = nullptr, BtnAddHitbox = nullptr, BtnRemoveHitbox = nullptr;
-    HWND EditHitX = nullptr, EditHitY = nullptr, EditHitW = nullptr, EditHitH = nullptr;
     std::vector<HitboxDef> EditorHitboxDraftList;
     int EditorHitboxIndex = 0;
-
-    HWND ComboHurtStance = nullptr, ComboHurtPart = nullptr, BtnAddPart = nullptr, BtnRemovePart = nullptr;
-    HWND EditHurtX = nullptr, EditHurtY = nullptr, EditHurtW = nullptr, EditHurtH = nullptr;
     HurtboxSet EditorHurtboxDraft;
     int EditorHurtStance = 0; // 0=stand, 1=crouch, 2=air
     int EditorHurtPartIndex = 0;
 
     // Which box the preview canvas' mouse drag currently controls.
-    HWND BtnDragHitbox = nullptr, BtnDragHurtbox = nullptr;
     bool EditorDragTargetIsHurtbox = false;
     bool EditorDragging = false, EditorDragResizing = false;
     int EditorDragStartMouseX = 0, EditorDragStartMouseY = 0;
     double EditorDragStartCenterX = 0, EditorDragStartCenterY = 0, EditorDragStartW = 0, EditorDragStartH = 0;
-    Gdiplus::RectF EditorPreviewRect{800.0f, 116.0f, 520.0f, 520.0f}; // overwritten to match by CreateEditorControls
+    Gdiplus::RectF EditorPreviewRect{800.0f, 116.0f, 520.0f, 520.0f};
     // world px -> preview px. Recalibrated (0.6 / 0.282609) for the 384x224
     // pixel-art rearchitecture's world-space shrink (kCharScale 4.6 -> 1.3,
     // see platform/Draw.cpp) so the Editor's preview panel - real window
@@ -176,25 +176,16 @@ public:
     double EditorPreviewScale = 2.1231;
 
     // ---- Language (JP/EN) ----
-    // 0 = English, 1 = Japanese. See Editor.cpp's EStr table - every
-    // label/button created through MakeLabel/MakeButton(EStr) registers
-    // itself so ApplyEditorLanguage() can retext them all in place without
-    // recreating any control.
+    // 0 = English, 1 = Japanese. Every widget label is looked up through
+    // Editor.cpp's EStr table at draw time, so toggling is just this flag.
     int EditorLanguage = 0;
-    HWND BtnLanguage = nullptr;
-    void ApplyEditorLanguage();
 
-    void SyncHitboxFieldsFromDraft();
-    void ApplyHitboxFieldsToDraft();
-    void SyncHurtboxFieldsFromDraft();
-    void ApplyHurtboxFieldsToDraft();
     void ClampBoxToPreview(double& cx, double& cy, double& w, double& h);
-    void RebuildHitboxCombo();
-    void RebuildHurtPartCombo();
-    void UpdateCommandPreview();
     void DrawEditorPreview(Gdiplus::Graphics& g);
     void OnMouseMove(int x, int y);
     void OnLButtonUp(int x, int y);
+    void OnMouseWheel(int delta);
+    void OnChar(wchar_t c);
 
     void Init(HWND hwnd, const fs::path& baseDataDir, const fs::path& userDir);
     void Shutdown();
@@ -205,8 +196,6 @@ public:
     void OnKeyDown(int vk);
     void OnKeyUp(int vk);
     void OnTimer();
-    void OnCommand(int controlId, int notifyCode, HWND ctrl);
-    void OnDrawItem(DRAWITEMSTRUCT* dis);
 
     ViewTransform CurrentTransform() const;
     void GoTo(Screen s);
@@ -234,20 +223,18 @@ public:
     // Editor (Editor.cpp)
     void EnterEditor();
     void LeaveEditor();
-    void CreateEditorControls();
-    void DestroyEditorControls();
-    void HideEditorControls();
-    void LayoutEditorControls();
-    void PopulateCharacterCombo();
-    void PopulateMoveCombo();
-    void PopulateTemplateCombo();
+    void DrawEditor(Gdiplus::Graphics& g, int w, int h);
+    bool EditorMouseDown(int x, int y);   // true if a widget consumed the click
+    void EditorMouseMove(int x, int y);
+    bool EditorKeyDown(int vk);           // true if consumed
+    void EditorChar(wchar_t c);
+    void EditorWheel(int delta);
+    void EditorSetStatus(const std::wstring& text);
+    void EditorBlur();
     void LoadCharacterIntoForm(const std::string& charId);
     void LoadMoveIntoForm(const std::string& moveId);
     void ApplyStatsForm();
     void ApplyMoveForm();
-    void UpdateAdvantagePreview();
-    void ShowCreateCharacterPrompt();
-    void HideCreateCharacterPrompt();
 
     RawInput CollectP1Input() const;
 };
