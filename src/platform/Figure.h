@@ -40,6 +40,7 @@ struct HumanoidPose {
     double guardRaise = 0.0;  // 腕を上げる量（ガード）
     bool crouch = false;      // しゃがみ姿勢
     bool jump = false;        // 空中姿勢（脚を抱える）
+    bool lying = false;       // 倒れている姿（ダウン・KO）
     int idleFrame = 0;        // 立ちの呼吸アニメ（0-3）
 };
 
@@ -49,7 +50,19 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
 
 // 試合中のキャラクターを、状態に応じた姿勢で描く。
 // カメラの拡大率・位置は内部で適用します。
+//
+// data/sprites/<キャラクター ID>/ に絵が置いてあれば、
+// 図形ではなくその絵で描きます（platform/Sprite.h）。
 void DrawFighter(Renderer& r, const Fighter& fighter);
+
+// スプライトだけで描く（絵が無ければ false）。DrawFighter が
+// 内部で呼びます。外から使うことはまずありません。
+bool DrawFighterSprite(Renderer& r, const Fighter& fighter);
+
+// 立ち絵を 1 コマ描く（キャラクター選択画面むけ）。絵が無ければ false。
+// scale は表示倍率（図形描画の HumanoidPose::heightScale と同じ意味）。
+bool DrawIdleSprite(Renderer& r, const std::string& characterId,
+                    double sx, double sy, int facing, int frame, double scale = 1.0);
 
 // 飛び道具を描く。
 void DrawProjectile(Renderer& r, const Projectile& proj);

@@ -9,6 +9,7 @@
 #include "platform/Camera.h"
 #include "platform/Font.h"
 #include "platform/Palette.h"
+#include "platform/Sprite.h"
 
 namespace kakuge {
 
@@ -65,14 +66,33 @@ void DrawDisc(Renderer& r, const FigureStyle& st, Color fill,
 // キャラクター 1 体を描く
 // ---------------------------------------------------------------------
 // 描く順番が重要です。あとから描いたものが上に重なるので、
-//   奥の脚 → 奥の腕 → 胴 → 手前の脚 → 頭 → 手前の腕
+//   奥の脚 → 胴 → 奥の腕 → 手前の脚 → 頭 → 手前の腕
 // の順で描くと、自然な前後関係になります。
+// 奥の腕を胴のあとに描いているのは、腕が胴に隠れず
+// 「両手で構えている」形がはっきり見えるようにするためです。
 void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const HumanoidPose& pose) {
     double s = pose.heightScale * kCharScale; // フィギュア単位 → 画面ピクセル
     int f = pose.facing < 0 ? -1 : 1;         // 向き（座標の左右反転に使う）
     FigureStyle st = MakeFigureStyle(color);
 
     double ow = std::max(0.6, 1.4 * s); // 輪郭の太さ
+
+    // ---- 倒れている姿（ダウン・KO）----
+    // 立ち姿とは骨格の組み立てがまったく違うので、ここで完結させます。
+    if (pose.lying) {
+        DrawLimb(r, st, st.dark, sx - f * 40 * s, sy - 7 * s,
+                 sx - f * 6 * s, sy - 8 * s, 13.0 * s, ow);   // 脚
+        DrawLimb(r, st, st.body, sx - f * 8 * s, sy - 9 * s,
+                 sx + f * 22 * s, sy - 10 * s, 17.0 * s, ow); // 胴
+        DrawLimb(r, st, st.body, sx + f * 4 * s, sy - 12 * s,
+                 sx + f * 24 * s, sy - 22 * s, 10.0 * s, ow); // 上げた腕
+        DrawDisc(r, st, st.skin, sx + f * 36 * s, sy - 11 * s, 11.0 * s, ow); // 頭
+        r.FillRect(static_cast<float>(sx + f * 36 * s - 11 * s),
+                   static_cast<float>(sy - 15 * s),
+                   static_cast<float>(22 * s), static_cast<float>(4 * s), st.band);
+        return;
+    }
+
     double limbT = 13.0 * s;            // 脚の太さ
     double armT = 11.0 * s;             // 腕の太さ
     double headR = 12.0 * s;            // 頭の半径
@@ -154,31 +174,6 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
     DrawLimb(r, st, st.dark, kneeBX, kneeBY, footBX, footBY, limbT, ow);
     DrawDisc(r, st, st.outline, footBX - f * 2.0 * s, footBY - 3.0 * s, 4.5 * s, 0.0);
 
-    // ---- 奥の腕 ----
-    double shBackX = cx - f * 18.0 * s, shBackY = shoulderY + 4.0 * s;
-    double elBackX, elBackY, hdBackX, hdBackY;
-    if (pose.guardRaise > 0) {
-        // ガード: 顔の前に構える
-        elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s;
-        hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s;
-    } else {
-        // 構え: 肘は体の横に下ろし、前腕だけを前へ出します。
-        //
-        // 以前は肘も拳も体の後ろ（cx から見て後方）に置いていたため、
-        // 腕が背中側へ回り込んで見えていました。人が構えるとき、
-        // 腕は体の後ろではなく前に来ます。肘を胴の内側に入れて
-        // 前腕を前へ振り出すと、奥の腕は「胴の陰から前に出ている」
-        // 形になり、背中側にはみ出しません。
-        //
-        // 拳の X は、胴の前の縁（肩で 22、腰で 15 単位）より必ず外へ
-        // 置きます。内側に置くと、あとから描く胴に隠れて消えます。
-        elBackX = cx - f * 4.0 * s;  elBackY = shoulderY + 24.0 * s;
-        hdBackX = cx + f * 24.0 * s; hdBackY = shoulderY + 18.0 * s - bob;
-    }
-    DrawLimb(r, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
-    DrawLimb(r, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);
-    DrawDisc(r, st, st.skin, hdBackX, hdBackY, 5.5 * s, ow);
-
     // ---- 胴（肩が広く腰が狭い台形）----
     {
         Vec2 pts[4] = {
@@ -210,6 +205,36 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
                    static_cast<float>(cx - f * 2.0 * s), static_cast<float>(hipY - 6.0 * s),
                    st.outline, static_cast<float>(ow));
     }
+
+    // ---- 奥の腕（胴より前面に出す）----
+    // 描く順番の中で、この腕だけは「胴のあと」に来ます。
+    //
+    // 以前は胴より先に描いていたため、腕の大部分が胴に隠れ、
+    // 肩から拳の先だけが胴の脇からのぞく形になっていました。
+    // 実際に構えるときは、奥の腕も体の前に回して構えます。
+    // 胴のあとに描くと腕が丸ごと見えるようになり、
+    // 「両手で構えている」ことが小さな画面でも分かります。
+    //
+    // 前後関係は「奥の脚 → 胴 → 奥の腕 → 手前の脚 → 頭 → 手前の腕」。
+    // 奥の腕は暗い色（st.dark）のままにしてあるので、胴の上に
+    // 乗っていても手前の腕と見分けが付き、奥行きは失われません。
+    double shBackX = cx - f * 18.0 * s, shBackY = shoulderY + 4.0 * s;
+    double elBackX, elBackY, hdBackX, hdBackY;
+    if (pose.guardRaise > 0) {
+        // ガード: 顔の前に構える
+        elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s;
+        hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s;
+    } else {
+        // 構え: 肘は体の横に下ろし、前腕だけを前へ出します。
+        //
+        // 肘を胴の内側に入れて前腕を前へ振り出すと、腕が背中側へ
+        // 回り込まず、自然な構えに見えます。
+        elBackX = cx - f * 4.0 * s;  elBackY = shoulderY + 24.0 * s;
+        hdBackX = cx + f * 24.0 * s; hdBackY = shoulderY + 18.0 * s - bob;
+    }
+    DrawLimb(r, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
+    DrawLimb(r, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);
+    DrawDisc(r, st, st.skin, hdBackX, hdBackY, 5.5 * s, ow);
 
     // ---- 手前の脚（胴の上に重なる）----
     DrawLimb(r, st, st.body, hipFrontX, hipY, kneeFX, kneeFY, limbT, ow);
@@ -273,9 +298,47 @@ Color MoveTint(const Fighter& fighter) {
 }
 
 // ---------------------------------------------------------------------
+// スプライトで描く（絵が用意されているときだけ）
+// ---------------------------------------------------------------------
+// 描けたら true。絵が無ければ false を返すので、呼び出し側は
+// これまでどおりの図形描画に進みます。
+bool DrawFighterSprite(Renderer& r, const Fighter& fighter) {
+    const CharacterSprites* sprites = GetSprites().Get(fighter.Stats.Id);
+    if (!sprites) return false;
+    const SpriteCell* cell = PickFighterCell(*sprites, fighter);
+    if (!cell) return false;
+
+    // 座標の丸め方は図形描画とまったく同じにします。ここがずれると
+    // 当たり判定のデバッグ表示と絵の位置が合わなくなります。
+    double sx = std::round(ToScreenX(fighter.PositionX));
+    double sy = std::round(ToScreenY(fighter.PositionY));
+    DrawSpriteCell(r, sprites->Sheet, *cell, sx, sy, fighter.Facing,
+                   FighterSpriteTint(*sprites, fighter));
+    return true;
+}
+
+// キャラクター選択画面などで、立ち絵を 1 コマ描く。
+// 絵が無ければ false（呼び出し側が図形で描きます）。
+bool DrawIdleSprite(Renderer& r, const std::string& characterId,
+                    double sx, double sy, int facing, int frame, double scale) {
+    const CharacterSprites* sprites = GetSprites().Get(characterId);
+    if (!sprites) return false;
+    const SpriteCell* cell = PickIdleCell(*sprites, frame);
+    if (!cell) return false;
+    DrawSpriteCell(r, sprites->Sheet, *cell, std::round(sx), std::round(sy), facing,
+                   Color(255, 255, 255, 255), scale);
+    return true;
+}
+
+// ---------------------------------------------------------------------
 // 試合中のキャラクターを状態に応じて描く
 // ---------------------------------------------------------------------
 void DrawFighter(Renderer& r, const Fighter& fighter) {
+    // 手描きの絵（スプライト）が用意されていれば、そちらを優先します。
+    // 用意されていなければ、これまでどおり図形で組み立てて描きます
+    //（絵が 1 枚も無くても遊べる、というこのゲームの性質はそのまま）。
+    if (DrawFighterSprite(r, fighter)) return;
+
     Color bodyColor(fighter.Stats.ColorR, fighter.Stats.ColorG, fighter.Stats.ColorB);
 
     // 座標を整数に丸めます。当たり判定側も同じように丸めているので、
@@ -286,25 +349,14 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
 
     // 対戦中の表示倍率は常に 100%（カメラは拡大縮小しません）。
     // 間合いの感覚を狂わせないための、このゲームの基本方針です。
-    // 倒れ姿の寸法計算に使う倍率だけ、ここで用意しておきます。
-    constexpr double cs = kCharScale;
-
     bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
 
-    // ダウン中・KO 後の「倒れている姿」。立ち姿とは別に描きます。
+    // ダウン中・KO 後の「倒れている姿」（DrawHumanoid が描き分けます）。
     auto drawLying = [&](Color body) {
-        FigureStyle st = MakeFigureStyle(body);
-        double ow = std::max(0.6, 1.4 * cs);
-        DrawLimb(r, st, st.dark, sx - facing * 40 * cs, sy - 7 * cs,
-                 sx - facing * 6 * cs, sy - 8 * cs, 13.0 * cs, ow);   // 脚
-        DrawLimb(r, st, st.body, sx - facing * 8 * cs, sy - 9 * cs,
-                 sx + facing * 22 * cs, sy - 10 * cs, 17.0 * cs, ow); // 胴
-        DrawLimb(r, st, st.body, sx + facing * 4 * cs, sy - 12 * cs,
-                 sx + facing * 24 * cs, sy - 22 * cs, 10.0 * cs, ow); // 上げた腕
-        DrawDisc(r, st, st.skin, sx + facing * 36 * cs, sy - 11 * cs, 11.0 * cs, ow); // 頭
-        r.FillRect(static_cast<float>(sx + facing * 36 * cs - 11 * cs),
-                   static_cast<float>(sy - 15 * cs),
-                   static_cast<float>(22 * cs), static_cast<float>(4 * cs), st.band);
+        HumanoidPose lying;
+        lying.facing = facing;
+        lying.lying = true;
+        DrawHumanoid(r, sx, sy, body, lying);
     };
 
     HumanoidPose pose;

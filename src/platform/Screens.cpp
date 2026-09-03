@@ -136,11 +136,16 @@ void Game::DrawCharacterSelect() {
         // タイルの中に小さなキャラクターを描く
         const CharacterStats* cs = dm_->GetCharacter(ids[i]);
         if (cs) {
-            HumanoidPose pose;
-            pose.heightScale = 0.36; // タイルに収まる大きさ
-            pose.facing = 1;
-            DrawHumanoid(r_, x + tileW / 2.0f, y + tileH - 5,
-                         Color(cs->ColorR, cs->ColorG, cs->ColorB), pose);
+            // 手描きの絵があればそれを、無ければ図形で描きます。
+            const double previewScale = 0.36; // タイルに収まる大きさ
+            if (!DrawIdleSprite(r_, cs->Id, x + tileW / 2.0f, y + tileH - 5, 1, 0,
+                                previewScale)) {
+                HumanoidPose pose;
+                pose.heightScale = previewScale;
+                pose.facing = 1;
+                DrawHumanoid(r_, x + tileW / 2.0f, y + tileH - 5,
+                             Color(cs->ColorR, cs->ColorG, cs->ColorB), pose);
+            }
         }
     }
 
@@ -192,11 +197,14 @@ void Game::DrawVS() {
         r_.FillRect(x, boxY, boxW, boxH, pal.PanelBg);
         r_.DrawRect(x, boxY, boxW, boxH, pal.Ink, 1.0f);
         if (!cs) return;
-        HumanoidPose pose;
-        pose.heightScale = 0.85;
-        pose.facing = facing;
-        DrawHumanoid(r_, x + boxW / 2.0f, boxY + boxH - 8,
-                     Color(cs->ColorR, cs->ColorG, cs->ColorB), pose);
+        const double vsScale = 0.85;
+        if (!DrawIdleSprite(r_, cs->Id, x + boxW / 2.0f, boxY + boxH - 8, facing, 0, vsScale)) {
+            HumanoidPose pose;
+            pose.heightScale = vsScale;
+            pose.facing = facing;
+            DrawHumanoid(r_, x + boxW / 2.0f, boxY + boxH - 8,
+                         Color(cs->ColorR, cs->ColorG, cs->ColorB), pose);
+        }
         DrawPixelTextCentered(r_, cs->Name, x, boxY - 12, boxW, 10, 1.0f, pal.Ink);
     };
     drawSide(p1, leftX, 1);
@@ -291,10 +299,23 @@ void Game::DrawGame() {
     }
 
     // ステージの端（壁）。ここから先には進めないことを示します。
-    for (double wall : {StageConstants::StageMinX, StageConstants::StageMaxX}) {
-        float sx = static_cast<float>(ToScreenX(wall));
-        if (sx < -2 || sx > VirtualW + 2) continue;
-        r_.FillRect(sx - 1, 0, 2, static_cast<float>(VirtualH), Color(30, 28, 30, 160));
+    //
+    // 帯は必ず「ステージの内側」へ描きます。壁の線をまたぐように
+    // 描くと、カメラが端まで寄ったとき（＝壁の位置が画面のいちばん端に
+    // 来たとき）帯の外側半分が画面の外へ出てしまい、左右で太さが
+    // 違って見えます。内側だけに描けば、壁の面が画面の端と
+    // ちょうど重なり、「ステージの端＝画面の端」が一目で分かります。
+    constexpr float kWallBand = 2.0f;
+    {
+        float leftX = static_cast<float>(ToScreenX(StageConstants::StageMinX));
+        if (leftX > -kWallBand && leftX < VirtualW) {
+            r_.FillRect(leftX, 0, kWallBand, static_cast<float>(VirtualH), Color(30, 28, 30, 160));
+        }
+        float rightX = static_cast<float>(ToScreenX(StageConstants::StageMaxX));
+        if (rightX > 0 && rightX < VirtualW + kWallBand) {
+            r_.FillRect(rightX - kWallBand, 0, kWallBand, static_cast<float>(VirtualH),
+                        Color(30, 28, 30, 160));
+        }
     }
 
     // ---- キャラクターと飛び道具 ----

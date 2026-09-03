@@ -210,6 +210,8 @@ set(KAKUGE_SOURCES
     src/platform/Renderer.cpp
     src/platform/Font.cpp
     src/platform/Figure.cpp
+    src/platform/Sprite.cpp
+    src/platform/SpriteExport.cpp
     src/platform/Camera.cpp
     src/platform/Gamepad.cpp
     src/platform/Hud.cpp
@@ -285,6 +287,17 @@ if(KAKUGE_BUILD_TESTS)
 
     # コントローラのテストだけは SDL2 を使います（仮想ジョイスティックを
     # 作るのに SDL の機能が要るためです）。実物のコントローラは不要です。
+    # カメラとステージ端のテスト。計算だけなので画面は出しませんが、
+    # 内部キャンバスの大きさ（VirtualW）が Renderer.cpp にあるため
+    # SDL2 とリンクします。
+    add_executable(CameraTests tests/CameraTests.cpp
+        src/platform/Camera.cpp src/platform/Renderer.cpp)
+    target_include_directories(CameraTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(CameraTests PRIVATE
+        $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
+        SDL2::SDL2
+    )
+
     add_executable(GamepadTests tests/GamepadTests.cpp src/platform/Gamepad.cpp)
     target_include_directories(GamepadTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
     target_link_libraries(GamepadTests PRIVATE

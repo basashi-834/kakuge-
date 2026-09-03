@@ -17,12 +17,25 @@
 // =====================================================================
 #include <SDL.h>
 
+#include <cstring>
+#include <string>
+
 #include "platform/Game.h"
+#include "platform/SpriteExport.h"
 
 int main(int argc, char** argv) {
-    // 引数は使いませんが、上のコメントの理由で形は残します。
-    (void)argc;
-    (void)argv;
+    // ---- スプライトの型紙を書き出すだけのモード ----
+    // 通常の起動では通りません（ゲーム画面は開かずに終了します）。
+    //   Kakuge --export-sprites          … 全キャラクターぶん
+    //   Kakuge --export-sprites ryu      … ryu だけ
+    // 詳しくは platform/SpriteExport.h を見てください。
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--export-sprites") != 0) continue;
+        std::string charId = (i + 1 < argc) ? argv[i + 1] : std::string();
+        // 次の引数が別のオプションなら、キャラクター指定ではありません。
+        if (!charId.empty() && charId.rfind("--", 0) == 0) charId.clear();
+        return kakuge::ExportSpriteSheets(charId);
+    }
 
     kakuge::Game game;
     if (!game.Init()) {

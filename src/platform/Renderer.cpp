@@ -156,6 +156,27 @@ void Renderer::EndFrame(int windowW, int windowH) {
 }
 
 // ---------------------------------------------------------------------
+// 画像（テクスチャ）を貼る
+// ---------------------------------------------------------------------
+// SDL_RenderCopyExF は「切り出し → 拡大縮小 → 回転・反転 → 貼り付け」を
+// まとめてやってくれる関数です。ここでは回転は使わず、左右反転だけを
+// 使います（キャラクターの絵は右向きの 1 種類だけ用意すれば済むように）。
+//
+// 色の掛け算（ColorMod / AlphaMod）はテクスチャ側の設定なので、
+// 貼るたびに指定し直します。前に貼ったときの色が残っていると、
+// 別のキャラクターまで青くなる、といった事故になります。
+void Renderer::DrawTexture(SDL_Texture* texture, const SDL_Rect& src,
+                           float x, float y, float w, float h,
+                           bool flipX, Color mod) {
+    if (!texture || w <= 0 || h <= 0) return;
+    SDL_SetTextureColorMod(texture, mod.r, mod.g, mod.b);
+    SDL_SetTextureAlphaMod(texture, mod.a);
+    SDL_FRect dest{x + shakeX_, y + shakeY_, w, h};
+    SDL_RenderCopyExF(sdl_, texture, &src, &dest, 0.0, nullptr,
+                      flipX ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE);
+}
+
+// ---------------------------------------------------------------------
 // 基本の描画
 // ---------------------------------------------------------------------
 void Renderer::Clear(Color color) {

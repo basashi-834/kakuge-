@@ -150,6 +150,17 @@ public:
     // 指定できるので、四角形の上辺と下辺に違う色を置くだけで作れます。
     void FillGradientRect(float x, float y, float w, float h, Color top, Color bottom);
 
+    // ---- 画像（テクスチャ）を貼る ----
+    // スプライト（platform/Sprite.h）を描くために使います。
+    //   src   … 画像のどこを切り出すか
+    //   x,y,w,h … 内部キャンバスのどこへ、どの大きさで貼るか
+    //   flipX … true なら左右反転（絵は右向きだけ用意すれば済みます）
+    //   mod   … 掛ける色。白（255,255,255,255）なら元の絵のまま。
+    //           ガード中を青くする、といった色付けに使います。
+    void DrawTexture(SDL_Texture* texture, const SDL_Rect& src,
+                     float x, float y, float w, float h,
+                     bool flipX, Color mod = Color(255, 255, 255, 255));
+
     // ---- 描画範囲の制限（クリップ）----
     // 指定した四角形の外にはみ出した部分を描かないようにします。
     // ゲージを「割合ぶんだけ」表示するときなどに使います。

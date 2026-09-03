@@ -326,10 +326,17 @@ int main(int argc, char** argv) {
     Check("ラウンド開始の間合いは 175（左右対称に -87.5/+87.5）",
           StageConstants::Player1StartX == -87.5 && StageConstants::Player2StartX == 87.5 &&
           StageConstants::RoundStartDistance == 175.0);
-    Check("ステージ幅は 850、キャラ間の上限 300 は画面幅 384 より狭い",
+    Check("ステージ幅は 850、キャラ間の上限 304 は画面幅 384 より狭い",
           StageConstants::StageWidth == 850.0 &&
-          StageConstants::MaxPlayerDistance == 300.0 &&
+          StageConstants::MaxPlayerDistance == 304.0 &&
           StageConstants::MaxPlayerDistance < GameSpec::BaseWidth);
+    // 上限は「画面幅 － 絵 1 体ぶん」で決めています。2 人が上限まで
+    // 離れて、カメラを中間に置いたとき、左右の絵の端が画面の端に
+    // ちょうど重なる、という関係です（platform/Camera.cpp が使います）。
+    Check("キャラ間の上限＋絵 1 体ぶん＝画面幅（端がぴったり合う）",
+          StageConstants::MaxPlayerDistance +
+              StageConstants::PlayerScreenMargin * 2 == GameSpec::BaseWidth &&
+          StageConstants::PlayerScreenMargin * 2 == GameSpec::CharacterSpriteWidth);
     Check("地面は Y=200、キャラの身長 95 は画面高の 40〜45%",
           GameSpec::GroundY == 200 &&
           GameSpec::CharacterVisualHeight == 95 &&
@@ -553,9 +560,9 @@ int main(int argc, char** argv) {
         bs.Player2.PositionX = 400;
         bs.ResolveMaxDistance();
         double dist = std::abs(bs.Player2.PositionX - bs.Player1.PositionX);
-        Check("2 人の距離は上限 300 まで詰められる",
+        Check("2 人の距離は上限 304 まで詰められる",
               std::abs(dist - StageConstants::MaxPlayerDistance) < 0.001);
-        Check("上限 300 は画面幅 384 より狭いので必ず両方映る",
+        Check("上限 304 は画面幅 384 より狭いので必ず両方映る",
               StageConstants::MaxPlayerDistance < GameSpec::BaseWidth);
 
         // 追い詰められた側が、相手が逃げただけで角から引き出されないこと。
@@ -572,12 +579,12 @@ int main(int argc, char** argv) {
                        - StageConstants::MaxPlayerDistance) < 0.001);
 
         // どちらも逃げていなければ半分ずつ
-        bs.Player1.PositionX = -160; bs.Player1.VelocityX = 0.0;
-        bs.Player2.PositionX = 160;  bs.Player2.VelocityX = 0.0;
+        bs.Player1.PositionX = -162; bs.Player1.VelocityX = 0.0;
+        bs.Player2.PositionX = 162;  bs.Player2.VelocityX = 0.0;
         bs.ResolveMaxDistance();
         Check("どちらも逃げていなければ半分ずつ詰める",
-              std::abs(bs.Player1.PositionX - (-150)) < 0.001 &&
-              std::abs(bs.Player2.PositionX - 150) < 0.001);
+              std::abs(bs.Player1.PositionX - (-152)) < 0.001 &&
+              std::abs(bs.Player2.PositionX - 152) < 0.001);
 
         // 上限内なら何もしない
         bs.Player1.PositionX = 0; bs.Player2.PositionX = 100;

@@ -11,6 +11,7 @@
 #include "platform/Hud.h"
 #include "platform/Palette.h"
 #include "platform/Paths.h"
+#include "platform/Sprite.h"
 
 namespace kakuge {
 
@@ -95,6 +96,11 @@ bool Game::Init() {
         }
     }
 
+    // 手描きの絵（スプライト）を読み込みます。
+    // data/sprites/<キャラクター ID>/sprites.json が無いキャラクターは、
+    // これまでどおり図形で描かれます（platform/Sprite.h）。
+    GetSprites().LoadAll(sdlRenderer_, dm_->BaseDir, dm_->UserDir, dm_->GetCharacterIds());
+
     // USB コントローラ（つながっていなくても失敗しません）。
     pad_.Init();
 
@@ -106,6 +112,9 @@ bool Game::Init() {
 
 void Game::Shutdown() {
     pad_.Shutdown();
+    // 画像は SDL_Renderer より先に片付けます（逆にすると、
+    // すでに壊した描画機に向かって解放を頼むことになります）。
+    GetSprites().Unload();
     r_.Shutdown();
     if (sdlRenderer_) { SDL_DestroyRenderer(sdlRenderer_); sdlRenderer_ = nullptr; }
     if (window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
@@ -239,6 +248,10 @@ void Game::OnKeyDown(SDL_Keycode key) {
                 editor_->ClearExitRequest();
                 // 編集結果をゲーム側にも反映させるため読み直します。
                 dm_->ReloadAll();
+                // 絵も読み直します（新しく作ったキャラクターの絵を
+                // 置いた直後でも、ゲームを起動し直さずに反映されます）。
+                GetSprites().LoadAll(sdlRenderer_, dm_->BaseDir, dm_->UserDir,
+                                     dm_->GetCharacterIds());
                 GoTitle();
             }
             return;
