@@ -185,24 +185,34 @@ int main(int argc, char** argv) {
     std::cout << "\n=== 試合をまるごと 1 回シミュレート ===\n";
     // =================================================================
     // プレイヤーは何もせず、CPU だけが動く試合を最後まで回します。
-    // 「決着がつく」「攻撃判定が出る」「ダメージが入る」を確認します。
+    // 「決着がつく」「CPU が攻めた」「ダメージが入る」を確認します。
+    //
+    // CPU の思考には乱数が入るので、種を固定して毎回同じ試合にします。
+    // 固定しないと、実行のたびに違う展開になり、たまたま失敗する
+    // テストになってしまいます（実際そうなっていました）。
     {
         BattleSystem bs;
         bs.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"),
                       *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
+        bs.CpuAI->Rng.seed(20240601u);
         double dt = 1.0 / 60.0;
         RawInput neutral;
-        bool sawHitboxActive = false, sawHpDrop = false;
+        bool sawAttack = false, sawHpDrop = false, sawProjectile = false;
         int maxFrames = 12000, frame = 0;
         while (bs.MatchActive && frame < maxFrames) {
             bs.Update(dt, neutral);
-            if (!bs.Player2.ActiveHitboxRects.empty()) sawHitboxActive = true;
+            // 「攻撃した」の判定に本体の攻撃判定（ActiveHitboxRects）だけを
+            // 見てはいけません。飛び道具は本体とは別のオブジェクトなので、
+            // CPU が波動拳だけで倒しきると本体の判定は一度も出ないためです。
+            if (bs.Player2.SM.CurrentState == CharState::Attack) sawAttack = true;
+            if (!bs.Projectiles.empty()) sawProjectile = true;
             if (bs.Player1.CurrentHP < bs.Player1.Stats.MaxHP) sawHpDrop = true;
             frame++;
         }
         Check("上限フレームより前に決着した (" + std::to_string(frame) + " フレーム)",
               frame < maxFrames);
-        Check("攻撃判定が少なくとも 1 回出た", sawHitboxActive);
+        Check("CPU が攻撃行動を取った", sawAttack);
+        Check("飛び道具が飛んだ", sawProjectile);
         Check("プレイヤー 1 の体力が減った", sawHpDrop);
         Check("KO か時間切れで試合が終わった", !bs.MatchActive);
         Check("勝者または引き分けが記録された", bs.IsDraw || bs.Winner != nullptr);
