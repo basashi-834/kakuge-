@@ -1,29 +1,29 @@
 {
- "id": "ryu",
- "name": "RYU",
- "maxHP": 1000,
- "walkForwardSpeed": 62.17,
- "walkBackwardSpeed": 48.04,
- "dashSpeed": 121.52,
- "jumpVelocity": -210.0,
- "gravity": 678.26,
- "color": [
-  0.75,
-  0.2,
-  0.18
- ],
- "moves": [
-  "standing_light",
-  "standing_medium",
-  "standing_heavy",
-  "crouch_light",
-  "crouch_medium",
-  "crouch_heavy",
-  "jump_attack",
-  "standing_throw",
-  "fireball",
-  "anti_air_special",
-  "hurricane_kick",
-  "super_combo"
- ]
+    "id": "ryu",
+    "name": "RYU",
+    "maxHP": 1000,
+    "walkForwardSpeed": 67.12,
+    "walkBackwardSpeed": 51.86,
+    "dashSpeed": 131.19,
+    "jumpVelocity": -226.7,
+    "gravity": 732.21,
+    "color": [
+        0.75,
+        0.2,
+        0.18
+    ],
+    "moves": [
+        "standing_light",
+        "standing_medium",
+        "standing_heavy",
+        "crouch_light",
+        "crouch_medium",
+        "crouch_heavy",
+        "jump_attack",
+        "standing_throw",
+        "fireball",
+        "anti_air_special",
+        "hurricane_kick",
+        "super_combo"
+    ]
 }

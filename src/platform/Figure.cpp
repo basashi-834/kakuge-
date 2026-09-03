@@ -237,10 +237,10 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
     double sy = std::round(ToScreenY(fighter.PositionY));
     int facing = fighter.Facing;
 
-    // DrawHumanoid 自体はカメラを知らない（選択画面でも使うため）ので、
-    // 拡大率はここで姿勢の heightScale として渡します。
-    double zoom = GetCamera().Zoom;
-    double cs = kCharScale * zoom;
+    // 対戦中の表示倍率は常に 100%（カメラは拡大縮小しません）。
+    // 間合いの感覚を狂わせないための、このゲームの基本方針です。
+    // 倒れ姿の寸法計算に使う倍率だけ、ここで用意しておきます。
+    constexpr double cs = kCharScale;
 
     bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
 
@@ -261,7 +261,7 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
     };
 
     HumanoidPose pose;
-    pose.heightScale = zoom;
+    pose.heightScale = 1.0; // 常に等倍
     pose.facing = facing;
 
     switch (fighter.SM.CurrentState) {
@@ -282,12 +282,12 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
             DrawHumanoid(r, sx, sy, Color(60, 120, 210), pose); // ガードは青
             break;
         case CharState::Hitstun:
-            pose.leanBack = -8.0 * facing * zoom;
+            pose.leanBack = -8.0 * facing;
             pose.jump = airborne;
             DrawHumanoid(r, sx, sy, Color(220, 60, 60), pose);  // 食らいは赤
             break;
         case CharState::Throw:
-            pose.leanBack = -6.0 * facing * zoom;
+            pose.leanBack = -6.0 * facing;
             DrawHumanoid(r, sx, sy, Color(200, 50, 50), pose);
             break;
         case CharState::Attack: {
@@ -316,31 +316,40 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
 void DrawProjectile(Renderer& r, const Projectile& proj) {
     double sx = ToScreenX(proj.PositionX);
     double sy = ToScreenY(proj.PositionY);
-    double rad = ScreenScale(11.0);
+    double rad = 12.0; // 倍率固定なのでそのままのピクセル数
     // 外側の明るい輪 → 内側の濃い玉、の 2 重で「光っている」感じを出す
     r.FillCircle(static_cast<float>(sx), static_cast<float>(sy),
-                 static_cast<float>(rad + ScreenScale(2.0)), Color(255, 200, 60));
+                 static_cast<float>(rad + 2.0), Color(255, 200, 60));
     r.FillCircle(static_cast<float>(sx), static_cast<float>(sy),
                  static_cast<float>(rad), Color(235, 130, 30));
 }
 
 EffectStyle GetEffectStyle(const std::string& kind) {
-    // {色, 大きさ, 表示時間（秒）}
-    if (kind == "hit") return {Color(255, 200, 40), 16.0, 0.14};
-    if (kind == "heavy_hit") return {Color(235, 110, 20), 26.0, 0.18};
-    if (kind == "guard") return {Color(60, 130, 220), 20.0, 0.14};
-    if (kind == "special") return {Color(140, 40, 220), 30.0, 0.22};
-    if (kind == "super") return {Color(230, 30, 30), 46.0, 0.32};
-    if (kind == "counter") return {Color(255, 210, 30), 24.0, 0.35};
-    if (kind == "effective_counter") return {Color(255, 40, 40), 40.0, 0.5};
-    return {Color(255, 255, 255), 16.0, 0.14};
+    // {色, 大きさ（画面ピクセル）, 表示時間（秒）}
+    //
+    // 技の強さで大きさに差を付けます。弱で 10、超必で 34。
+    // 表示倍率が 100% 固定になったので、ここの数値がそのまま
+    // 画面上のピクセル数です（キャラの身長が 95 なので、
+    // 超必のエフェクトでも体の 3 分の 1 ほど）。
+    //
+    // 表示時間を短めにしているのは、エフェクトが長く残ると
+    // キャラクターが隠れて次の行動が読めなくなるためです。
+    if (kind == "hit") return {Color(255, 200, 40), 10.0, 0.11};          // 弱
+    if (kind == "medium_hit") return {Color(255, 170, 30), 14.0, 0.13};   // 中
+    if (kind == "heavy_hit") return {Color(235, 110, 20), 20.0, 0.16};    // 強
+    if (kind == "guard") return {Color(60, 130, 220), 13.0, 0.12};        // ガード
+    if (kind == "special") return {Color(140, 40, 220), 24.0, 0.20};      // 必殺技
+    if (kind == "super") return {Color(230, 30, 30), 34.0, 0.28};         // 超必殺技
+    if (kind == "counter") return {Color(255, 210, 30), 18.0, 0.30};
+    if (kind == "effective_counter") return {Color(255, 40, 40), 28.0, 0.42};
+    return {Color(255, 255, 255), 10.0, 0.11};
 }
 
 void DrawEffect(Renderer& r, const LiveEffect& fx) {
     EffectStyle style = GetEffectStyle(fx.kind);
     double t = std::min(1.0, fx.age / style.duration); // 0（出た瞬間）→ 1（消える）
     // 時間とともに大きく、薄くなる
-    double rad = ScreenScale(style.radius * (0.4 + t * 1.1));
+    double rad = style.radius * (0.4 + t * 1.1);
     int alpha = static_cast<int>(255 * (1.0 - t));
     if (alpha <= 0) return;
     double sx = ToScreenX(fx.x), sy = ToScreenY(fx.y);

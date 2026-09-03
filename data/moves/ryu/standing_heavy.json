@@ -1,45 +1,45 @@
 {
- "id": "standing_heavy",
- "name": "\u7acb\u3061\u5f37\u653b\u6483",
- "startup": 7,
- "active": 3,
- "recovery": 13,
- "damage": 100,
- "hitstun": 30,
- "blockstun": 12,
- "hitstop": 8,
- "guardType": "High",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 32,
-   "offsetY": -58,
-   "width": 20,
-   "height": 12
-  }
- ],
- "knockbackX": 111.91,
- "knockbackY": 0.0,
- "hitOutcome": "Knockdown",
- "meterGain": 12,
- "meterCost": 0,
- "cancelRoutes": [
-  "fireball",
-  "anti_air_special",
-  "super_combo"
- ],
- "cancelStartFrame": 10,
- "cancelEndFrame": 16,
- "tags": [
-  "Heavy",
-  "Normal"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "HP",
- "stance": "stand"
+    "id": "standing_heavy",
+    "name": "立ち強攻撃",
+    "startup": 7,
+    "active": 3,
+    "recovery": 13,
+    "damage": 100,
+    "hitstun": 30,
+    "blockstun": 12,
+    "hitstop": 8,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 34.55,
+            "offsetY": -62.61,
+            "width": 21.59,
+            "height": 12.95
+        }
+    ],
+    "knockbackX": 120.81,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 12,
+    "meterCost": 0,
+    "cancelRoutes": [
+        "fireball",
+        "anti_air_special",
+        "super_combo"
+    ],
+    "cancelStartFrame": 10,
+    "cancelEndFrame": 16,
+    "tags": [
+        "Heavy",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HP",
+    "stance": "stand"
 }

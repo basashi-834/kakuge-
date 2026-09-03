@@ -10,71 +10,71 @@ namespace kakuge {
 
 namespace {
 
-// 2 人の間隔に加えて、左右にどれだけ余白を見せるか。
-// 232 という値は「試合開始時の間隔（152）＋この余白 = 384（画面幅）」、
-// つまり開始直後がちょうど拡大率 1.0 になるように決めています。
-// 開始位置が基準の大きさになるので、寄ったか引いたかが分かりやすい。
-constexpr double kCameraPaddingWorld = 232.0;
-
-// もっとも引いたときの拡大率。
-// 2 人が両端（640 離れている）まで離れても、
-// 384 / 0.49 ≒ 784 > 640 なので必ず両方が画面に入ります。
-// これ以上引くと、ステージの外の何もない場所まで映ってしまいます。
-constexpr double kCameraMinZoom = 0.49;
-
-// もっとも寄ったときの拡大率。
-// キャラクターの身長は拡大率 1.0 で 88 ピクセル。1.05 倍でも 92 ピクセルで、
-// 画面上部の体力ゲージ（約 30 ピクセル）に頭がぶつかりません。
-constexpr double kCameraMaxZoom = 1.05;
-
 // 目標へ近づく速さ（1 秒あたりの割合）。
-// 大きすぎるとカクッと切り替わって酔いやすく、
-// 小さすぎるとダッシュにカメラが付いてこられません。
-constexpr double kCameraLerpSpeed = 6.0;
+//
+// この値の決め方は、次の 2 つの板挟みです。
+//   大きすぎる … カメラが中間点にぴったり張り付き、歩くたびに
+//                 背景がガタガタ動いて酔いやすくなる
+//   小さすぎる … ダッシュや吹き飛びにカメラが付いてこられず、
+//                 キャラクターが画面端に押し付けられて見えなくなる
+// 8.0 は「少し滑らかだが、入力には十分ついてくる」あたりです。
+// （1/60 秒で目標との差の約 12% を詰め、約 0.12 秒でほぼ到達します）
+constexpr double kCameraLerpSpeed = 8.0;
 
 GameCamera g_Camera;
-
-// 2 人の間隔から、あるべき拡大率を求める。
-double CameraTargetZoom(double distance) {
-    double desiredWidth = distance + kCameraPaddingWorld;
-    double zoom = (desiredWidth > 1.0) ? (VirtualW / desiredWidth) : kCameraMaxZoom;
-    return std::clamp(zoom, kCameraMinZoom, kCameraMaxZoom);
-}
 
 // カメラの中心を、ステージの外が映らない範囲に収める。
 //
 // これが無いと、片方が画面端に追い詰められたとき、2 人の中間点を
-// そのまま中心にするせいで、端の向こうの何もない空間が半分映ります。
+// そのまま中心にするせいで、端の向こうの何もない空間が映ります。
 // 本物の格闘ゲームのカメラは、そういうとき中間点の追跡をやめて
 // 壁に張り付きます。その動きを再現しています。
-double ClampCameraCenter(double centerX, double zoom) {
-    double halfVisible = VirtualW / (2.0 * zoom);
+// これが「画面端に追い詰めた」という状況を作る仕組みでもあります。
+double ClampCameraCenter(double centerX) {
+    constexpr double halfVisible = VirtualW / 2.0; // 倍率固定なので常に 192
     double minCenter = StageConstants::StageMinX + halfVisible;
     double maxCenter = StageConstants::StageMaxX - halfVisible;
-    // 画面のほうがステージより広い場合（最小倍率のとき）は中央固定。
+    // ステージが画面より狭い場合は中央固定（今の設定では起きません）。
     if (minCenter > maxCenter) {
         return (StageConstants::StageMinX + StageConstants::StageMaxX) / 2.0;
     }
     return std::clamp(centerX, minCenter, maxCenter);
 }
 
+// デッドゾーンを考慮して、カメラが目指すべき位置を求める。
+//
+//   中間点がデッドゾーンの中  → 今の位置のまま（カメラは動かない）
+//   はみ出した               → はみ出したぶんだけ動く
+//
+// 「はみ出したぶんだけ」なので、帯の縁に中間点が貼り付く形になり、
+// カメラの動き出しが急にならず自然につながります。
+double CameraTargetX(double midpoint, double currentCenterX) {
+    const double half = StageConstants::CameraDeadZoneWidth / 2.0; // 70
+    double diff = midpoint - currentCenterX;
+    double target = currentCenterX;
+    if (diff > half) target = midpoint - half;
+    else if (diff < -half) target = midpoint + half;
+    return ClampCameraCenter(target);
+}
+
 } // namespace
 
 GameCamera& GetCamera() { return g_Camera; }
 
+double CameraDrawX() { return std::round(g_Camera.CenterX); }
+
 void UpdateCamera(double p1x, double p2x, double dt) {
-    double targetZoom = CameraTargetZoom(std::abs(p1x - p2x));
-    double targetCenter = ClampCameraCenter((p1x + p2x) / 2.0, targetZoom);
+    double midpoint = (p1x + p2x) / 2.0;
+    double target = CameraTargetX(midpoint, g_Camera.CenterX);
     // 目標との差の一定割合ずつ近づける（線形補間）。
     // 毎フレーム差が縮むので、なめらかに減速しながら到達します。
     double t = std::clamp(kCameraLerpSpeed * dt, 0.0, 1.0);
-    g_Camera.CenterX += (targetCenter - g_Camera.CenterX) * t;
-    g_Camera.Zoom += (targetZoom - g_Camera.Zoom) * t;
+    g_Camera.CenterX += (target - g_Camera.CenterX) * t;
 }
 
 void ResetCamera(double p1x, double p2x) {
-    g_Camera.Zoom = CameraTargetZoom(std::abs(p1x - p2x));
-    g_Camera.CenterX = ClampCameraCenter((p1x + p2x) / 2.0, g_Camera.Zoom);
+    // 試合開始時はデッドゾーンを考えず、中間点にまっすぐ合わせます。
+    g_Camera.CenterX = ClampCameraCenter((p1x + p2x) / 2.0);
 }
 
 } // namespace kakuge

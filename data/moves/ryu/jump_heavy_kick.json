@@ -1,42 +1,42 @@
 {
- "id": "jump_heavy_kick",
- "name": "\u30b8\u30e3\u30f3\u30d7\u5f37\u30ad\u30c3\u30af",
- "startup": 6,
- "active": 7,
- "recovery": 12,
- "damage": 88,
- "hitstun": 22,
- "blockstun": 12,
- "hitstop": 7,
- "guardType": "Overhead",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 26,
-   "offsetY": -21,
-   "width": 35,
-   "height": 28
-  }
- ],
- "knockbackX": 86.48,
- "knockbackY": 0.0,
- "hitOutcome": "Normal",
- "meterGain": 10,
- "meterCost": 0,
- "cancelRoutes": [],
- "cancelStartFrame": 0,
- "cancelEndFrame": 0,
- "tags": [
-  "Heavy",
-  "Normal",
-  "Overhead"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "HK",
- "stance": "air"
+    "id": "jump_heavy_kick",
+    "name": "ジャンプ強キック",
+    "startup": 6,
+    "active": 7,
+    "recovery": 12,
+    "damage": 88,
+    "hitstun": 22,
+    "blockstun": 12,
+    "hitstop": 7,
+    "guardType": "Overhead",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 28.07,
+            "offsetY": -22.67,
+            "width": 37.78,
+            "height": 30.23
+        }
+    ],
+    "knockbackX": 93.36,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 10,
+    "meterCost": 0,
+    "cancelRoutes": [],
+    "cancelStartFrame": 0,
+    "cancelEndFrame": 0,
+    "tags": [
+        "Heavy",
+        "Normal",
+        "Overhead"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HK",
+    "stance": "air"
 }

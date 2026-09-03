@@ -1,46 +1,46 @@
 {
- "id": "crouch_heavy",
- "name": "\u3057\u3083\u304c\u307f\u5f37\u653b\u6483",
- "startup": 9,
- "active": 4,
- "recovery": 20,
- "damage": 90,
- "hitstun": 35,
- "blockstun": 12,
- "hitstop": 8,
- "guardType": "Low",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 31,
-   "offsetY": -9,
-   "width": 37,
-   "height": 15
-  }
- ],
- "knockbackX": 101.74,
- "knockbackY": 0.0,
- "hitOutcome": "Knockdown",
- "meterGain": 12,
- "meterCost": 0,
- "cancelRoutes": [
-  "fireball",
-  "anti_air_special",
-  "super_combo"
- ],
- "cancelStartFrame": 9,
- "cancelEndFrame": 15,
- "tags": [
-  "Heavy",
-  "Normal",
-  "Low"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "HK",
- "stance": "crouch"
+    "id": "crouch_heavy",
+    "name": "しゃがみ強攻撃",
+    "startup": 9,
+    "active": 4,
+    "recovery": 20,
+    "damage": 90,
+    "hitstun": 35,
+    "blockstun": 12,
+    "hitstop": 8,
+    "guardType": "Low",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 33.47,
+            "offsetY": -9.72,
+            "width": 39.94,
+            "height": 16.19
+        }
+    ],
+    "knockbackX": 109.83,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 12,
+    "meterCost": 0,
+    "cancelRoutes": [
+        "fireball",
+        "anti_air_special",
+        "super_combo"
+    ],
+    "cancelStartFrame": 9,
+    "cancelEndFrame": 15,
+    "tags": [
+        "Heavy",
+        "Normal",
+        "Low"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HK",
+    "stance": "crouch"
 }

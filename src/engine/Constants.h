@@ -135,74 +135,84 @@ struct Constants {
 // くっきりしたドット絵として表示できます。
 //
 // ここに並んでいるのは、その 384x224 の中での寸法です。
-// 単位は「カメラ倍率 1.0 のときの画面ピクセル」で、ゲーム内部の
-// 座標の単位（ワールド単位）と同じです。
+// 対戦中の表示倍率は常に 100% 固定なので、
+//   ここに書いた数値 = 画面にそのまま出るピクセル数
+// です（カメラが拡大縮小しないので、換算が要りません）。
 // =====================================================================
 struct GameSpec {
     static constexpr int BaseWidth = 384;   // 内部画面の幅
     static constexpr int BaseHeight = 224;  // 内部画面の高さ
 
-    // 地面の高さ（画面の上から 189 ピクセル目 ＝ 高さの約 84%）。
+    // 地面の高さ（画面の上から 200 ピクセル目）。
     // 両キャラクターの足はこの線の上に立ちます。
-    static constexpr int GroundY = 189;
+    // 下に 24 ピクセル残るので、そこに超必殺技ゲージを置けます。
+    static constexpr int GroundY = 200;
+
+    // ---- キャラクターの大きさ ----
+    // 立ち姿の身長 95px は画面高 224px の約 42%。
+    // 「大きく見えるが画面が窮屈にならない」ちょうど中間の値です。
+    //   90px → 40.2%  /  95px → 42.4%  /  100px → 44.6%
+    static constexpr int CharacterVisualHeight = 95;
+    // 立ち姿の見た目の幅の目安（45〜60 の中間）。
+    static constexpr int CharacterVisualWidth = 52;
 
     // 1 コマぶんのキャラクター画像を描くときの推奨キャンバスサイズ。
-    static constexpr int CharacterSpriteWidth = 75;
-    static constexpr int CharacterSpriteHeight = 90;
-    // そのキャンバスの中で、実際に体が占める大きさ。
-    // 描画側の拡大率はこの「高さ 88」から逆算しています。
-    static constexpr int CharacterVisualWidth = 55;
-    static constexpr int CharacterVisualHeight = 88;
+    // ただし攻撃・ジャンプなどでは、この枠に収める必要はありません。
+    // 技によって必要な広さが違うためです（例: 横蹴りは幅 110〜130px）。
+    static constexpr int CharacterSpriteWidth = 80;
+    static constexpr int CharacterSpriteHeight = 100;
 
-    // ラウンド開始時の立ち位置（画面幅の 30% と 70% の位置）。
-    // 2 人の間隔は 268 - 116 = 152 ピクセルになります。
-    static constexpr int Player1StartX = 116;
-    static constexpr int Player2StartX = 268;
-
-    static constexpr int HudHeight = 30;        // 画面上部（体力ゲージ・制限時間）の帯の高さ
-    static constexpr int SuperGaugeHeight = 18; // 画面下部（超必ゲージ）の帯の高さ
+    static constexpr int HudHeight = 30;        // 画面上部（体力ゲージ・制限時間）の帯
+    static constexpr int SuperGaugeHeight = 18; // 画面下部（超必ゲージ）の帯
 
     // ---- 押し合い判定（プッシュボックス）----
     // 体と体が重ならないように押し合うためだけの四角形で、
     // 攻撃が当たるかどうかには一切関係しません。
-    // 立ち・しゃがみ・空中で大きさが変わります。
-    static constexpr int PushboxStandWidth = 30, PushboxStandHeight = 72;
-    static constexpr int PushboxCrouchWidth = 32, PushboxCrouchHeight = 48;
-    static constexpr int PushboxAirWidth = 28, PushboxAirHeight = 52;
+    // 見た目の幅（52px）よりわざと細くしてあります。腕や髪で
+    // 相手を押してしまうと不自然だからです。胴・腰・脚が目安。
+    static constexpr int PushboxStandWidth = 32, PushboxStandHeight = 78;
+    static constexpr int PushboxCrouchWidth = 35, PushboxCrouchHeight = 52;
+    static constexpr int PushboxAirWidth = 30, PushboxAirHeight = 56;
 
     // 投げが成立する距離（中心から中心まで）。投げだけは当たり判定の
     // 四角形ではなく、この距離で成立するかを決めます。
-    static constexpr int NormalThrowRange = 28;
-
-    // 通常技の当たり判定の大きさの目安。実際に使われる値は
-    // data/moves/ryu/*.json のほうで、ここはその元になった基準値です。
-    static constexpr int LightPunchHitboxWidth = 16, LightPunchHitboxHeight = 10;
-    static constexpr int HeavyPunchHitboxWidth = 20, HeavyPunchHitboxHeight = 12;
-    static constexpr int LightKickHitboxWidth = 18, LightKickHitboxHeight = 10;
-    static constexpr int HeavyKickHitboxWidth = 24, HeavyKickHitboxHeight = 14;
-    static constexpr int CrouchLightKickHitboxWidth = 20, CrouchLightKickHitboxHeight = 8;
+    static constexpr int NormalThrowRange = 30;
 };
 
 // =====================================================================
-// StageConstants - ステージ（戦う場所）の広さと開始位置
+// StageConstants - ステージ（戦う場所）とカメラの基準値
 // =====================================================================
-// ゲーム内部の座標は「画面の中央が X=0」です。左に行くとマイナス、
+// ゲーム内部の座標は「ステージの中央が X=0」です。左に行くとマイナス、
 // 右に行くとプラス。画面座標（左上が 0,0）ではないので注意してください。
-// 画面座標への変換は描画側（platform/Camera.h）が担当します。
+// 画面座標への変換はカメラ（platform/Camera.h）が担当します。
+//
+// 表示倍率が 100% 固定なので、ここでの 1 単位 = 画面の 1 ピクセルです。
 // =====================================================================
 struct StageConstants {
-    // ステージ全体の幅。384 の画面より広いので、カメラが左右に動きます。
-    static constexpr double StageWidth = 640.0;
-    static constexpr double StageMinX = -StageWidth / 2.0;  // 左端
-    static constexpr double StageMaxX = StageWidth / 2.0;   // 右端
+    // ステージ全体の幅。画面（384）の約 2.2 倍あるので、
+    // カメラが左右にスクロールして戦う場所を追いかけます。
+    static constexpr double StageWidth = 850.0;
+    static constexpr double StageMinX = -StageWidth / 2.0;  // 左端 -425
+    static constexpr double StageMaxX = StageWidth / 2.0;   // 右端 +425
 
-    // ラウンド開始位置。GameSpec の画面座標 116/268 を、
-    // 「画面中央が 0」の座標に直したもの（-76 と +76）。
-    static constexpr double Player1StartX = GameSpec::Player1StartX - GameSpec::BaseWidth / 2.0;
-    static constexpr double Player2StartX = GameSpec::Player2StartX - GameSpec::BaseWidth / 2.0;
-    static constexpr double PlayerStartDistance = Player2StartX - Player1StartX; // 152
+    // ラウンド開始時の 2 人の距離（中心から中心まで）。
+    // 遠すぎず、開幕からいきなり殴り合いにもならない間合いで、
+    // 歩き・牽制・ジャンプ・飛び道具のどれも選べる距離です。
+    static constexpr double RoundStartDistance = 175.0;
+    static constexpr double Player1StartX = -RoundStartDistance / 2.0; // -87.5
+    static constexpr double Player2StartX = RoundStartDistance / 2.0;  // +87.5
 
-    // キャラクターの身長が画面の高さの何割を占めるか（88 / 224 ≒ 0.39）。
+    // 2 人がこれ以上離れないようにする上限。
+    // 画面幅 384 より小さくしてあるので、どんなに離れても
+    // 必ず両方が画面に映ります（相手を見失わない）。
+    static constexpr double MaxPlayerDistance = 300.0;
+
+    // カメラのデッドゾーン（＝カメラを動かさない中央の帯）の幅。
+    // 2 人の中間点がこの帯の中にいる限り、カメラは止まったままです。
+    // これが無いと、少し歩くたびに背景が動いて画面が落ち着きません。
+    static constexpr double CameraDeadZoneWidth = 140.0;
+
+    // キャラクターの身長が画面の高さの何割を占めるか（95 / 224 ≒ 0.42）。
     static constexpr double PlayerHeightRatio =
         static_cast<double>(GameSpec::CharacterVisualHeight) / GameSpec::BaseHeight;
 };

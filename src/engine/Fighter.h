@@ -108,7 +108,7 @@ public:
     int PushboxStandW = GameSpec::PushboxStandWidth, PushboxStandH = GameSpec::PushboxStandHeight;
     int PushboxCrouchW = GameSpec::PushboxCrouchWidth, PushboxCrouchH = GameSpec::PushboxCrouchHeight;
     int PushboxAirW = GameSpec::PushboxAirWidth, PushboxAirH = GameSpec::PushboxAirHeight;
-    static constexpr int AirPushboxCenterY = -42;
+    static constexpr int AirPushboxCenterY = -45;
 
     bool HitboxesWereLive = false;          // 前フレームに攻撃判定が出ていたか
     std::vector<RectBox> ActiveHitboxRects; // 今出ている攻撃判定（複数可）
@@ -576,11 +576,16 @@ public:
             } else {
                 EnterKnockdown(move.HitOutcome == std::string(Constants::HitHardKnockdown), move.Hitstun);
             }
-            // 演出の種類を技の性質から選ぶ
-            std::string fx = "hit";
+            // 演出の種類を技の強さから選ぶ。
+            // 弱 → 中 → 強 → 必殺 → 超必 の順に、火花が大きくなります。
+            // 「強い技を当てた」ことが見た目だけで分かるようにするためで、
+            // これがヒットストップ・ノックバックと合わさって
+            // 「当たった感じ」を作ります。
+            std::string fx = "hit"; // 弱（既定）
             if (move.HasTag(Constants::TagSuper)) fx = "super";
             else if (move.HasTag(Constants::TagSpecial)) fx = "special";
             else if (move.HasTag(Constants::TagHeavy)) fx = "heavy_hit";
+            else if (move.HasTag(Constants::TagMedium)) fx = "medium_hit";
             PendingEffects.push_back({fx, PositionX, PositionY});
             PendingSounds.push_back("hit");
         }
@@ -665,9 +670,49 @@ public:
         }
     }
 
+    // 今の姿勢での押し合い判定の「半分の幅」。
+    // 画面端で体がはみ出さないようにするために使います。
+    double PushboxHalfWidth() const {
+        if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasPushbox) {
+            return fb->pushbox.Width / 2.0;
+        }
+        std::string stance = Stance();
+        if (stance == "air") return PushboxAirW / 2.0;
+        if (stance == "crouch") return PushboxCrouchW / 2.0;
+        return PushboxStandW / 2.0;
+    }
+
+    // 指定した向き（+1 右 / -1 左）へ、壁にぶつかるまであと何動けるか。
+    // ClampToStage と同じ「判定の半分の幅ぶん内側で止まる」基準で
+    // 測るので、押し合いの計算が壁を突き抜ける想定をしなくなります。
+    double RoomToWall(double dir) const {
+        double half = PushboxHalfWidth();
+        double room = (dir > 0) ? (std::floor(StageMaxX - half) - PositionX)
+                                : (PositionX - std::ceil(StageMinX + half));
+        return std::max(0.0, room);
+    }
+
+    // ステージの外へ出ないように位置を制限する。
+    //
+    // 以前は「中心座標」だけを見て止めていたため、画面端に張り付くと
+    // 体の左半分（＝押し合い判定の半分）がステージの外にはみ出して
+    // 見えていました。壁は体の表面で止まるべきなので、
+    // 判定の半分の幅だけ内側で止めます。
+    //
+    // 姿勢によって判定の幅が変わる（しゃがみは立ちより広い）ので、
+    // しゃがんだ瞬間に壁へめり込まないよう、そのつど計算し直します。
     void ClampToStage() {
-        if (PositionX < StageMinX) PositionX = StageMinX;
-        if (PositionX > StageMaxX) PositionX = StageMaxX;
+        double half = PushboxHalfWidth();
+        // ceil / floor で「整数に丸めた位置」を基準にします。
+        // 判定の四角形は座標を整数に丸めてから作られる（PushboxRect）ので、
+        // 丸める前の座標で止めると、丸めた結果 0.5 ピクセルだけ
+        // 壁を突き抜けて見えることがあります。
+        double minX = std::ceil(StageMinX + half);
+        double maxX = std::floor(StageMaxX - half);
+        // ステージが判定より狭いという異常時は中央に置く（安全策）。
+        if (minX > maxX) { PositionX = (StageMinX + StageMaxX) / 2.0; return; }
+        if (PositionX < minX) PositionX = minX;
+        if (PositionX > maxX) PositionX = maxX;
     }
 
     // 相手のほうを向く。ただし技の最中（FacingLocked）や、

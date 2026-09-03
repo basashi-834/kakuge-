@@ -18,7 +18,7 @@
 // 「フィギュア単位」という内部の単位で組み立てています。
 // 立ち姿の全高が 108 単位（頭 24 ＋ 首 2 ＋ 胴 38 ＋ 脚 46）。
 // これに拡大率を掛けて画面ピクセルにします。
-// 88 ピクセル（仕様の身長）÷ 108 単位 = 約 0.81 が基準倍率です。
+// 95 ピクセル（仕様の身長）÷ 108 単位 = 約 0.88 が基準倍率です。
 // =====================================================================
 #pragma once
 #include "engine/BattleSystem.h"
@@ -27,12 +27,12 @@
 
 namespace kakuge {
 
-// 108 フィギュア単位を 88 ピクセル（仕様の身長）にする倍率。
+// 108 フィギュア単位を 95 ピクセル（仕様の身長）にする倍率。
 constexpr double kCharScale = static_cast<double>(GameSpec::CharacterVisualHeight) / 108.0;
 
 // 姿勢の指定。数値を変えるだけで見た目が変わります。
 struct HumanoidPose {
-    double heightScale = 1.0; // 全体の大きさ（カメラ倍率を掛けて渡す）
+    double heightScale = 1.0; // 全体の大きさ（対戦中は常に 1.0）
     int facing = 1;           // 向き（+1 右 / -1 左）
     double armReach = 0.0;    // 前腕を伸ばす量（パンチ）
     double legKick = 0.0;     // 脚を伸ばす量（キック）

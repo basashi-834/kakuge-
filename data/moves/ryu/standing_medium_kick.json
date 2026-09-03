@@ -1,46 +1,46 @@
 {
- "id": "standing_medium_kick",
- "name": "\u7acb\u3061\u4e2d\u30ad\u30c3\u30af",
- "startup": 8,
- "active": 3,
- "recovery": 12,
- "damage": 62,
- "hitstun": 16,
- "blockstun": 10,
- "hitstop": 6,
- "guardType": "High",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 31,
-   "offsetY": -33,
-   "width": 31,
-   "height": 18
-  }
- ],
- "knockbackX": 84.78,
- "knockbackY": 0.0,
- "hitOutcome": "Normal",
- "meterGain": 8,
- "meterCost": 0,
- "cancelRoutes": [
-  "standing_heavy_kick",
-  "fireball",
-  "anti_air_special",
-  "super_combo"
- ],
- "cancelStartFrame": 8,
- "cancelEndFrame": 13,
- "tags": [
-  "Medium",
-  "Normal"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "MK",
- "stance": "stand"
+    "id": "standing_medium_kick",
+    "name": "立ち中キック",
+    "startup": 8,
+    "active": 3,
+    "recovery": 12,
+    "damage": 62,
+    "hitstun": 16,
+    "blockstun": 10,
+    "hitstop": 6,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 33.47,
+            "offsetY": -35.62,
+            "width": 33.47,
+            "height": 19.43
+        }
+    ],
+    "knockbackX": 91.52,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 8,
+    "meterCost": 0,
+    "cancelRoutes": [
+        "standing_heavy_kick",
+        "fireball",
+        "anti_air_special",
+        "super_combo"
+    ],
+    "cancelStartFrame": 8,
+    "cancelEndFrame": 13,
+    "tags": [
+        "Medium",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "MK",
+    "stance": "stand"
 }

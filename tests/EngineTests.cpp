@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <utility>
 #include <random>
 #include <string>
 #include <vector>
@@ -309,9 +310,18 @@ int main(int argc, char** argv) {
     // =================================================================
     std::cout << "\n=== 当たり判定の寸法（仕様どおりか）===\n";
     // =================================================================
-    Check("開始位置は画面 116/268（内部座標 -76/+76）",
-          StageConstants::Player1StartX == -76.0 && StageConstants::Player2StartX == 76.0 &&
-          StageConstants::PlayerStartDistance == 152.0);
+    Check("ラウンド開始の間合いは 175（左右対称に -87.5/+87.5）",
+          StageConstants::Player1StartX == -87.5 && StageConstants::Player2StartX == 87.5 &&
+          StageConstants::RoundStartDistance == 175.0);
+    Check("ステージ幅は 850、キャラ間の上限 300 は画面幅 384 より狭い",
+          StageConstants::StageWidth == 850.0 &&
+          StageConstants::MaxPlayerDistance == 300.0 &&
+          StageConstants::MaxPlayerDistance < GameSpec::BaseWidth);
+    Check("地面は Y=200、キャラの身長 95 は画面高の 40〜45%",
+          GameSpec::GroundY == 200 &&
+          GameSpec::CharacterVisualHeight == 95 &&
+          StageConstants::PlayerHeightRatio > 0.40 &&
+          StageConstants::PlayerHeightRatio < 0.45);
 
     {
         Fighter f;
@@ -320,21 +330,21 @@ int main(int argc, char** argv) {
         f.PositionX = 0; f.PositionY = 0; f.Facing = Constants::FacingRight;
 
         RectBox stand = f.PushboxRect();
-        Check("立ちの押し合い判定は 30x72 で足元に接地",
-              stand.Width == 30 && stand.Height == 72 && stand.Left() == -15 &&
-              stand.Right() == 15 && stand.Top() == -72 && stand.Bottom() == 0);
+        Check("立ちの押し合い判定は 32x78 で足元に接地",
+              stand.Width == 32 && stand.Height == 78 && stand.Left() == -16 &&
+              stand.Right() == 16 && stand.Top() == -78 && stand.Bottom() == 0);
 
         f.SM.ChangeState(CharState::Crouch, "");
         RectBox crouch = f.PushboxRect();
-        Check("しゃがみの押し合い判定は 32x48",
-              crouch.Width == 32 && crouch.Height == 48 && crouch.Bottom() == 0 &&
-              crouch.Left() == -16);
+        Check("しゃがみの押し合い判定は 35x52",
+              crouch.Width == 35 && crouch.Height == 52 && crouch.Bottom() == 0 &&
+              crouch.Left() == -17.5);
 
         f.SM.ChangeState(CharState::Jump, "");
         f.PositionY = -40;
         RectBox air = f.PushboxRect();
-        Check("空中の押し合い判定は 28x52 で胴体の位置",
-              air.Width == 28 && air.Height == 52 &&
+        Check("空中の押し合い判定は 30x56 で胴体の位置",
+              air.Width == 30 && air.Height == 56 &&
               air.CenterY == -40 + Fighter::AirPushboxCenterY);
         f.SM.ChangeState(CharState::Idle, "");
         f.PositionY = 0;
@@ -346,15 +356,17 @@ int main(int argc, char** argv) {
             top = std::min(top, r.Top()); bottom = std::max(bottom, r.Bottom());
         }
         Check("立ちの食らい判定は 3 部位（頭・胴・脚）", hurt.size() == 3);
-        Check("立ちの食らい判定の外形は 30 幅 x 88 高、足元が 0",
-              (right - left) == 30 && (bottom - top) == 88 && bottom == 0);
+        Check("立ちの食らい判定の外形は 32 幅 x 95 高（身長ぴったり）、足元が 0",
+              (right - left) == 32 && (bottom - top) == GameSpec::CharacterVisualHeight &&
+              bottom == 0);
+        Check("食らい判定の幅は見た目の幅（52）より細い", (right - left) < GameSpec::CharacterVisualWidth);
 
         f.SM.ChangeState(CharState::Crouch, "");
         std::vector<RectBox> churt = f.HurtboxRects();
         double ctop = 1e9;
         for (const auto& r : churt) ctop = std::min(ctop, r.Top());
-        Check("しゃがみの食らい判定の高さは 50〜58 の範囲",
-              churt.size() == 3 && -ctop >= 50 && -ctop <= 58);
+        Check("しゃがみの食らい判定は立ちより十分低い（62 ＜ 95）",
+              churt.size() == 3 && -ctop == 62 && -ctop < GameSpec::CharacterVisualHeight);
         f.SM.ChangeState(CharState::Idle, "");
 
         f.PositionX = 10.4;
@@ -380,22 +392,28 @@ int main(int argc, char** argv) {
         // 右向きで X=100 から出したときの弱パンチの判定位置
         auto rightBoxes = MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup, Constants::FacingRight, 100, 0);
         auto leftBoxes = MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup, Constants::FacingLeft, 100, 0);
-        Check("弱パンチの判定は 16x10、右向きで x+18〜+34",
-              rightBoxes.size() == 1 && rightBoxes[0].Width == 16 && rightBoxes[0].Height == 10 &&
-              rightBoxes[0].Left() == 118 && rightBoxes[0].Right() == 134 &&
-              rightBoxes[0].Top() == -66 && rightBoxes[0].Bottom() == -56);
+        // 具体的な数値はデータ側（JSON）で調整するものなので、
+        // ここでは「前方の、胸の高さに、体より小さく出る」ことを確認します。
+        Check("弱パンチの判定は前方の胸の高さに出る",
+              rightBoxes.size() == 1 &&
+              rightBoxes[0].Left() > 100 &&                       // 体より前
+              rightBoxes[0].Right() < 100 + 45 &&                 // 弱なので短い
+              rightBoxes[0].Top() < -55 && rightBoxes[0].Bottom() > -80 && // 胸の高さ
+              rightBoxes[0].Width < 25 && rightBoxes[0].Height < 15);
         Check("左向きでは同じデータが左右反転される",
-              leftBoxes.size() == 1 && leftBoxes[0].Left() == 66 && leftBoxes[0].Right() == 82);
+              leftBoxes.size() == 1 &&
+              std::abs((100 - leftBoxes[0].CenterX) - (rightBoxes[0].CenterX - 100)) < 0.001 &&
+              leftBoxes[0].Width == rightBoxes[0].Width);
         Check("発生フレーム中には攻撃判定が存在しない",
               MoveExecutor::GetActiveHitboxRects(*lp, 0, Constants::FacingRight, 100, 0).empty());
 
         auto hkBoxes = MoveExecutor::GetActiveHitboxRects(*hk, hk->Startup, Constants::FacingRight, 0, 0);
-        Check("強キックの判定は 24x14 で +48 まで届く（最長）",
-              hkBoxes.size() == 1 && hkBoxes[0].Width == 24 && hkBoxes[0].Height == 14 &&
-              hkBoxes[0].Right() == 48);
+        Check("強キックは弱パンチより遠くまで届く",
+              hkBoxes.size() == 1 && hkBoxes[0].Right() > 45 &&
+              hkBoxes[0].Right() > (rightBoxes[0].Right() - 100));
         auto clkBoxes = MoveExecutor::GetActiveHitboxRects(*clk, clk->Startup, Constants::FacingRight, 0, 0);
-        Check("しゃがみ弱キックは下段の高さ（y -12〜-4）",
-              clkBoxes.size() == 1 && clkBoxes[0].Top() == -12 && clkBoxes[0].Bottom() == -4);
+        Check("しゃがみ弱キックは足元付近の高さに出る（下段）",
+              clkBoxes.size() == 1 && clkBoxes[0].Bottom() > -10 && clkBoxes[0].Top() > -20);
 
         // フレーム単位の上書き指定が効くか
         MoveData custom;
@@ -453,11 +471,12 @@ int main(int argc, char** argv) {
             bsThrow.ResolveCombat(bsThrow.Player1, bsThrow.Player2);
             return bsThrow.Player2.SM.CurrentState == CharState::Throw;
         };
-        Check("距離 20（間合い 28 以内）なら投げが成立する", armThrow(20, 0));
+        Check("距離 20（間合い 30 以内）なら投げが成立する", armThrow(20, 0));
         Check("距離 40 では投げが空振りする", !armThrow(40, 0));
         Check("空中の相手は投げられない", !armThrow(20, -30));
         Check("投げは距離判定であって当たり判定ではない",
-              throwMove->ThrowRange == 28.0 && throwMove->GuardType == Constants::GuardThrow);
+              throwMove->ThrowRange == static_cast<double>(GameSpec::NormalThrowRange) &&
+              throwMove->GuardType == Constants::GuardThrow);
     }
 
     // =================================================================
@@ -467,19 +486,140 @@ int main(int argc, char** argv) {
         BattleSystem bsPush;
         bsPush.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"),
                           *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
-        // 幅 30 の判定どうしが 20 の距離 -> 10 だけ重なる
+        // 幅 32 の判定どうしが 20 の距離 -> 12 だけ重なる
         bsPush.Player1.PositionX = 0; bsPush.Player2.PositionX = 20;
         bsPush.ResolvePushboxes();
-        Check("重なり 10 は半分ずつ（-5 / +5）に分けられる",
-              bsPush.Player1.PositionX == -5 && bsPush.Player2.PositionX == 25);
+        Check("重なり 12 は半分ずつ（-6 / +6）に分けられる",
+              bsPush.Player1.PositionX == -6 && bsPush.Player2.PositionX == 26);
 
-        // 画面端に張り付いている側は動かず、相手が全部下がる
-        bsPush.Player1.PositionX = BattleSystem::StageMinX;
-        bsPush.Player2.PositionX = BattleSystem::StageMinX + 20;
+        // 画面端に張り付いている側は動かず、相手が全部下がる。
+        // 「張り付いた位置」は判定の半分の幅ぶん内側（体の表面が壁）です。
+        const double wallX = BattleSystem::StageMinX + GameSpec::PushboxStandWidth / 2.0;
+        bsPush.Player1.PositionX = wallX;
+        bsPush.Player2.PositionX = wallX + 20;
         bsPush.ResolvePushboxes();
         Check("画面端側は動かず、相手が重なりを全部引き受ける",
-              bsPush.Player1.PositionX == BattleSystem::StageMinX &&
-              bsPush.Player2.PositionX == BattleSystem::StageMinX + 30);
+              bsPush.Player1.PositionX == wallX &&
+              bsPush.Player2.PositionX == wallX + 32);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 画面端とキャラ間距離の制限 ===\n";
+    // =================================================================
+    {
+        BattleSystem bs;
+        bs.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"),
+                      *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
+
+        // 壁にめり込ませようとしても、体（押し合い判定）の分だけ内側で止まる
+        bs.Player1.PositionX = BattleSystem::StageMinX - 100;
+        bs.Player1.ClampToStage();
+        RectBox box = bs.Player1.PushboxRect();
+        Check("左端: 判定がステージの外へはみ出さない",
+              box.Left() >= BattleSystem::StageMinX - 0.001);
+        Check("左端: 壁にぴったり接する（隙間なく詰められる）",
+              std::abs(box.Left() - BattleSystem::StageMinX) < 0.001);
+
+        bs.Player1.PositionX = BattleSystem::StageMaxX + 100;
+        bs.Player1.ClampToStage();
+        box = bs.Player1.PushboxRect();
+        Check("右端: 判定がステージの外へはみ出さない",
+              box.Right() <= BattleSystem::StageMaxX + 0.001);
+
+        // しゃがみは判定が広いので、立ちより手前で止まる
+        bs.Player1.PositionX = BattleSystem::StageMinX - 100;
+        bs.Player1.SM.ChangeState(CharState::Crouch, "");
+        bs.Player1.ClampToStage();
+        RectBox crouchBox = bs.Player1.PushboxRect();
+        Check("しゃがみ（判定が広い）でも外へはみ出さない",
+              crouchBox.Left() >= BattleSystem::StageMinX - 0.001);
+        bs.Player1.SM.ChangeState(CharState::Idle, "");
+
+        // 離れすぎの制限
+        bs.Player1.PositionX = -400;
+        bs.Player2.PositionX = 400;
+        bs.ResolveMaxDistance();
+        double dist = std::abs(bs.Player2.PositionX - bs.Player1.PositionX);
+        Check("2 人の距離は上限 300 まで詰められる",
+              std::abs(dist - StageConstants::MaxPlayerDistance) < 0.001);
+        Check("上限 300 は画面幅 384 より狭いので必ず両方映る",
+              StageConstants::MaxPlayerDistance < GameSpec::BaseWidth);
+
+        // 追い詰められた側が、相手が逃げただけで角から引き出されないこと。
+        // （これが起きると画面端に押し込む攻防が成立しなくなります）
+        bs.Player1.PositionX = std::ceil(BattleSystem::StageMinX + 16); // 左端に張り付き
+        bs.Player1.VelocityX = 0.0;                                     // 動いていない
+        bs.Player2.PositionX = bs.Player1.PositionX + 380;
+        bs.Player2.VelocityX = 60.0;                                    // 右へ逃げている
+        double p1Before = bs.Player1.PositionX;
+        bs.ResolveMaxDistance();
+        Check("逃げている側だけが止まり、追い詰められた側は動かない",
+              std::abs(bs.Player1.PositionX - p1Before) < 0.001 &&
+              std::abs(bs.Player2.PositionX - bs.Player1.PositionX
+                       - StageConstants::MaxPlayerDistance) < 0.001);
+
+        // どちらも逃げていなければ半分ずつ
+        bs.Player1.PositionX = -160; bs.Player1.VelocityX = 0.0;
+        bs.Player2.PositionX = 160;  bs.Player2.VelocityX = 0.0;
+        bs.ResolveMaxDistance();
+        Check("どちらも逃げていなければ半分ずつ詰める",
+              std::abs(bs.Player1.PositionX - (-150)) < 0.001 &&
+              std::abs(bs.Player2.PositionX - 150) < 0.001);
+
+        // 上限内なら何もしない
+        bs.Player1.PositionX = 0; bs.Player2.PositionX = 100;
+        bs.ResolveMaxDistance();
+        Check("上限より近ければ位置を動かさない",
+              bs.Player1.PositionX == 0 && bs.Player2.PositionX == 100);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 画面揺れ（技の強さで段階的に）===\n";
+    // =================================================================
+    {
+        auto shakeOf = [](const MoveData* m) {
+            double mag = -1; int fr = -1; double v = 0;
+            BattleSystem::ShakeForMove(*m, mag, fr, v);
+            return std::pair<double,int>(mag, fr);
+        };
+        auto light = shakeOf(dm.GetMove("ryu", "standing_light"));
+        auto medium = shakeOf(dm.GetMove("ryu", "standing_medium"));
+        auto heavy = shakeOf(dm.GetMove("ryu", "standing_heavy"));
+        auto special = shakeOf(dm.GetMove("ryu", "fireball"));
+        auto super_ = shakeOf(dm.GetMove("ryu", "super_combo"));
+
+        Check("弱・中の通常技では画面を揺らさない",
+              light.first == 0.0 && medium.first == 0.0);
+        Check("強 1〜2px / 必殺 2〜3px / 超必 3〜5px",
+              heavy.first >= 1.0 && heavy.first <= 2.0 &&
+              special.first >= 2.0 && special.first <= 3.0 &&
+              super_.first >= 3.0 && super_.first <= 5.0);
+        Check("揺れの長さは 2〜6 フレーム",
+              heavy.second >= 2 && heavy.second <= 6 &&
+              special.second >= 2 && special.second <= 6 &&
+              super_.second >= 2 && super_.second <= 6);
+
+        BattleSystem bs;
+        bs.AddShake(2.0, 4, 1.0);
+        bs.AddShake(1.0, 3, -1.0); // 弱い揺れは強い揺れを打ち消さない
+        Check("弱い揺れが強い揺れを上書きしない",
+              bs.ShakeMagnitude == 2.0 && bs.ShakeDirX == 1.0);
+        bs.AddShake(9.0, 4, 1.0);
+        Check("揺れ幅は 5px を超えない", bs.ShakeMagnitude == 5.0);
+    }
+
+    // =================================================================
+    std::cout << "\n=== ヒットストップ（技の強さで段階的に）===\n";
+    // =================================================================
+    {
+        auto stop = [&](const char* id) { return dm.GetMove("ryu", id)->Hitstop; };
+        Check("弱 2〜4F", stop("standing_light") >= 2 && stop("standing_light") <= 4);
+        Check("中 4〜6F", stop("standing_medium") >= 4 && stop("standing_medium") <= 6);
+        Check("強 6〜9F", stop("standing_heavy") >= 6 && stop("standing_heavy") <= 9);
+        Check("必殺技 5〜10F", stop("fireball") >= 5 && stop("fireball") <= 10);
+        Check("強い技ほどヒットストップが長い",
+              stop("standing_light") < stop("standing_medium") &&
+              stop("standing_medium") < stop("standing_heavy"));
     }
 
     // 一時フォルダを片付ける

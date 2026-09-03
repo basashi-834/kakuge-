@@ -1,47 +1,47 @@
 {
- "id": "standing_light",
- "name": "\u7acb\u3061\u5f31\u653b\u6483",
- "startup": 4,
- "active": 3,
- "recovery": 7,
- "damage": 30,
- "hitstun": 12,
- "blockstun": 8,
- "hitstop": 4,
- "guardType": "High",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 26,
-   "offsetY": -61,
-   "width": 16,
-   "height": 10
-  }
- ],
- "knockbackX": 61.04,
- "knockbackY": 0.0,
- "hitOutcome": "Normal",
- "meterGain": 5,
- "meterCost": 0,
- "cancelRoutes": [
-  "standing_medium",
-  "standing_heavy",
-  "fireball",
-  "anti_air_special",
-  "super_combo"
- ],
- "cancelStartFrame": 4,
- "cancelEndFrame": 10,
- "tags": [
-  "Light",
-  "Normal"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "LP",
- "stance": "stand"
+    "id": "standing_light",
+    "name": "立ち弱攻撃",
+    "startup": 4,
+    "active": 3,
+    "recovery": 7,
+    "damage": 30,
+    "hitstun": 12,
+    "blockstun": 8,
+    "hitstop": 4,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 28.07,
+            "offsetY": -65.85,
+            "width": 17.27,
+            "height": 10.8
+        }
+    ],
+    "knockbackX": 65.9,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "cancelRoutes": [
+        "standing_medium",
+        "standing_heavy",
+        "fireball",
+        "anti_air_special",
+        "super_combo"
+    ],
+    "cancelStartFrame": 4,
+    "cancelEndFrame": 10,
+    "tags": [
+        "Light",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LP",
+    "stance": "stand"
 }

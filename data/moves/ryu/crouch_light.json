@@ -1,49 +1,49 @@
 {
- "id": "crouch_light",
- "name": "\u3057\u3083\u304c\u307f\u5f31\u653b\u6483",
- "startup": 4,
- "active": 3,
- "recovery": 7,
- "damage": 25,
- "hitstun": 12,
- "blockstun": 8,
- "hitstop": 4,
- "guardType": "Low",
- "chipDamagePercent": 0.0,
- "hitbox": [
-  {
-   "offsetX": 28,
-   "offsetY": -8,
-   "width": 20,
-   "height": 8
-  }
- ],
- "knockbackX": 55.96,
- "knockbackY": 0.0,
- "hitOutcome": "Normal",
- "meterGain": 5,
- "meterCost": 0,
- "cancelRoutes": [
-  "crouch_medium",
-  "crouch_heavy",
-  "standing_medium",
-  "fireball",
-  "anti_air_special",
-  "super_combo"
- ],
- "cancelStartFrame": 4,
- "cancelEndFrame": 10,
- "tags": [
-  "Light",
-  "Normal",
-  "Low"
- ],
- "invincibility": {
-  "type": "None",
-  "start_frame": 0,
-  "end_frame": 0
- },
- "input": "",
- "button": "LK",
- "stance": "crouch"
+    "id": "crouch_light",
+    "name": "しゃがみ弱攻撃",
+    "startup": 4,
+    "active": 3,
+    "recovery": 7,
+    "damage": 25,
+    "hitstun": 12,
+    "blockstun": 8,
+    "hitstop": 4,
+    "guardType": "Low",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 30.23,
+            "offsetY": -8.64,
+            "width": 21.59,
+            "height": 8.64
+        }
+    ],
+    "knockbackX": 60.41,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "cancelRoutes": [
+        "crouch_medium",
+        "crouch_heavy",
+        "standing_medium",
+        "fireball",
+        "anti_air_special",
+        "super_combo"
+    ],
+    "cancelStartFrame": 4,
+    "cancelEndFrame": 10,
+    "tags": [
+        "Light",
+        "Normal",
+        "Low"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LK",
+    "stance": "crouch"
 }

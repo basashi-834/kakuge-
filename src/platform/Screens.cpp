@@ -220,16 +220,24 @@ void Game::DrawGame() {
     const auto& pal = GetPalette();
     if (!battle_) { r_.Clear(pal.ArenaBg); return; }
 
-    // カウンターヒットの画面揺れ。残りフレームが減るほど揺れも小さく。
-    if (battle_->ShakeFrames > 0) {
-        double decay = battle_->ShakeFrames / 18.0;
-        double amount = battle_->ShakeMagnitude * decay * 0.35;
-        // 毎フレーム向きを変えて「ブレる」感じを出します。
-        // rand() ではなくフレーム数から作ることで、同じ操作なら
-        // 同じ揺れ方になります（録画・比較がしやすい）。
-        double phase = battle_->ShakeFrames * 2.399;
-        r_.SetShake(static_cast<float>(std::sin(phase) * amount),
-                    static_cast<float>(std::cos(phase * 1.7) * amount * 0.5));
+    // ---- 画面揺れ ----
+    // ランダムに全方向へブルブル震わせるのではなく、
+    //   「まず攻撃された向きへ押される → 中央へ戻る」
+    // という動きにします。そのほうが「その方向に殴られた」という
+    // 手応えが出ますし、短時間でもはっきり伝わります。
+    //
+    // cos の 1.5 周期ぶんを使って、
+    //   最初 = 攻撃方向へ最大 → 反対側へ小さく揺り戻し → 0
+    // という減衰した往復を作っています。
+    // 最後に整数へ丸めるのは、ドット絵をにじませないためです。
+    if (battle_->ShakeFrames > 0 && battle_->ShakeTotalFrames > 0) {
+        double decay = static_cast<double>(battle_->ShakeFrames) / battle_->ShakeTotalFrames;
+        double progress = 1.0 - decay;             // 0（発生直後）→ 1（終わり）
+        double phase = progress * 3.14159265 * 1.5; // 0 → 1.5π
+        double amount = battle_->ShakeMagnitude * decay * std::cos(phase);
+        double ox = amount * battle_->ShakeDirX;
+        double oy = amount * battle_->ShakeVertical;
+        r_.SetShake(static_cast<float>(std::round(ox)), static_cast<float>(std::round(oy)));
     } else {
         r_.SetShake(0, 0);
     }
@@ -242,7 +250,7 @@ void Game::DrawGame() {
 
     // 奥の建物のシルエット。カメラの動きの半分だけずらして描くと、
     // 手前の地面より遅く流れて、奥行きが感じられます（多重スクロール）。
-    double parallax = -GetCamera().CenterX * 0.35;
+    double parallax = -CameraDrawX() * 0.35;
     for (int i = -4; i <= 4; ++i) {
         float bx = static_cast<float>(VirtualW / 2 + i * 62 + parallax);
         float bh = 40.0f + ((i * 37) % 5) * 8.0f;
@@ -256,7 +264,7 @@ void Game::DrawGame() {
     r_.FillRect(0, static_cast<float>(OriginY), VirtualW, 2, Color(120, 108, 100));
     // 床のタイル線。カメラと一緒に流れるので、動きが分かりやすくなります。
     for (int i = -12; i <= 12; ++i) {
-        double worldX = std::floor(GetCamera().CenterX / 40.0) * 40.0 + i * 40.0;
+        double worldX = std::floor(CameraDrawX() / 40.0) * 40.0 + i * 40.0;
         float sx = static_cast<float>(ToScreenX(worldX));
         if (sx < -4 || sx > VirtualW + 4) continue;
         r_.DrawLine(sx, static_cast<float>(OriginY) + 3, sx, static_cast<float>(VirtualH),
@@ -274,10 +282,10 @@ void Game::DrawGame() {
     // 影を先に描いてからキャラクターを描きます。
     for (const Fighter* p : {&battle_->Player1, &battle_->Player2}) {
         float sx = static_cast<float>(ToScreenX(p->PositionX));
-        float shadowW = static_cast<float>(ScreenScale(22.0));
+        float shadowW = 22.0f; // 倍率固定なのでそのままのピクセル数
         // 空中にいるほど影が小さくなると、高さが分かりやすくなります。
         double height = -p->PositionY;
-        float shrink = static_cast<float>(std::max(0.4, 1.0 - height / 200.0));
+        float shrink = static_cast<float>(std::max(0.4, 1.0 - height / 160.0));
         r_.FillEllipse(sx, static_cast<float>(OriginY) + 1,
                        shadowW * shrink, 3.0f * shrink, Color(20, 18, 20, 110));
     }
