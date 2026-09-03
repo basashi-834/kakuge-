@@ -1,6 +1,6 @@
 {
     "id": "jump_heavy_kick",
-    "name": "ジャンプ強キック",
+    "name": "ジャンプ キョウキック",
     "startup": 6,
     "active": 7,
     "recovery": 12,

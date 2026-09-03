@@ -31,7 +31,7 @@ GameCamera g_Camera;
 // 壁に張り付きます。その動きを再現しています。
 // これが「画面端に追い詰めた」という状況を作る仕組みでもあります。
 double ClampCameraCenter(double centerX) {
-    constexpr double halfVisible = VirtualW / 2.0; // 倍率固定なので常に 192
+    const double halfVisible = VirtualW / 2.0; // キャンバス幅の半分
     double minCenter = StageConstants::StageMinX + halfVisible;
     double maxCenter = StageConstants::StageMaxX - halfVisible;
     // ステージが画面より狭い場合は中央固定（今の設定では起きません）。

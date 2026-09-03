@@ -1,6 +1,6 @@
 {
     "id": "crouch_light",
-    "name": "しゃがみ弱攻撃",
+    "name": "シャガミ ジャクキック",
     "startup": 4,
     "active": 3,
     "recovery": 7,

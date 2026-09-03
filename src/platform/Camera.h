@@ -44,8 +44,19 @@
 namespace kakuge {
 
 // ワールド座標の原点が、画面座標のどこに来るか。
-constexpr double OriginX = VirtualW / 2.0;      // 画面の横中央（192）
-constexpr double OriginY = GameSpec::GroundY;   // 地面の線（上から 200px）
+//
+// 内部キャンバスの大きさはウィンドウの形に合わせて変わる（黒い余白を
+// 出さないため）ので、原点も固定値ではなく、そのつど計算します。
+//
+//   横 … いつでも画面の真ん中
+//   縦 … 画面の下から一定の距離。地面の線を画面下端から数えるのが
+//         ポイントです。上から数えると、キャンバスが縦に広がったとき
+//         地面より下の帯（超必ゲージを置く場所）が広がってしまい、
+//         キャラクターが画面の真ん中より上へ寄ってしまいます。
+constexpr int GroundFromBottom = GameSpec::BaseHeight - GameSpec::GroundY; // 24
+
+inline double OriginX() { return VirtualW / 2.0; }
+inline double OriginY() { return static_cast<double>(VirtualH - GroundFromBottom); }
 
 struct GameCamera {
     // 今どのワールド座標を画面中央に映しているか。
@@ -80,10 +91,10 @@ void ResetCamera(double p1x, double p2x);
 // 表示倍率が 100% 固定なので、変換は「カメラのぶんだけ横にずらす」
 // だけです。掛け算が要りません。
 inline double ToScreenX(double worldX) {
-    return OriginX + (worldX - CameraDrawX());
+    return OriginX() + (worldX - CameraDrawX());
 }
 inline double ToScreenY(double worldY) {
-    return OriginY + worldY;
+    return OriginY() + worldY;
 }
 
 } // namespace kakuge

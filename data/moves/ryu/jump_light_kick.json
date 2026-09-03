@@ -1,6 +1,6 @@
 {
     "id": "jump_light_kick",
-    "name": "ジャンプ弱キック",
+    "name": "ジャンプ ジャクキック",
     "startup": 4,
     "active": 5,
     "recovery": 8,

@@ -36,6 +36,7 @@
 #include "engine/Settings.h"
 #include "platform/Editor.h"
 #include "platform/Figure.h"
+#include "platform/Gamepad.h"
 #include "platform/Renderer.h"
 
 namespace kakuge {
@@ -90,6 +91,8 @@ private:
     std::vector<UiButton> buttons_;
     int focusIndex_ = 0;   // キーボードで選んでいるボタン
     double mouseVx_ = -1, mouseVy_ = -1; // マウス位置（内部キャンバス座標）
+    bool pendingRelayout_ = false; // ウィンドウの大きさが変わった
+    int laidOutW_ = 0, laidOutH_ = 0; // ボタンを並べたときのキャンバスの大きさ
 
     // ---- モード ----
     bool isTrainingMode_ = false;
@@ -106,6 +109,7 @@ private:
     // ---- 対戦中 ----
     std::unique_ptr<BattleSystem> battle_;
     std::unordered_set<SDL_Keycode> heldKeys_;
+    Gamepad pad_; // USB コントローラ（つながっていなければ何もしない）
     bool debugVisible_ = false;
     bool paused_ = false;
     int pauseIndex_ = 0;
@@ -161,6 +165,8 @@ private:
     void GoControls();
     void GoEditor();
     void ApplySettings();
+    // 今の画面のボタンを並べ直す（画面切り替え時とリサイズ時）。
+    void LayoutButtons();
 
     // ---- 各画面の描画（Screens.cpp）----
     void DrawTitle();

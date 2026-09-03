@@ -1,6 +1,6 @@
 {
     "id": "crouch_light_punch",
-    "name": "しゃがみ弱パンチ",
+    "name": "シャガミ ジャクパンチ",
     "startup": 3,
     "active": 3,
     "recovery": 6,

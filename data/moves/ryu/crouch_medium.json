@@ -1,6 +1,6 @@
 {
     "id": "crouch_medium",
-    "name": "しゃがみ中攻撃",
+    "name": "シャガミ チュウキック",
     "startup": 6,
     "active": 3,
     "recovery": 11,

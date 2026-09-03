@@ -5,7 +5,8 @@
 // このファイルは「その画面がどう見えるか」だけを担当します。
 // 分けておくと、見た目を調整したいときにここだけ見れば済みます。
 //
-// 座標はすべて 384x224 の内部キャンバス上の数値です。
+// 座標は内部キャンバス上の数値です（基準 384x224。ウィンドウの形に
+// 合わせて少し広がることがあるので、VirtualW / VirtualH を使います）。
 // =====================================================================
 #include <algorithm>
 #include <cmath>
@@ -245,7 +246,7 @@ void Game::DrawGame() {
     // ---- 背景 ----
     r_.Clear(pal.ArenaBg);
     // 空（上のほうを少し明るく）
-    r_.FillGradientRect(0, 0, VirtualW, static_cast<float>(OriginY),
+    r_.FillGradientRect(0, 0, VirtualW, static_cast<float>(OriginY()),
                         Color(74, 72, 78), Color(48, 46, 48));
 
     // 奥の建物のシルエット。
@@ -271,21 +272,21 @@ void Game::DrawGame() {
             // 変わってちらついてしまうためです。
             float bh = L.minH + ((i * 37) % 5 + 5) % 5 * L.stepH;
             float bw = static_cast<float>(L.width);
-            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY) - bh, bw, bh, L.body);
-            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY) - bh, bw, 2, L.top);
+            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY()) - bh, bw, bh, L.body);
+            r_.FillRect(bx - bw / 2, static_cast<float>(OriginY()) - bh, bw, 2, L.top);
         }
     }
 
     // 地面
-    r_.FillRect(0, static_cast<float>(OriginY), VirtualW,
-                static_cast<float>(VirtualH - OriginY), Color(70, 62, 58));
-    r_.FillRect(0, static_cast<float>(OriginY), VirtualW, 2, Color(120, 108, 100));
+    r_.FillRect(0, static_cast<float>(OriginY()), VirtualW,
+                static_cast<float>(VirtualH - OriginY()), Color(70, 62, 58));
+    r_.FillRect(0, static_cast<float>(OriginY()), VirtualW, 2, Color(120, 108, 100));
     // 床のタイル線。カメラと一緒に流れるので、動きが分かりやすくなります。
     for (int i = -12; i <= 12; ++i) {
         double worldX = std::floor(CameraDrawX() / 40.0) * 40.0 + i * 40.0;
         float sx = static_cast<float>(ToScreenX(worldX));
         if (sx < -4 || sx > VirtualW + 4) continue;
-        r_.DrawLine(sx, static_cast<float>(OriginY) + 3, sx, static_cast<float>(VirtualH),
+        r_.DrawLine(sx, static_cast<float>(OriginY()) + 3, sx, static_cast<float>(VirtualH),
                     Color(90, 80, 74), 1.0f);
     }
 
@@ -304,7 +305,7 @@ void Game::DrawGame() {
         // 空中にいるほど影が小さくなると、高さが分かりやすくなります。
         double height = -p->PositionY;
         float shrink = static_cast<float>(std::max(0.4, 1.0 - height / 160.0));
-        r_.FillEllipse(sx, static_cast<float>(OriginY) + 1,
+        r_.FillEllipse(sx, static_cast<float>(OriginY()) + 1,
                        shadowW * shrink, 3.0f * shrink, Color(20, 18, 20, 110));
     }
     DrawFighter(r_, battle_->Player1);
@@ -392,16 +393,19 @@ void Game::DrawSettings() {
     int idx = std::clamp(pendingResIndex_, 0, static_cast<int>(presets.size()) - 1);
     const auto& p = presets[static_cast<size_t>(idx)];
 
-    r_.FillRect(96, 104, 192, 18, pal.PanelBg);
-    r_.DrawRect(96, 104, 192, 18, pal.Ink, 1.0f);
-    DrawPixelTextCentered(r_, p.label, 96, 104, 192, 18, 1.0f, pal.Ink);
+    const float panelX = VirtualW / 2.0f - 96;
+    r_.FillRect(panelX, 104, 192, 18, pal.PanelBg);
+    r_.DrawRect(panelX, 104, 192, 18, pal.Ink, 1.0f);
+    DrawPixelTextCentered(r_, p.label, panelX, 104, 192, 18, 1.0f, pal.Ink);
     DrawPixelTextCentered(r_, p.aspect, 0, 126, VirtualW, 8, 1.0f, pal.Ink45);
 
     DrawButtons();
 
-    DrawPixelTextCentered(r_,
-        "GAME ALWAYS RENDERS AT 384X224 AND SCALES UP",
-        0, VirtualH - 14, VirtualW, 10, 1.0f, pal.Ink45);
+    // 実際に使っている内部キャンバスの大きさを出します。ウィンドウの
+    // 形に合わせて変わるので、固定の文字列にはできません。
+    std::string canvas = "CANVAS " + std::to_string(VirtualW) + "X" +
+                         std::to_string(VirtualH) + "  (NO BLACK BARS)";
+    DrawPixelTextCentered(r_, canvas, 0, VirtualH - 14, VirtualW, 10, 1.0f, pal.Ink45);
 }
 
 // ---------------------------------------------------------------------
@@ -413,34 +417,71 @@ void Game::DrawControls() {
     DrawScreenHeader("CONTROLS", "");
 
     // 表形式で「キー」と「操作」を並べます。
+    // 左半分がキーボード、右半分がコントローラです。
     struct Row { const char* key; const char* action; };
-    const Row rows[] = {
-        {"A / D",      "WALK BACK / FORWARD"},
+    const Row keyboardRows[] = {
+        {"A / D",      "WALK BACK / FWD"},
         {"S",          "CROUCH"},
         {"SPACE",      "JUMP"},
         {"S + BACK",   "CROUCH GUARD"},
-        {"U / I / O",  "PUNCH  L / M / H"},
-        {"J / K / L",  "KICK   L / M / H"},
+        {"U / I / O",  "PUNCH  L/M/H"},
+        {"J / K / L",  "KICK   L/M/H"},
         {"U + J",      "THROW"},
         {"D,D",        "DASH FORWARD"},
         {"236 + P",    "FIREBALL"},
         {"623 + P",    "ANTI-AIR SPECIAL"},
         {"214 + K",    "HURRICANE KICK"},
-        {"236236 + P", "SUPER  (NEEDS METER)"},
+        {"236236 + P", "SUPER (NEEDS METER)"},
         {"ESC",        "PAUSE"},
-        {"F1",         "HITBOX DISPLAY (TRAINING)"},
+        {"F1",         "HITBOX (TRAINING)"},
     };
-    // 14 行 x 10px = 140px。見出しの下（y=40）から始めて y=170 で終わり、
-    // 補足行（y=176）も BACK ボタン（y=196）にかかりません。
-    float y = 40;
-    for (const auto& row : rows) {
-        DrawPixelText(r_, row.key, 18, y, 1.0f, pal.AccentDeep);
-        DrawPixelText(r_, row.action, 126, y, 1.0f, pal.Ink70);
+
+    const float leftX = 8, leftActionX = 88;
+    const float rightX = VirtualW / 2.0f + 8;
+    float y = 43;
+
+    DrawPixelText(r_, "KEYBOARD", leftX, 32, 1.0f, pal.Ink);
+    for (const auto& row : keyboardRows) {
+        DrawPixelText(r_, row.key, leftX, y, 1.0f, pal.AccentDeep);
+        DrawPixelText(r_, row.action, leftActionX, y, 1.0f, pal.Ink70);
         y += 10;
     }
 
+    // ---- コントローラ ----
+    // 市販のパッドは役割どおり、自作の基板は 0 番から順に読みます
+    //（詳しくは platform/Gamepad.h）。
+    const Row padRows[] = {
+        {"STICK/DPAD", "MOVE"},
+        {"X / Y / RB", "PUNCH  L/M/H"},
+        {"A / B / RT", "KICK   L/M/H"},
+        {"LB",         "THROW"},
+        {"START",      "CONFIRM (MENU)"},
+        {"",           ""},
+        {"BTN 0/1/2",  "PUNCH  L/M/H"},
+        {"BTN 3/4/5",  "KICK   L/M/H"},
+        {"BTN 6",      "THROW"},
+    };
+    DrawPixelText(r_, "GAMEPAD", rightX, 32, 1.0f, pal.Ink);
+    y = 43;
+    for (const auto& row : padRows) {
+        if (row.key[0] != '\0') {
+            DrawPixelText(r_, row.key, rightX, y, 1.0f, pal.AccentDeep);
+            DrawPixelText(r_, row.action, rightX + 66, y, 1.0f, pal.Ink70);
+        }
+        y += 10;
+    }
+    // 番号読みの説明（自作コントローラ向け）。
+    DrawPixelText(r_, "BTN N = UNMAPPED PAD (DIY BOARDS)", rightX, y, 1.0f, pal.Ink45);
+
+    // 今つながっている機器を出します。コントローラが効かないとき、
+    // 「そもそも認識されていないのか」がここで分かります。
+    std::string padLine = pad_.IsConnected()
+        ? std::string("PAD: ") + pad_.Name()
+        : std::string("PAD: NOT CONNECTED");
+    DrawPixelText(r_, padLine, rightX, y + 10, 1.0f, pal.Ink55);
+
     // コマンドの数字（テンキー表記）の意味を補足します。
-    DrawPixelText(r_, "236 = DOWN, DOWN-FORWARD, FORWARD", 18, y + 6, 1.0f, pal.Ink45);
+    DrawPixelText(r_, "236 = DOWN, DOWN-FORWARD, FORWARD", leftX, 185, 1.0f, pal.Ink45);
 
     DrawButtons();
 }

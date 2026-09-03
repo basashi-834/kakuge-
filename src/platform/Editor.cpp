@@ -31,8 +31,16 @@ constexpr float kHeaderH = 12.0f;  // 上のタイトル帯
 constexpr float kTabY = 13.0f;     // タブ行
 constexpr float kTabH = 9.0f;
 constexpr float kBodyY = 25.0f;    // 本体の開始
-constexpr float kFooterY = 202.0f; // 下の操作説明
-constexpr float kRowH = 10.0f;     // 1 行の高さ
+constexpr float kFooterH = 22.0f;  // 下の操作説明の高さ
+
+// 下の操作説明を置く Y 座標。内部キャンバスの高さはウィンドウの形で
+// 変わるので、固定値ではなく「画面の下から数えた位置」にします。
+inline float FooterY() { return static_cast<float>(VirtualH) - kFooterH; }
+
+// 1 行の高さ。日本語のドット文字は 10x10 なので、上下に 1 ドットずつ
+// 余裕を持たせて 12 にしています（英数字だけなら 10 で足りますが、
+// 行の高さが表示言語で変わると項目の位置が動いて落ち着きません）。
+constexpr float kRowH = 12.0f;
 
 // 数値を文字列にする。小数桁数を指定できます。
 std::string FormatNumber(double v, int decimals) {
@@ -143,7 +151,7 @@ void Editor::BuildCharacterFields() {
     {   // 名前（文字）
         Field f;
         f.kind = Field::Kind::Text;
-        f.label = "NAME";
+        f.label = Loc("ナマエ", "NAME");
         f.getText = [this] { return statsDraft_.Name; };
         f.setText = [this](const std::string& v) { statsDraft_.Name = v; };
         fields_.push_back(std::move(f));
@@ -156,30 +164,30 @@ void Editor::BuildCharacterFields() {
         fields_.push_back(std::move(f));
     }
 
-    addNum("MAX HP", [this] { return statsDraft_.MaxHP; },
+    addNum(Loc("サイダイ HP", "MAX HP"), [this] { return statsDraft_.MaxHP; },
            [this](double v) { statsDraft_.MaxHP = static_cast<int>(v); }, 10, 100, 9999, 0);
-    addNum("WALK FWD", [this] { return statsDraft_.WalkForwardSpeed; },
+    addNum(Loc("マエアルキ ソクド", "WALK FWD"), [this] { return statsDraft_.WalkForwardSpeed; },
            [this](double v) { statsDraft_.WalkForwardSpeed = v; }, 1, 0, 400, 1);
-    addNum("WALK BACK", [this] { return statsDraft_.WalkBackwardSpeed; },
+    addNum(Loc("ウシロアルキ ソクド", "WALK BACK"), [this] { return statsDraft_.WalkBackwardSpeed; },
            [this](double v) { statsDraft_.WalkBackwardSpeed = v; }, 1, 0, 400, 1);
-    addNum("DASH", [this] { return statsDraft_.DashSpeed; },
+    addNum(Loc("ダッシュ ソクド", "DASH"), [this] { return statsDraft_.DashSpeed; },
            [this](double v) { statsDraft_.DashSpeed = v; }, 1, 0, 800, 1);
     // ジャンプ初速は上向きがマイナス。数値が小さいほど高く跳びます。
-    addNum("JUMP VEL", [this] { return statsDraft_.JumpVelocity; },
+    addNum(Loc("ジャンプ ショソク", "JUMP VEL"), [this] { return statsDraft_.JumpVelocity; },
            [this](double v) { statsDraft_.JumpVelocity = v; }, 1, -600, -1, 1);
-    addNum("GRAVITY", [this] { return statsDraft_.Gravity; },
+    addNum(Loc("ジュウリョク", "GRAVITY"), [this] { return statsDraft_.Gravity; },
            [this](double v) { statsDraft_.Gravity = v; }, 5, 50, 3000, 1);
-    addNum("COLOR R", [this] { return statsDraft_.ColorR; },
+    addNum(Loc("イロ R", "COLOR R"), [this] { return statsDraft_.ColorR; },
            [this](double v) { statsDraft_.ColorR = static_cast<int>(v); }, 5, 0, 255, 0);
-    addNum("COLOR G", [this] { return statsDraft_.ColorG; },
+    addNum(Loc("イロ G", "COLOR G"), [this] { return statsDraft_.ColorG; },
            [this](double v) { statsDraft_.ColorG = static_cast<int>(v); }, 5, 0, 255, 0);
-    addNum("COLOR B", [this] { return statsDraft_.ColorB; },
+    addNum(Loc("イロ B", "COLOR B"), [this] { return statsDraft_.ColorB; },
            [this](double v) { statsDraft_.ColorB = static_cast<int>(v); }, 5, 0, 255, 0);
 
     {   // 跳べる高さを計算して見せる（数値だけでは想像しづらいので）
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = "JUMP HEIGHT";
+        f.label = Loc("ジャンプ タカサ", "JUMP HEIGHT");
         f.getInfo = [this] {
             double v = std::abs(statsDraft_.JumpVelocity);
             double g = std::max(1.0, statsDraft_.Gravity);
@@ -193,7 +201,8 @@ void Editor::BuildCharacterFields() {
     {   // 新規作成
         Field f;
         f.kind = Field::Kind::Action;
-        f.label = "> NEW CHARACTER (COPY THIS)";
+        f.label = Loc("> コノキャラヲ コピーシテ シンキサクセイ",
+                       "> NEW CHARACTER (COPY THIS)");
         f.onActivate = [this] { CreateNewCharacter(); };
         fields_.push_back(std::move(f));
     }
@@ -203,7 +212,7 @@ void Editor::BuildMoveFields() {
     if (moveIds_.empty()) {
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = "NO MOVES";
+        f.label = Loc("ワザ ガ アリマセン", "NO MOVES");
         f.getInfo = [] { return std::string("-"); };
         fields_.push_back(std::move(f));
         return;
@@ -222,32 +231,36 @@ void Editor::BuildMoveFields() {
         f.decimals = decimals;
         fields_.push_back(std::move(f));
     };
+    // labels を渡すと、保存される値ではなくそちらを画面に出します。
     auto addChoice = [&](const std::string& label, std::vector<std::string> options,
-                         std::function<int()> get, std::function<void(int)> set) {
+                         std::function<int()> get, std::function<void(int)> set,
+                         std::vector<std::string> labels = {}) {
         Field f;
         f.kind = Field::Kind::Choice;
         f.label = label;
         f.options = std::move(options);
+        f.optionLabels = std::move(labels);
         f.getIndex = std::move(get);
         f.setIndex = std::move(set);
         fields_.push_back(std::move(f));
     };
 
     // どの技を編集するか（← → で切り替え）
-    addChoice("MOVE", moveIds_, [this] { return moveIndex_; },
+    addChoice(Loc("ワザ", "MOVE"), moveIds_, [this] { return moveIndex_; },
               [this](int i) { LoadMove(i); RebuildFields(); });
 
     {   // 技の表示名
         Field f;
         f.kind = Field::Kind::Text;
-        f.label = "NAME";
+        f.label = Loc("ワザメイ", "NAME");
         f.getText = [this] { return moveDraft_.Name; };
         f.setText = [this](const std::string& v) { moveDraft_.Name = v; };
         fields_.push_back(std::move(f));
     }
 
     // 出し方
-    addChoice("BUTTON", {"LP", "MP", "HP", "LK", "MK", "HK", "AnyP", "AnyK", "Throw"},
+    addChoice(Loc("ボタン", "BUTTON"),
+              {"LP", "MP", "HP", "LK", "MK", "HK", "AnyP", "AnyK", "Throw"},
               [this] {
                   static const std::vector<std::string> opts =
                       {"LP", "MP", "HP", "LK", "MK", "HK", "AnyP", "AnyK", "Throw"};
@@ -258,7 +271,7 @@ void Editor::BuildMoveFields() {
                       {"LP", "MP", "HP", "LK", "MK", "HK", "AnyP", "AnyK", "Throw"};
                   moveDraft_.Button = opts[static_cast<size_t>(i)];
               });
-    addChoice("STANCE", {"stand", "crouch", "air"},
+    addChoice(Loc("シセイ", "STANCE"), {"stand", "crouch", "air"},
               [this] {
                   static const std::vector<std::string> opts = {"stand", "crouch", "air"};
                   return IndexOfOption(opts, moveDraft_.Stance);
@@ -266,27 +279,29 @@ void Editor::BuildMoveFields() {
               [this](int i) {
                   static const std::vector<std::string> opts = {"stand", "crouch", "air"};
                   moveDraft_.Stance = opts[static_cast<size_t>(i)];
-              });
+              },
+              japanese_ ? std::vector<std::string>{"タチ", "シャガミ", "クウチュウ"}
+                        : std::vector<std::string>{});
     {   // コマンド（"236" など。空なら通常技）
         Field f;
         f.kind = Field::Kind::Text;
-        f.label = "COMMAND";
+        f.label = Loc("コマンド", "COMMAND");
         f.getText = [this] { return moveDraft_.InputCommand.empty()
-                                        ? std::string("(NONE)") : moveDraft_.InputCommand; };
+                                        ? Loc("(ナシ)", "(NONE)") : moveDraft_.InputCommand; };
         f.setText = [this](const std::string& v) { moveDraft_.InputCommand = v; };
         fields_.push_back(std::move(f));
     }
 
     // フレームデータ
-    addNum("STARTUP", [this] { return moveDraft_.Startup; },
+    addNum(Loc("ハッセイ", "STARTUP"), [this] { return moveDraft_.Startup; },
            [this](double v) { moveDraft_.Startup = static_cast<int>(v);
                               moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
                                                       moveDraft_.Recovery; }, 1, 1, 60, 0);
-    addNum("ACTIVE", [this] { return moveDraft_.Active; },
+    addNum(Loc("ジゾク", "ACTIVE"), [this] { return moveDraft_.Active; },
            [this](double v) { moveDraft_.Active = static_cast<int>(v);
                               moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
                                                       moveDraft_.Recovery; }, 1, 1, 60, 0);
-    addNum("RECOVERY", [this] { return moveDraft_.Recovery; },
+    addNum(Loc("コウチョク", "RECOVERY"), [this] { return moveDraft_.Recovery; },
            [this](double v) { moveDraft_.Recovery = static_cast<int>(v);
                               moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
                                                       moveDraft_.Recovery; }, 1, 1, 90, 0);
@@ -294,7 +309,7 @@ void Editor::BuildMoveFields() {
     {   // 有利・不利フレームは、調整で一番よく見る数字なので必ず出します
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = "ADV HIT/BLOCK";
+        f.label = Loc("ユウリF ヒット/ガード", "ADV HIT/BLOCK");
         f.getInfo = [this] {
             auto sign = [](int v) {
                 return (v >= 0 ? std::string("+") : std::string("")) + std::to_string(v);
@@ -305,16 +320,16 @@ void Editor::BuildMoveFields() {
     }
 
     // 当たったときの効果
-    addNum("DAMAGE", [this] { return moveDraft_.Damage; },
+    addNum(Loc("ダメージ", "DAMAGE"), [this] { return moveDraft_.Damage; },
            [this](double v) { moveDraft_.Damage = static_cast<int>(v); }, 5, 0, 999, 0);
-    addNum("HITSTUN", [this] { return moveDraft_.Hitstun; },
+    addNum(Loc("ヒット ノケゾリ", "HITSTUN"), [this] { return moveDraft_.Hitstun; },
            [this](double v) { moveDraft_.Hitstun = static_cast<int>(v); }, 1, 0, 120, 0);
-    addNum("BLOCKSTUN", [this] { return moveDraft_.Blockstun; },
+    addNum(Loc("ガード ノケゾリ", "BLOCKSTUN"), [this] { return moveDraft_.Blockstun; },
            [this](double v) { moveDraft_.Blockstun = static_cast<int>(v); }, 1, 0, 120, 0);
     // ヒットストップは打撃感の要。仕様の目安は 弱2-4 / 中4-6 / 強6-9。
-    addNum("HITSTOP", [this] { return moveDraft_.Hitstop; },
+    addNum(Loc("ヒットストップ", "HITSTOP"), [this] { return moveDraft_.Hitstop; },
            [this](double v) { moveDraft_.Hitstop = static_cast<int>(v); }, 1, 0, 30, 0);
-    addChoice("GUARD", {"High", "Low", "Overhead", "Throw"},
+    addChoice(Loc("ガード シュベツ", "GUARD"), {"High", "Low", "Overhead", "Throw"},
               [this] {
                   static const std::vector<std::string> opts = {"High", "Low", "Overhead", "Throw"};
                   return IndexOfOption(opts, moveDraft_.GuardType);
@@ -322,51 +337,61 @@ void Editor::BuildMoveFields() {
               [this](int i) {
                   static const std::vector<std::string> opts = {"High", "Low", "Overhead", "Throw"};
                   moveDraft_.GuardType = opts[static_cast<size_t>(i)];
-              });
-    addNum("KNOCKBACK X", [this] { return moveDraft_.KnockbackX; },
+              },
+              // High = 立ちでもしゃがみでも防げる / Overhead = 立ちガードのみ
+              japanese_ ? std::vector<std::string>{"ドチラデモ", "ゲダン", "チュウダン", "ナゲ"}
+                        : std::vector<std::string>{});
+    addNum(Loc("ノックバック X", "KNOCKBACK X"), [this] { return moveDraft_.KnockbackX; },
            [this](double v) { moveDraft_.KnockbackX = v; }, 5, 0, 400, 1);
-    addNum("KNOCKBACK Y", [this] { return moveDraft_.KnockbackY; },
+    addNum(Loc("ノックバック Y", "KNOCKBACK Y"), [this] { return moveDraft_.KnockbackY; },
            [this](double v) { moveDraft_.KnockbackY = v; }, 5, 0, 400, 1);
-    addNum("METER GAIN", [this] { return moveDraft_.MeterGain; },
+    addNum(Loc("ゲージ ゾウカ", "METER GAIN"), [this] { return moveDraft_.MeterGain; },
            [this](double v) { moveDraft_.MeterGain = static_cast<int>(v); }, 1, 0, 100, 0);
-    addNum("METER COST", [this] { return moveDraft_.MeterCost; },
+    addNum(Loc("ゲージ ショウヒ", "METER COST"), [this] { return moveDraft_.MeterCost; },
            [this](double v) { moveDraft_.MeterCost = static_cast<int>(v); }, 5, 0, 100, 0);
     // キャンセル可能時間帯。ここが開いている間だけ次の技につなげます
     //（＝コンボの成立条件）。
-    addNum("CANCEL FROM", [this] { return moveDraft_.CancelStartFrame; },
+    addNum(Loc("キャンセル カイシF", "CANCEL FROM"), [this] { return moveDraft_.CancelStartFrame; },
            [this](double v) { moveDraft_.CancelStartFrame = static_cast<int>(v); }, 1, 0, 90, 0);
-    addNum("CANCEL TO", [this] { return moveDraft_.CancelEndFrame; },
+    addNum(Loc("キャンセル シュウリョウF", "CANCEL TO"), [this] { return moveDraft_.CancelEndFrame; },
            [this](double v) { moveDraft_.CancelEndFrame = static_cast<int>(v); }, 1, 0, 90, 0);
-    addNum("THROW RANGE", [this] { return moveDraft_.ThrowRange; },
+    addNum(Loc("ナゲ キョリ", "THROW RANGE"), [this] { return moveDraft_.ThrowRange; },
            [this](double v) { moveDraft_.ThrowRange = v; }, 1, 0, 120, 0);
 }
 
 void Editor::BuildBoxFields() {
+    // labels を渡すと、保存される値ではなくそちらを画面に出します。
     auto addChoice = [&](const std::string& label, std::vector<std::string> options,
-                         std::function<int()> get, std::function<void(int)> set) {
+                         std::function<int()> get, std::function<void(int)> set,
+                         std::vector<std::string> labels = {}) {
         Field f;
         f.kind = Field::Kind::Choice;
         f.label = label;
         f.options = std::move(options);
+        f.optionLabels = std::move(labels);
         f.getIndex = std::move(get);
         f.setIndex = std::move(set);
         fields_.push_back(std::move(f));
     };
 
     // 何の判定を編集するか
-    addChoice("TARGET", {"HITBOX", "HURT STAND", "HURT CROUCH", "HURT AIR"},
+    addChoice(Loc("タイショウ", "TARGET"),
+              {"HITBOX", "HURT STAND", "HURT CROUCH", "HURT AIR"},
               [this] { return static_cast<int>(boxTarget_); },
               [this](int i) {
                   boxTarget_ = static_cast<BoxTarget>(i);
                   boxIndex_ = 0;
                   RebuildFields();
-              });
+              },
+              japanese_ ? std::vector<std::string>{"コウゲキ ハンテイ", "クライ タチ",
+                                                   "クライ シャガミ", "クライ クウチュウ"}
+                        : std::vector<std::string>{});
 
     if (boxTarget_ == BoxTarget::Hitbox) {
         // どの技の判定かが分かるように、技名も出します
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = "MOVE";
+        f.label = Loc("ワザ", "MOVE");
         f.getInfo = [this] { return moveIds_.empty() ? std::string("-")
                                                      : moveIds_[static_cast<size_t>(moveIndex_)]; };
         fields_.push_back(std::move(f));
@@ -376,9 +401,9 @@ void Editor::BuildBoxFields() {
     {
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = "BOX";
+        f.label = Loc("ハンテイ", "BOX");
         f.getInfo = [this, count] {
-            if (count == 0) return std::string("NONE");
+            if (count == 0) return Loc("ナシ", "NONE");
             return std::to_string(boxIndex_ + 1) + " / " + std::to_string(count);
         };
         fields_.push_back(std::move(f));
@@ -387,7 +412,7 @@ void Editor::BuildBoxFields() {
     if (count > 1) {
         std::vector<std::string> nums;
         for (int i = 0; i < count; ++i) nums.push_back(std::to_string(i + 1));
-        addChoice("SELECT BOX", nums, [this] { return boxIndex_; },
+        addChoice(Loc("ハンテイ センタク", "SELECT BOX"), nums, [this] { return boxIndex_; },
                   [this](int i) { boxIndex_ = i; RebuildFields(); });
     }
 
@@ -407,23 +432,23 @@ void Editor::BuildBoxFields() {
         };
         // 座標はキャラクターの中心（X）と足元（Y）からの相対。
         // Y は上がマイナスなので、頭のあたりは -95 くらいになります。
-        addBoxNum("OFFSET X", 0, -120, 120);
-        addBoxNum("OFFSET Y", 1, -140, 20);
-        addBoxNum("WIDTH", 2, 1, 160);
-        addBoxNum("HEIGHT", 3, 1, 160);
+        addBoxNum(Loc("イチ X", "OFFSET X"), 0, -120, 120);
+        addBoxNum(Loc("イチ Y", "OFFSET Y"), 1, -140, 20);
+        addBoxNum(Loc("ハバ", "WIDTH"), 2, 1, 160);
+        addBoxNum(Loc("タカサ", "HEIGHT"), 3, 1, 160);
     }
 
     {
         Field f;
         f.kind = Field::Kind::Action;
-        f.label = "> ADD BOX";
+        f.label = Loc("> ハンテイヲ フヤス", "> ADD BOX");
         f.onActivate = [this] { AddBox(); };
         fields_.push_back(std::move(f));
     }
     if (count > 0) {
         Field f;
         f.kind = Field::Kind::Action;
-        f.label = "> DELETE BOX";
+        f.label = Loc("> ハンテイヲ ケス", "> DELETE BOX");
         f.onActivate = [this] { DeleteBox(); };
         fields_.push_back(std::move(f));
     }
@@ -547,7 +572,7 @@ void Editor::AddBox() {
         boxIndex_ = static_cast<int>(parts->size()) - 1;
     }
     dirty_ = true;
-    SetMessage("BOX ADDED");
+    SetMessage("ハンテイヲ フヤシマシタ", "BOX ADDED");
     RebuildFields();
 }
 
@@ -565,7 +590,7 @@ void Editor::DeleteBox() {
     }
     boxIndex_ = std::max(0, boxIndex_ - 1);
     dirty_ = true;
-    SetMessage("BOX DELETED");
+    SetMessage("ハンテイヲ ケシマシタ", "BOX DELETED");
     RebuildFields();
 }
 
@@ -577,7 +602,7 @@ void Editor::Save() {
     dm_->SaveCharacter(statsDraft_);
     if (!moveIds_.empty()) dm_->SaveMove(statsDraft_.Id, moveDraft_);
     dirty_ = false;
-    SetMessage("SAVED TO USER FOLDER");
+    SetMessage("ユーザーフォルダニ ホゾンシマシタ", "SAVED TO USER FOLDER");
 }
 
 void Editor::CreateNewCharacter() {
@@ -589,10 +614,10 @@ void Editor::CreateNewCharacter() {
         std::string candidate = base + std::to_string(n);
         if (dm_->GetCharacter(candidate) == nullptr) { newId = candidate; break; }
     }
-    if (newId.empty()) { SetMessage("NO FREE ID"); return; }
+    if (newId.empty()) { SetMessage("アキ ID ガ アリマセン", "NO FREE ID"); return; }
 
     if (!dm_->CreateCharacter(newId, statsDraft_.Name + " " + newId, statsDraft_.Id)) {
-        SetMessage("CREATE FAILED");
+        SetMessage("サクセイ デキマセンデシタ", "CREATE FAILED");
         return;
     }
     dm_->ReloadAll();
@@ -602,11 +627,11 @@ void Editor::CreateNewCharacter() {
         if (charIds_[i] == newId) { LoadCharacter(static_cast<int>(i)); break; }
     }
     dirty_ = false;
-    SetMessage("CREATED " + newId);
+    SetMessage(newId + " ヲ サクセイシマシタ", "CREATED " + newId);
 }
 
-void Editor::SetMessage(const std::string& text) {
-    message_ = text;
+void Editor::SetMessage(const std::string& jp, const std::string& en) {
+    message_ = Loc(jp, en);
     messageTimer_ = 2.5;
 }
 
@@ -655,7 +680,7 @@ void Editor::ActivateSelected() {
         editingText_ = true;
         editingField_ = selected_;
         textBuffer_ = f.getText();
-        if (textBuffer_ == "(NONE)") textBuffer_.clear();
+        if (textBuffer_ == "(NONE)" || textBuffer_ == "(ナシ)") textBuffer_.clear();
     }
 }
 
@@ -702,17 +727,24 @@ bool Editor::HandleKey(SDL_Keycode key, bool shift) {
             return true;
         }
         case SDLK_s: Save(); return true;
+        case SDLK_l:
+            // 表示言語の切り替え。ラベルは項目を組み立てるときに決まるので、
+            // 切り替えたら一覧を作り直す必要があります。
+            japanese_ = !japanese_;
+            RebuildFields();
+            SetMessage("ヒョウジ: ニホンゴ", "LANGUAGE: ENGLISH");
+            return true;
         case SDLK_PAGEUP:
             if (!charIds_.empty()) {
                 LoadCharacter((charIndex_ - 1 + static_cast<int>(charIds_.size())) %
                               static_cast<int>(charIds_.size()));
-                SetMessage("CHARACTER: " + statsDraft_.Id);
+                SetMessage("キャラ: " + statsDraft_.Id, "CHARACTER: " + statsDraft_.Id);
             }
             return true;
         case SDLK_PAGEDOWN:
             if (!charIds_.empty()) {
                 LoadCharacter((charIndex_ + 1) % static_cast<int>(charIds_.size()));
-                SetMessage("CHARACTER: " + statsDraft_.Id);
+                SetMessage("キャラ: " + statsDraft_.Id, "CHARACTER: " + statsDraft_.Id);
             }
             return true;
         case SDLK_ESCAPE:
@@ -740,11 +772,15 @@ void Editor::Draw(Renderer& r) {
     DrawTabs(r);
 
     if (tab_ == Tab::Boxes) {
-        // 左半分に項目、右半分にキャラクターと判定のプレビュー。
-        DrawFieldList(r, 4, kBodyY, 176, kFooterY - kBodyY - 4);
-        DrawBoxPreview(r, 184, kBodyY, VirtualW - 188, kFooterY - kBodyY - 4);
+        // 左に項目、右にキャラクターと判定のプレビュー。
+        // 幅の割り当ては画面の広さに応じて決めます（項目側は
+        // ラベルと数値が並ぶので、最低 176 は確保します）。
+        float listW = std::max(176.0f, VirtualW * 0.46f);
+        DrawFieldList(r, 4, kBodyY, listW, FooterY() - kBodyY - 4);
+        DrawBoxPreview(r, listW + 12, kBodyY, VirtualW - listW - 16,
+                       FooterY() - kBodyY - 4);
     } else {
-        DrawFieldList(r, 4, kBodyY, VirtualW - 8, kFooterY - kBodyY - 4);
+        DrawFieldList(r, 4, kBodyY, VirtualW - 8, FooterY() - kBodyY - 4);
     }
 
     DrawFooter(r);
@@ -755,7 +791,8 @@ void Editor::Draw(Renderer& r) {
 void Editor::DrawHeader(Renderer& r) {
     const auto& pal = GetPalette();
     r.FillRect(0, 0, VirtualW, kHeaderH, pal.Accent);
-    DrawPixelText(r, "CHARACTER EDITOR", 4, 3, 1.0f, pal.OnAccent);
+    DrawPixelText(r, Loc("キャラクター エディット", "CHARACTER EDITOR"),
+                  4, 2, 1.0f, pal.OnAccent);
 
     // 今どのキャラクターを編集しているか（PgUp/PgDn で切り替え）
     std::string right = statsDraft_.Id;
@@ -769,7 +806,9 @@ void Editor::DrawHeader(Renderer& r) {
 
 void Editor::DrawTabs(Renderer& r) {
     const auto& pal = GetPalette();
-    const char* names[3] = {"CHARACTER", "MOVE", "BOXES"};
+    const std::string names[3] = {Loc("キャラクター", "CHARACTER"),
+                                 Loc("ワザ", "MOVE"),
+                                 Loc("ハンテイ", "BOXES")};
     float x = 4;
     for (int i = 0; i < 3; ++i) {
         float w = PixelTextWidth(names[i], 1.0f) + 10;
@@ -790,7 +829,7 @@ void Editor::DrawTabs(Renderer& r) {
 void Editor::DrawFieldList(Renderer& r, float x, float y, float w, float h) {
     const auto& pal = GetPalette();
     if (fields_.empty()) {
-        DrawPixelText(r, "NO DATA", x + 4, y + 4, 1.0f, pal.Ink55);
+        DrawPixelText(r, Loc("データ ガ アリマセン", "NO DATA"), x + 4, y + 4, 1.0f, pal.Ink55);
         return;
     }
 
@@ -833,7 +872,10 @@ void Editor::DrawFieldList(Renderer& r, float x, float y, float w, float h) {
             case Field::Kind::Choice:
                 if (f.getIndex && !f.options.empty()) {
                     int idx = std::clamp(f.getIndex(), 0, static_cast<int>(f.options.size()) - 1);
-                    value = f.options[static_cast<size_t>(idx)];
+                    // 表示用のラベルがあればそちらを出す（無ければ値そのもの）
+                    const std::vector<std::string>& shown =
+                        f.optionLabels.size() == f.options.size() ? f.optionLabels : f.options;
+                    value = shown[static_cast<size_t>(idx)];
                     if (isSelected) value = "< " + value + " >";
                 }
                 break;
@@ -859,7 +901,7 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
     const auto& pal = GetPalette();
     r.FillRect(x, y, w, h, Color(228, 226, 224));
     r.DrawRect(x, y, w, h, pal.RuleSoft, 1.0f);
-    DrawPixelText(r, "PREVIEW", x + 3, y + 3, 1.0f, pal.Ink45);
+    DrawPixelText(r, Loc("プレビュー", "PREVIEW"), x + 3, y + 3, 1.0f, pal.Ink45);
 
     // キャラクターの足元をどこに置くか。
     // 身長 95 が枠に収まるように、下寄りに配置します。
@@ -931,25 +973,30 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
 
 void Editor::DrawFooter(Renderer& r) {
     const auto& pal = GetPalette();
-    r.FillRect(0, kFooterY, VirtualW, VirtualH - kFooterY, pal.PanelBg);
-    r.FillRect(0, kFooterY, VirtualW, 1, pal.RuleSoft);
+    r.FillRect(0, FooterY(), VirtualW, VirtualH - FooterY(), pal.PanelBg);
+    r.FillRect(0, FooterY(), VirtualW, 1, pal.RuleSoft);
 
     if (messageTimer_ > 0.0 && !message_.empty()) {
         // 保存しました等のお知らせ。数秒で消えます。
-        DrawPixelText(r, message_, 4, kFooterY + 4, 1.0f, pal.AccentDeep);
-        DrawPixelTextRight(r, "ESC: BACK", VirtualW - 4, kFooterY + 4, 1.0f, pal.Ink55);
+        DrawPixelText(r, message_, 4, FooterY() + 4, 1.0f, pal.AccentDeep);
+        DrawPixelTextRight(r, Loc("ESC:モドル", "ESC: BACK"),
+                           VirtualW - 4, FooterY() + 4, 1.0f, pal.Ink55);
         return;
     }
 
     if (editingText_) {
-        DrawPixelText(r, "TYPE TEXT   ENTER: OK   ESC: CANCEL", 4, kFooterY + 4, 1.0f, pal.Ink70);
+        DrawPixelText(r, Loc("モジ ニュウリョク  ENTER:ケッテイ  ESC:トリケシ",
+                             "TYPE TEXT   ENTER: OK   ESC: CANCEL"),
+                      4, FooterY() + 4, 1.0f, pal.Ink70);
         return;
     }
 
-    DrawPixelText(r, "ARROWS:EDIT  SHIFT:X10  ENTER:GO  TAB:PAGE",
-                  4, kFooterY + 2, 1.0f, pal.Ink70);
-    DrawPixelText(r, "S:SAVE  PGUP/PGDN:CHARACTER  ESC:BACK",
-                  4, kFooterY + 11, 1.0f, pal.Ink55);
+    DrawPixelText(r, Loc("ヤジルシ:ヘンコウ  SHIFT:10バイ  ENTER:ジッコウ  TAB:ページ",
+                         "ARROWS:EDIT  SHIFT:X10  ENTER:GO  TAB:PAGE"),
+                  4, FooterY() + 2, 1.0f, pal.Ink70);
+    DrawPixelText(r, Loc("S:ホゾン  PGUP/PGDN:キャラ  L:ニホンゴ/EN  ESC:モドル",
+                         "S:SAVE  PGUP/PGDN:CHARACTER  L:JP/EN  ESC:BACK"),
+                  4, FooterY() + 11, 1.0f, pal.Ink55);
 }
 
 } // namespace kakuge

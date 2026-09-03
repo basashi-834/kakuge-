@@ -22,6 +22,52 @@ inline SDL_Color ToSdl(Color c) {
 }
 } // namespace
 
+// 実行時の内部キャンバスの大きさ。既定は設計の基準値。
+int VirtualW = BaseVirtualW;
+int VirtualH = BaseVirtualH;
+
+// ---------------------------------------------------------------------
+// ウィンドウの大きさ → 拡大率・キャンバスの大きさ
+// ---------------------------------------------------------------------
+// 手順は 3 段階です。
+//
+//   1. まず「基準の 384x224 が丸ごと入る、いちばん大きい整数倍」を求める。
+//      1600x900 のウィンドウなら 1600/384=4.1、900/224=4.0 で、
+//      小さいほうを切り捨てて 4 倍。
+//   2. その倍率でウィンドウを埋めるのに必要なキャンバスの大きさを出す。
+//      1600/4=400、900/4=225 → 400x225。基準より横に 16、縦に 1 広い。
+//      この広がったぶんが、以前は黒い余白だった場所です。
+//   3. 端が 1 ピクセル欠けないよう、割り切れないときは切り上げます。
+//      その結果、表示は最大で拡大率-1 ピクセルだけウィンドウから
+//      はみ出しますが、はみ出すのは画面のいちばん外側なので
+//      見た目には影響しません（黒帯が出るよりずっとましです）。
+//
+// 拡大率を整数に保つのが要点です。3.7 倍のような半端な倍率にすると、
+// 1 ドットが 3 ピクセルの場所と 4 ピクセルの場所が混ざって、
+// ドット絵の線幅がガタガタになります。
+CanvasLayout ComputeCanvasLayout(int windowW, int windowH) {
+    CanvasLayout out;
+    if (windowW <= 0 || windowH <= 0) return out;
+
+    int scale = static_cast<int>(std::floor(std::min(
+        static_cast<double>(windowW) / BaseVirtualW,
+        static_cast<double>(windowH) / BaseVirtualH)));
+    if (scale < 1) scale = 1; // 基準より小さいウィンドウでも 1 倍は保つ
+    out.scale = scale;
+
+    // 切り上げの割り算（(a + b - 1) / b）。
+    int wantW = (windowW + scale - 1) / scale;
+    int wantH = (windowH + scale - 1) / scale;
+    out.width = std::clamp(wantW, BaseVirtualW, MaxVirtualW);
+    out.height = std::clamp(wantH, BaseVirtualH, MaxVirtualH);
+
+    // 上限に当たった場合や、ウィンドウが基準より小さい場合だけ
+    // 中央に寄せます（このときは多少はみ出す/余ることがあります）。
+    out.offsetX = (windowW - out.width * scale) / 2;
+    out.offsetY = (windowH - out.height * scale) / 2;
+    return out;
+}
+
 Color Color::Scaled(double f) const {
     auto clamp255 = [](double v) {
         return static_cast<int>(std::max(0.0, std::min(255.0, v)));
@@ -35,20 +81,30 @@ Color Color::Scaled(double f) const {
 bool Renderer::Init(SDL_Renderer* sdlRenderer) {
     sdl_ = sdlRenderer;
     if (!sdl_) return false;
+    // 半透明を正しく重ねるための設定。
+    SDL_SetRenderDrawBlendMode(sdl_, SDL_BLENDMODE_BLEND);
+    return EnsureCanvas(BaseVirtualW, BaseVirtualH);
+}
 
-    // 内部キャンバス。TEXTUREACCESS_TARGET は「このテクスチャに
-    // 描き込める」という指定です（普通のテクスチャは表示専用）。
+// 内部キャンバスを作り直す。大きさが同じなら何もしません
+//（ウィンドウを動かしただけで毎フレーム作り直すのは無駄なので）。
+bool Renderer::EnsureCanvas(int w, int h) {
+    if (canvas_ && canvasW_ == w && canvasH_ == h) return true;
+    if (canvas_) SDL_DestroyTexture(canvas_);
+
+    // TEXTUREACCESS_TARGET は「このテクスチャに描き込める」という
+    // 指定です（普通のテクスチャは表示専用）。
     canvas_ = SDL_CreateTexture(sdl_, SDL_PIXELFORMAT_RGBA8888,
-                                SDL_TEXTUREACCESS_TARGET, VirtualW, VirtualH);
-    if (!canvas_) return false;
+                                SDL_TEXTUREACCESS_TARGET, w, h);
+    if (!canvas_) { canvasW_ = canvasH_ = 0; return false; }
+    canvasW_ = w;
+    canvasH_ = h;
 
     // ここが「くっきりドット絵」の要。SDL_ScaleModeNearest は
     // 拡大するときに色を混ぜず、1 ピクセルをそのまま四角く引き伸ばします。
     // 既定の Linear だとぼやけた絵になってしまいます。
     SDL_SetTextureScaleMode(canvas_, SDL_ScaleModeNearest);
     SDL_SetTextureBlendMode(canvas_, SDL_BLENDMODE_BLEND);
-    // 半透明を正しく重ねるための設定。
-    SDL_SetRenderDrawBlendMode(sdl_, SDL_BLENDMODE_BLEND);
     return true;
 }
 
@@ -57,13 +113,22 @@ void Renderer::Shutdown() {
         SDL_DestroyTexture(canvas_);
         canvas_ = nullptr;
     }
+    canvasW_ = canvasH_ = 0;
     sdl_ = nullptr;
 }
 
 // ---------------------------------------------------------------------
 // フレームの開始と終了
 // ---------------------------------------------------------------------
-void Renderer::BeginFrame() {
+void Renderer::BeginFrame(int windowW, int windowH) {
+    // ウィンドウの形に合わせてキャンバスの大きさを決め直します。
+    // 描き始める前にやるのが大事です（描いたあとで変えると、
+    // その 1 フレームだけ配置がずれます）。
+    CanvasLayout layout = ComputeCanvasLayout(windowW, windowH);
+    if (EnsureCanvas(layout.width, layout.height)) {
+        VirtualW = layout.width;
+        VirtualH = layout.height;
+    }
     // 以降の描画命令はすべて内部キャンバスに向かいます。
     SDL_SetRenderTarget(sdl_, canvas_);
     shakeX_ = shakeY_ = 0.0f;
@@ -73,21 +138,17 @@ void Renderer::EndFrame(int windowW, int windowH) {
     // 描き込み先をウィンドウに戻す
     SDL_SetRenderTarget(sdl_, nullptr);
     SDL_SetRenderDrawColor(sdl_, 0, 0, 0, 255);
-    SDL_RenderClear(sdl_); // 余白（レターボックス）は黒で塗る
+    SDL_RenderClear(sdl_);
 
-    if (windowW <= 0 || windowH <= 0) { SDL_RenderPresent(sdl_); return; }
+    if (windowW <= 0 || windowH <= 0 || !canvas_) { SDL_RenderPresent(sdl_); return; }
 
-    // 縦横比を保ったまま、はみ出さない最大の倍率を求めます。
-    double scale = std::min(static_cast<double>(windowW) / VirtualW,
-                            static_cast<double>(windowH) / VirtualH);
-    // 2 倍以上にできるなら整数倍にそろえます。
-    // 2.7 倍のような半端な倍率だと、ドットの大きさが場所によって
-    // 2 ピクセルだったり 3 ピクセルだったりしてムラが出るためです。
-    if (scale >= 2.0) scale = std::floor(scale);
-
+    // BeginFrame とまったく同じ計算をします。キャンバスはすでに
+    // ウィンドウの形に合わせて作ってあるので、あとは整数倍に
+    // 引き伸ばして貼るだけで、余白なく画面が埋まります。
+    CanvasLayout layout = ComputeCanvasLayout(windowW, windowH);
     SDL_Rect dest;
-    dest.w = static_cast<int>(VirtualW * scale);
-    dest.h = static_cast<int>(VirtualH * scale);
+    dest.w = canvasW_ * layout.scale;
+    dest.h = canvasH_ * layout.scale;
     dest.x = (windowW - dest.w) / 2;  // 中央に配置
     dest.y = (windowH - dest.h) / 2;
     SDL_RenderCopy(sdl_, canvas_, nullptr, &dest);

@@ -104,12 +104,49 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
         // 立ち: 前後に軽く開いた構え
         kneeBX = cx - f * 13.0 * s; kneeBY = hipY + legH * 0.52; footBX = cx - f * 20.0 * s; footBY = sy;
         kneeFX = cx + f * 12.0 * s; kneeFY = hipY + legH * 0.52; footFX = cx + f * 20.0 * s; footFY = sy;
-        if (pose.legKick > 0) {
-            // キック: 前脚を前方に伸ばす
-            kneeFX = cx + f * 22.0 * s; kneeFY = hipY + 10.0 * s;
-            footFX = cx + f * (30.0 + pose.legKick * 0.9) * s;
-            footFY = hipY + 6.0 * s - std::min(pose.legKick, 34.0) * 0.55 * s;
+    }
+
+    // ---- キック ----
+    // 立ちでもしゃがみでも、蹴り脚は「腰の付け根から斜め上へ伸ばした
+    // 1 本の直線」にします。膝は曲げません。
+    //
+    // 膝を曲げないのは見た目の好みではなく、実用上の理由があります。
+    // 384x224 の画面ではキャラクターの脚は 40 ピクセルほどしかなく、
+    // そこに膝の折れ角を入れると、脚がどこを向いているのか
+    // 一瞬では読めなくなります。まっすぐな 1 本の線にすると
+    // 「どこへ蹴っているか」が離れて見ても分かります。
+    //
+    // そのために、膝の点を腰と足先を結ぶ線の途中に置きます。
+    // 描画は今までどおり「腰→膝」「膝→足先」の 2 本ですが、
+    // 3 点が一直線に並ぶので、見た目は 1 本の脚になります。
+    if (pose.legKick > 0) {
+        // 角度は姿勢で変えます。
+        //   しゃがみ … 浅く（下段攻撃なのに足が上にあると分かりにくい）
+        //   立ち     … 斜め上へ
+        //   空中     … 斜め下へ（跳び蹴りは下を蹴るもの）
+        double angleDeg = 34.0;
+        if (pose.crouch) angleDeg = 14.0;
+        else if (pose.jump) angleDeg = -30.0;
+        const double angle = angleDeg * 3.14159265358979 / 180.0;
+        // 脚の長さ。技の強さ（legKick）が大きいほど深く踏み込みます。
+        double reach = (pose.crouch ? 40.0 : 48.0) + std::min(pose.legKick, 40.0) * 0.35;
+        double len = reach * s;
+
+        footFX = hipFrontX + f * len * std::cos(angle);
+        footFY = hipY - len * std::sin(angle);
+        // 膝は腰と足先のちょうど中間（＝一直線）。
+        kneeFX = (hipFrontX + footFX) / 2.0;
+        kneeFY = (hipY + footFY) / 2.0;
+
+        if (!pose.jump) {
+            // 軸足（奥の脚）は地面を踏んだままにします。片脚を上げるぶん、
+            // 支える側は少し後ろへ開いたほうが安定して見えます。
+            kneeBX = cx - f * 16.0 * s; kneeBY = hipY + (sy - hipY) * 0.5;
+            footBX = cx - f * 24.0 * s; footBY = sy;
         }
+        // 空中では地面が無いので、奥の脚は抱え込んだまま（上の分岐のまま）
+        // にします。ここで地面に着けてしまうと、宙に浮いているのに
+        // 片脚だけ地面に立っている絵になります。
     }
 
     // ---- 奥の脚 ----
@@ -125,8 +162,18 @@ void DrawHumanoid(Renderer& r, double sx, double sy, Color color, const Humanoid
         elBackX = cx - f * 6.0 * s; elBackY = shoulderY + 14.0 * s;
         hdBackX = cx + f * 14.0 * s; hdBackY = shoulderY - 2.0 * s;
     } else {
-        elBackX = cx - f * 26.0 * s; elBackY = shoulderY + 18.0 * s;
-        hdBackX = cx - f * 12.0 * s; hdBackY = shoulderY + 24.0 * s - bob;
+        // 構え: 肘は体の横に下ろし、前腕だけを前へ出します。
+        //
+        // 以前は肘も拳も体の後ろ（cx から見て後方）に置いていたため、
+        // 腕が背中側へ回り込んで見えていました。人が構えるとき、
+        // 腕は体の後ろではなく前に来ます。肘を胴の内側に入れて
+        // 前腕を前へ振り出すと、奥の腕は「胴の陰から前に出ている」
+        // 形になり、背中側にはみ出しません。
+        //
+        // 拳の X は、胴の前の縁（肩で 22、腰で 15 単位）より必ず外へ
+        // 置きます。内側に置くと、あとから描く胴に隠れて消えます。
+        elBackX = cx - f * 4.0 * s;  elBackY = shoulderY + 24.0 * s;
+        hdBackX = cx + f * 24.0 * s; hdBackY = shoulderY + 18.0 * s - bob;
     }
     DrawLimb(r, st, st.dark, shBackX, shBackY, elBackX, elBackY, armT, ow);
     DrawLimb(r, st, st.dark, elBackX, elBackY, hdBackX, hdBackY, armT, ow);

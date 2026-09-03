@@ -1,6 +1,6 @@
 {
     "id": "jump_attack",
-    "name": "ジャンプ攻撃",
+    "name": "ジャンプ チュウキック",
     "startup": 5,
     "active": 6,
     "recovery": 10,

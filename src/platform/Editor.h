@@ -31,7 +31,16 @@
 //   Enter        … 文字の項目なら入力開始、動作の項目なら実行
 //   Tab          … タブ（CHARACTER / MOVE / BOXES）を切り替え
 //   S            … 保存
+//   L            … 表示を日本語 / 英語で切り替える
 //   Esc          … 戻る（文字入力中なら入力の取り消し）
+//
+// 表示言語
+// -------
+// 既定は日本語です。項目名は 8x8 のカナで表示します（漢字はフォントに
+// 入っていないので、カナ書きになります。詳しくは Font.h）。
+// L キーで英語に切り替えられます。データそのもの（技の名前や ID、
+// 姿勢の "crouch" といった値）は言語を変えても変わりません。
+// 画面に出すラベルだけが切り替わります。
 // =====================================================================
 #pragma once
 #include <SDL.h>
@@ -97,7 +106,12 @@ private:
         std::function<void(const std::string&)> setText;
 
         // 選択肢項目
+        //   options      … 保存される値（"crouch" など。言語で変わらない）
+        //   optionLabels … 画面に出す文字（"シャガミ" など。空なら options）
+        // 2 つに分けているのは、表示を日本語にしたときにデータへ
+        // 日本語が書き込まれてしまわないようにするためです。
         std::vector<std::string> options;
+        std::vector<std::string> optionLabels;
         std::function<int()> getIndex;
         std::function<void(int)> setIndex;
 
@@ -114,6 +128,7 @@ private:
 
     // ---- 状態 ----
     DataManager* dm_ = nullptr;
+    bool japanese_ = true; // 表示言語（L キーで切り替え）
     Tab tab_ = Tab::Character;
     int selected_ = 0;   // 選んでいる行
     int scroll_ = 0;     // 表示の先頭行（項目が多いとき用）
@@ -168,7 +183,12 @@ private:
     int CurrentBoxCount() const;
     std::string CurrentStanceName() const;
 
-    void SetMessage(const std::string& text);
+    // 表示言語に応じて日本語か英語を返す。ラベルはすべてこれを通します。
+    std::string Loc(const std::string& jp, const std::string& en) const {
+        return japanese_ ? jp : en;
+    }
+
+    void SetMessage(const std::string& jp, const std::string& en);
     void MoveSelection(int delta);
     void AdjustSelected(int direction, bool shift);
     void ActivateSelected();

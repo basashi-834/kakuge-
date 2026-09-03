@@ -90,6 +90,9 @@ bool Game::Init() {
         }
     }
 
+    // USB コントローラ（つながっていなくても失敗しません）。
+    pad_.Init();
+
     GoTitle();
     lastTick_ = std::chrono::steady_clock::now();
     running_ = true;
@@ -97,6 +100,7 @@ bool Game::Init() {
 }
 
 void Game::Shutdown() {
+    pad_.Shutdown();
     r_.Shutdown();
     if (sdlRenderer_) { SDL_DestroyRenderer(sdlRenderer_); sdlRenderer_ = nullptr; }
     if (window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
@@ -159,14 +163,33 @@ void Game::HandleEvents() {
                 // 全部離した扱いにします。そうしないと、別の画面を
                 // 触っている間ずっと前進し続けてしまいます。
                 if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) heldKeys_.clear();
+                // 大きさが変わると内部キャンバスの大きさも変わるので、
+                // ボタンの位置を計算し直します。
+                if (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                    e.window.event == SDL_WINDOWEVENT_RESIZED) {
+                    pendingRelayout_ = true;
+                }
                 break;
             default:
                 break;
         }
+        // コントローラの抜き差しを見張ります。
+        pad_.HandleEvent(e);
+    }
+
+    // コントローラの十字キー・ボタンを、メニュー操作のキーとして扱います。
+    // キーボードとまったく同じ処理に流し込むので、どちらでも
+    // 同じようにメニューを操作できます。
+    for (SDL_Keycode key : pad_.PollMenuKeys()) {
+        // 対戦中はメニュー操作を送りません。しゃがみガードのつもりで
+        // 下を入れたときに、ポーズメニューが動いてしまうためです
+        //（ポーズ中は送ります）。
+        if (current_ == Screen::Game && !paused_) continue;
+        OnKeyDown(key);
     }
 }
 
-// キーボードの今の状態を、エンジンが理解できる形にまとめる。
+// キーボードとコントローラの今の状態を、エンジンが理解できる形にまとめる。
 //
 // 操作キー（6 ボタン式）
 //   移動   A（左） D（右） S（下） Space（ジャンプ）
@@ -186,6 +209,18 @@ RawInput Game::BuildPlayerInput() const {
     input.Buttons.LK = held(SDLK_j);
     input.Buttons.MK = held(SDLK_k);
     input.Buttons.HK = held(SDLK_l);
+
+    // コントローラの入力を重ねます。「どちらかが押していれば押している」
+    // という足し方なので、キーボードとコントローラを併用できます
+    //（右手はパッド、左手はキーボード、といった使い方もできます）。
+    RawInput padInput = pad_.Poll();
+    input.Left = input.Left || padInput.Left;
+    input.Right = input.Right || padInput.Right;
+    input.Down = input.Down || padInput.Down;
+    input.Up = input.Up || padInput.Up;
+    for (const char* name : {"LP", "MP", "HP", "LK", "MK", "HK"}) {
+        if (padInput.Buttons.Get(name)) input.Buttons.Set(name, true);
+    }
     return input;
 }
 
@@ -263,16 +298,14 @@ void Game::WindowToVirtual(int wx, int wy, double& vx, double& vy) const {
     int ww = 0, wh = 0;
     SDL_GetWindowSize(window_, &ww, &wh);
     if (ww <= 0 || wh <= 0) { vx = vy = -1; return; }
-    // Renderer::EndFrame と同じ計算で拡大率と余白を求めます。
+    // Renderer::EndFrame とまったく同じ計算を使います。
     // ここがずれると、見えているボタンと押せる場所がずれてしまいます。
-    double scale = std::min(static_cast<double>(ww) / VirtualW,
-                            static_cast<double>(wh) / VirtualH);
-    if (scale >= 2.0) scale = std::floor(scale);
-    double offX = (ww - VirtualW * scale) / 2.0;
-    double offY = (wh - VirtualH * scale) / 2.0;
-    if (scale <= 0.0001) { vx = vy = -1; return; }
-    vx = (wx - offX) / scale;
-    vy = (wy - offY) / scale;
+    CanvasLayout layout = ComputeCanvasLayout(ww, wh);
+    if (layout.scale <= 0) { vx = vy = -1; return; }
+    double offX = (ww - layout.width * layout.scale) / 2.0;
+    double offY = (wh - layout.height * layout.scale) / 2.0;
+    vx = (wx - offX) / layout.scale;
+    vy = (wy - offY) / layout.scale;
 }
 
 void Game::OnMouseMove(int windowX, int windowY) {
@@ -373,22 +406,64 @@ void Game::AddButton(float x, float y, float w, float h, const std::string& text
     buttons_.push_back(b);
 }
 
+// 今の画面に合わせてボタンを並べ直す。
+//
+// 画面を切り替えたときだけでなく、ウィンドウの大きさが変わったときにも
+// 呼びます。内部キャンバスの大きさはウィンドウの形に合わせて変わるので
+//（黒い余白を出さないため）、そのつど位置を計算し直さないと、
+// ボタンが中央からずれたり画面外に出たりしてしまいます。
+//
+// 画面の状態（選んでいるキャラクターなど）はここでは触りません。
+// リサイズのたびに選択がリセットされては困るからです。
+void Game::LayoutButtons() {
+    buttons_.clear();
+    const float halfW = VirtualW / 2.0f;
+    switch (current_) {
+        case Screen::Title: {
+            // 6 つのボタンを縦に並べ、上の赤い帯（高さ 74）と
+            // 画面下の帯（高さ 14）の間で縦中央に置きます。
+            const float bw = 150, bh = 15, step = 18;
+            const float blockH = step * 5 + bh;
+            const float bx = halfW - bw / 2.0f;
+            const float by = 74 + (VirtualH - 14 - 74 - blockH) / 2.0f;
+            AddButton(bx, by, bw, bh, "VERSUS (VS CPU)", ActVersus, true);
+            AddButton(bx, by + step, bw, bh, "TRAINING", ActTraining, false);
+            AddButton(bx, by + step * 2, bw, bh, "CHARACTER EDITOR", ActEditor, false);
+            AddButton(bx, by + step * 3, bw, bh, "CONTROLS", ActControls, false);
+            AddButton(bx, by + step * 4, bw, bh, "SETTINGS", ActSettings, false);
+            AddButton(bx, by + step * 5, bw, bh, "EXIT", ActQuit, false);
+            break;
+        }
+        case Screen::CharacterSelect:
+            AddButton(halfW - 76, VirtualH - 34, 72, 16, "SELECT", ActSelectConfirm, true);
+            AddButton(halfW + 4, VirtualH - 34, 72, 16, "BACK", ActSelectBack, false);
+            break;
+        case Screen::Result: {
+            const float bw = 100, bh = 18, bx = halfW - bw / 2.0f;
+            AddButton(bx, VirtualH - 64, bw, bh, "REMATCH", ActRematch, true);
+            AddButton(bx, VirtualH - 42, bw, bh, "TITLE", ActBackToTitle, false);
+            break;
+        }
+        case Screen::Settings:
+            AddButton(halfW - 122, 104, 20, 18, "<", ActResPrev, false);
+            AddButton(halfW + 102, 104, 20, 18, ">", ActResNext, false);
+            AddButton(halfW - 50, 150, 100, 18, "APPLY", ActResApply, true);
+            AddButton(halfW - 50, 174, 100, 18, "BACK", ActBackToTitle, false);
+            break;
+        case Screen::Controls:
+            AddButton(halfW - 50, VirtualH - 28, 100, 18, "BACK", ActBackToTitle, false);
+            break;
+        default:
+            break; // 対戦中とエディタはボタンを使わない（ポーズ中は毎フレーム作る）
+    }
+    if (focusIndex_ >= static_cast<int>(buttons_.size())) focusIndex_ = 0;
+}
+
 void Game::GoTitle() {
     current_ = Screen::Title;
     battle_.reset();
-    buttons_.clear();
     focusIndex_ = 0;
-    // 6 つのボタンを縦に並べます。最後の EXIT の下端
-    //（92 + 5*18 + 15 = 197）が画面下の帯（y=210 から）に
-    // かからないように間隔を決めています。
-    const float bw = 150, bh = 15, bx = (VirtualW - bw) / 2.0f;
-    const float by = 92, step = 18;
-    AddButton(bx, by, bw, bh, "VERSUS (VS CPU)", ActVersus, true);
-    AddButton(bx, by + step, bw, bh, "TRAINING", ActTraining, false);
-    AddButton(bx, by + step * 2, bw, bh, "CHARACTER EDITOR", ActEditor, false);
-    AddButton(bx, by + step * 3, bw, bh, "CONTROLS", ActControls, false);
-    AddButton(bx, by + step * 4, bw, bh, "SETTINGS", ActSettings, false);
-    AddButton(bx, by + step * 5, bw, bh, "EXIT", ActQuit, false);
+    LayoutButtons();
 }
 
 void Game::GoCharacterSelect(bool training) {
@@ -398,10 +473,8 @@ void Game::GoCharacterSelect(bool training) {
     selectIndex_ = 0;
     p1CharId_.clear();
     p2CharId_.clear();
-    buttons_.clear();
     focusIndex_ = 0;
-    AddButton(VirtualW / 2.0f - 76, 190, 72, 16, "SELECT", ActSelectConfirm, true);
-    AddButton(VirtualW / 2.0f + 4, 190, 72, 16, "BACK", ActSelectBack, false);
+    LayoutButtons();
 }
 
 void Game::GoVS() {
@@ -444,28 +517,20 @@ void Game::GoResult() {
         lastResult_.damageDealt = battle_->Player2.Stats.MaxHP - battle_->Player2.CurrentHP;
     }
     current_ = Screen::Result;
-    buttons_.clear();
     focusIndex_ = 0;
-    const float bw = 100, bh = 18, bx = (VirtualW - bw) / 2.0f;
-    AddButton(bx, 160, bw, bh, "REMATCH", ActRematch, true);
-    AddButton(bx, 182, bw, bh, "TITLE", ActBackToTitle, false);
+    LayoutButtons();
 }
 
 void Game::GoSettings() {
     current_ = Screen::Settings;
-    buttons_.clear();
     focusIndex_ = 2;
-    AddButton(70, 104, 20, 18, "<", ActResPrev, false);
-    AddButton(294, 104, 20, 18, ">", ActResNext, false);
-    AddButton(VirtualW / 2.0f - 50, 150, 100, 18, "APPLY", ActResApply, true);
-    AddButton(VirtualW / 2.0f - 50, 174, 100, 18, "BACK", ActBackToTitle, false);
+    LayoutButtons();
 }
 
 void Game::GoControls() {
     current_ = Screen::Controls;
-    buttons_.clear();
     focusIndex_ = 0;
-    AddButton(VirtualW / 2.0f - 50, 196, 100, 18, "BACK", ActBackToTitle, false);
+    LayoutButtons();
 }
 
 // キャラクターエディタを開く。
@@ -588,7 +653,26 @@ void Game::Update(double dt) {
 // 描画
 // ---------------------------------------------------------------------
 void Game::Render() {
-    r_.BeginFrame();
+    int ww = 0, wh = 0;
+    SDL_GetWindowSize(window_, &ww, &wh);
+    // 内部キャンバスの大きさはウィンドウの形で決まるので、
+    // 描き始める前に BeginFrame へ渡します。
+    r_.BeginFrame(ww, wh);
+
+    // ここで VirtualW / VirtualH が確定します。前のフレームと違って
+    // いたら、この時点でボタンを並べ直します。
+    //
+    // ウィンドウのリサイズイベントを見るだけでは足りません。起動直後の
+    // 1 回目もキャンバスの大きさが決まるのはここなので、それまでは
+    // 基準値（384x224）で並べたボタンが中央からずれたままになります。
+    // 「キャンバスの大きさが変わったら並べ直す」という条件にすれば、
+    // 起動時もリサイズ時も 1 つの仕組みで正しく揃います。
+    if (pendingRelayout_ || VirtualW != laidOutW_ || VirtualH != laidOutH_) {
+        pendingRelayout_ = false;
+        laidOutW_ = VirtualW;
+        laidOutH_ = VirtualH;
+        LayoutButtons();
+    }
     switch (current_) {
         case Screen::Title: DrawTitle(); break;
         case Screen::CharacterSelect: DrawCharacterSelect(); break;
@@ -599,8 +683,6 @@ void Game::Render() {
         case Screen::Controls: DrawControls(); break;
         case Screen::Editor: DrawEditor(); break;
     }
-    int ww = 0, wh = 0;
-    SDL_GetWindowSize(window_, &ww, &wh);
     r_.EndFrame(ww, wh);
 }
 
