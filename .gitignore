@@ -1,4 +1,11 @@
-# Delivery/packaging artifacts created during a session (already sent to
-# the user via SendUserFile) - not source, not tracked, same convention as
-# cpp-game/build/ and cpp-game/dist/.
+# ビルドで生成されるフォルダ（ソースではないので追跡しません）
+build/
+out/
+dist/
+
+# セッション中に作った配布用アーカイブ
 *.zip
+
+# Visual Studio が作る作業ファイル
+.vs/
+*.user

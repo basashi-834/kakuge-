@@ -1,0 +1,49 @@
+{
+ "id": "crouch_light_punch",
+ "name": "\u3057\u3083\u304c\u307f\u5f31\u30d1\u30f3\u30c1",
+ "startup": 3,
+ "active": 3,
+ "recovery": 6,
+ "damage": 22,
+ "hitstun": 12,
+ "blockstun": 8,
+ "hitstop": 4,
+ "guardType": "Low",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 22,
+   "offsetY": -29,
+   "width": 23,
+   "height": 15
+  }
+ ],
+ "knockbackX": 50.87,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 5,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "crouch_medium_punch",
+  "crouch_heavy_punch",
+  "standing_medium",
+  "fireball",
+  "anti_air_special",
+  "super_combo"
+ ],
+ "cancelStartFrame": 3,
+ "cancelEndFrame": 9,
+ "tags": [
+  "Light",
+  "Normal",
+  "Low"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "LP",
+ "stance": "crouch"
+}

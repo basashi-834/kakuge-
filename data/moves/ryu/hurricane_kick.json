@@ -1,0 +1,45 @@
+{
+ "id": "hurricane_kick",
+ "name": "\u7adc\u5dfb\u65cb\u98a8\u8173 (Hurricane Kick)",
+ "startup": 9,
+ "active": 16,
+ "recovery": 20,
+ "damage": 75,
+ "hitstun": 22,
+ "blockstun": 12,
+ "hitstop": 7,
+ "guardType": "High",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 28,
+   "offsetY": -29,
+   "width": 35,
+   "height": 26
+  }
+ ],
+ "knockbackX": 71.22,
+ "knockbackY": 0.0,
+ "hitOutcome": "Knockdown",
+ "meterGain": 12,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "super_combo"
+ ],
+ "cancelStartFrame": 9,
+ "cancelEndFrame": 16,
+ "tags": [
+  "Special"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "214",
+ "button": "AnyK",
+ "stance": "stand",
+ "requiresAir": false,
+ "projectile": {},
+ "effectiveRange": 95
+}

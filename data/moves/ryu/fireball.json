@@ -1,0 +1,45 @@
+{
+ "id": "fireball",
+ "name": "\u6ce2\u52d5\u62f3 (Fireball)",
+ "startup": 14,
+ "active": 2,
+ "recovery": 30,
+ "damage": 70,
+ "hitstun": 18,
+ "blockstun": 14,
+ "hitstop": 8,
+ "guardType": "High",
+ "chipDamagePercent": 0.05,
+ "hitbox": [],
+ "knockbackX": 76.3,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 10,
+ "meterCost": 0,
+ "cancelRoutes": [
+  "super_combo"
+ ],
+ "cancelStartFrame": 14,
+ "cancelEndFrame": 20,
+ "tags": [
+  "Special",
+  "Projectile"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "236",
+ "button": "AnyP",
+ "stance": "stand",
+ "projectile": {
+  "speed": 146.96,
+  "lifetime": 100,
+  "width": 23,
+  "height": 23,
+  "spawnOffsetX": 37,
+  "spawnOffsetY": -44
+ },
+ "effectiveRange": 658
+}

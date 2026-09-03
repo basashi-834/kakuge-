@@ -1,0 +1,42 @@
+{
+ "id": "jump_light_punch",
+ "name": "\u30b8\u30e3\u30f3\u30d7\u5f31\u30d1\u30f3\u30c1",
+ "startup": 4,
+ "active": 5,
+ "recovery": 8,
+ "damage": 38,
+ "hitstun": 14,
+ "blockstun": 8,
+ "hitstop": 4,
+ "guardType": "Overhead",
+ "chipDamagePercent": 0.0,
+ "hitbox": [
+  {
+   "offsetX": 17,
+   "offsetY": -19,
+   "width": 25,
+   "height": 21
+  }
+ ],
+ "knockbackX": 55.96,
+ "knockbackY": 0.0,
+ "hitOutcome": "Normal",
+ "meterGain": 5,
+ "meterCost": 0,
+ "cancelRoutes": [],
+ "cancelStartFrame": 0,
+ "cancelEndFrame": 0,
+ "tags": [
+  "Light",
+  "Normal",
+  "Overhead"
+ ],
+ "invincibility": {
+  "type": "None",
+  "start_frame": 0,
+  "end_frame": 0
+ },
+ "input": "",
+ "button": "LP",
+ "stance": "air"
+}
