@@ -33,8 +33,7 @@
 // Precedence when both a fill and a unit image exist: hp_unit/sp_unit
 // wins (it's the more specific, per-percent design).
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 #include <string>
 #include <memory>
 #include <unordered_map>

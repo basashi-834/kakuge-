@@ -7,8 +7,7 @@
 // at real window-pixel scale, since a data-entry form needs more room
 // than the 384x224 game canvas offers.
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 #include <string>
 #include <vector>
 #include <memory>

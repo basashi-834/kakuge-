@@ -38,15 +38,27 @@ REM             matching what the MinGW build produces.
 set FLAGS=/nologo /std:c++17 /EHsc /O2 /MT /utf-8 /permissive- /DNOMINMAX /DUNICODE /D_UNICODE /I third_party /Fobuild\
 set LIBS=gdiplus.lib gdi32.lib user32.lib shell32.lib ole32.lib comctl32.lib comdlg32.lib winmm.lib
 
-echo Compiling with MSVC: %SRC%
+echo Compiling with MSVC. This takes a minute or two...
 cl %FLAGS% %SRC% /Febuild\Kakuge.exe /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup %LIBS%
 if errorlevel 1 (
     echo.
-    echo BUILD FAILED.
+    echo ============================================================
+    echo BUILD FAILED - see the error messages above.
+    echo ============================================================
     exit /b 1
 )
 
 echo.
 echo Built build\Kakuge.exe
-echo Copy the Data\ folder next to it ^(it is already there in this folder^) and run it.
+
+REM The game looks for Data\ next to the .exe. In the source package Data\
+REM sits one level up from src\, so drop a copy of the fresh .exe there -
+REM then it can just be double-clicked like the prebuilt one.
+if exist "..\Data" (
+    copy /y build\Kakuge.exe "..\Kakuge.exe" >nul
+    echo Also copied to "%~dp0..\Kakuge.exe" - double-click that one to play.
+) else (
+    echo Put a copy of the Data folder next to build\Kakuge.exe before running it.
+)
+echo.
 endlocal

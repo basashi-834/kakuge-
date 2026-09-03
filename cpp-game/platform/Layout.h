@@ -11,8 +11,7 @@
 // cleanly without a second, resolution-specific layout pass or the art
 // going soft.
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 #include <string>
 #include <vector>
 #include <functional>

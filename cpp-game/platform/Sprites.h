@@ -19,8 +19,7 @@
 // WakeUp/Dead have no sprite slot (not part of the requested pose set) and
 // always use the line-art renderer.
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 #include <string>
 #include <memory>
 #include <filesystem>

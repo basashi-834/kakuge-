@@ -4,8 +4,7 @@
 // native GDI+ Flat API. Kept separate from engine/ so combat logic never
 // depends on GDI+ (same separation the PowerShell edition used).
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 #include <string>
 #include <vector>
 #include <filesystem>

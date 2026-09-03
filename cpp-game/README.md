@@ -288,39 +288,70 @@ cd src
 どちらも同じ `src/` 以下のソースから同じものが作れます。ビルド後は生成された `Kakuge.exe` の隣に
 `Data`(と、音を鳴らすなら `Audio`)フォルダを置いてください。
 
-### 方法A: Visual Studio Build Tools(Windows・無料)
+### 方法A: Visual Studio Build Tools を使う(Windows・無料・おすすめ)
 
-1. [Visual Studio ダウンロードページ](https://visualstudio.microsoft.com/downloads/) から
-   **Build Tools for Visual Studio** を入手し、ワークロード「**C++ によるデスクトップ開発**」を選んで
-   インストールします(Visual Studio Community でも可)。
-2. スタートメニューから「**x64 Native Tools Command Prompt for VS 20xx**」を開きます
-   (このプロンプトでないと `cl.exe` にパスが通りません)。
-3. ソースのフォルダへ移動して実行します。
+Microsoft 公式の C++ コンパイラです。「何を入れればいいか分からない」場合はこれを選んでください。
+
+**手順1. コンパイラを入れる**
+
+1. https://visualstudio.microsoft.com/ja/downloads/ を開きます。
+2. ページを下の方までスクロールし、「**Visual Studio のツール**」(または "Tools for Visual Studio")
+   というセクションを開きます。上部にある大きな「Visual Studio Community」ボタンではありません
+   (そちらでも構いませんが、容量が大きくなります)。
+3. その中の「**Build Tools for Visual Studio 2022**」の「ダウンロード」を押します。
+4. ダウンロードした `vs_BuildTools.exe` を実行します。
+5. インストーラーが開いたら、**「C++ によるデスクトップ開発」** にチェックを入れて「インストール」。
+   これが一番重要です。ここにチェックが無いとコンパイラ本体が入りません。
+   (ダウンロード量は数GBあります。時間がかかります)
+
+**手順2. 専用のコマンドプロンプトを開く**
+
+スタートメニューを開き、`x64 Native Tools` と入力して
+**「x64 Native Tools Command Prompt for VS 2022」** を起動します。
+
+> 通常の「コマンドプロンプト」や PowerShell ではコンパイラにパスが通っておらず、
+> `cl.exe が見つかりません` というエラーになります。必ずこの専用プロンプトを使ってください。
+
+**手順3. ソースのフォルダへ移動する**
+
+エクスプローラーで zip を展開したフォルダの中の `src` フォルダを開き、
+アドレスバーをクリックしてパスをコピーします。プロンプトで次のように打ちます
+(`cd /d` の後にスペースを空けて、コピーしたパスを貼り付け、末尾に `\src` を付けます)。
 
 ```bat
-cd  ソースを展開したフォルダ\src
+cd /d "C:\Users\あなたの名前\Downloads\Kakuge_v22_source\src"
+```
+
+**手順4. ビルドする**
+
+```bat
 build_windows_msvc.bat
 ```
 
-`build\Kakuge.exe` が生成されます。静的リンク(`/MT`)なので、VC++ 再頒布可能パッケージは不要です。
+1〜2分ほどで終わり、`Built build\Kakuge.exe` と表示されれば成功です。
+`Data` フォルダの隣にも自動でコピーされるので、そのままダブルクリックで遊べます。
 
-### 方法B: MSYS2 + MinGW-w64(Windows)
+### 方法B: MSYS2 + MinGW-w64 を使う(Windows)
 
-配布版 `Kakuge.exe` と同じコンパイラ(MinGW-w64)で作る方法です。
+配布版 `Kakuge.exe` とまったく同じコンパイラで作る方法です。Visual Studio より軽量ですが、
+Unix 風のパス表記(`/c/Users/...`)に慣れが必要です。
 
-1. [MSYS2](https://www.msys2.org/) をインストールします。
-2. スタートメニューから「**MSYS2 MINGW64**」シェルを開き、コンパイラを入れます。
+1. https://www.msys2.org/ からインストーラーを入手して実行します(既定の設定のままで構いません)。
+2. スタートメニューから「**MSYS2 MINGW64**」を起動します(MSYS2 UCRT64 等ではなく MINGW64)。
+3. コンパイラを入れます。
 
 ```bash
 pacman -S --needed mingw-w64-x86_64-gcc
 ```
 
-3. ソースのフォルダへ移動して実行します(`/c/Users/...` のようなパス表記になります)。
+4. ソースのフォルダへ移動してビルドします。`C:\Users\...` は `/c/Users/...` と書きます。
 
 ```bash
-cd  ソースを展開したフォルダ/src
+cd /c/Users/あなたの名前/Downloads/Kakuge_v22_source/src
 ./build_windows.sh
 ```
+
+`build/Kakuge.exe` が生成されます。`Data` フォルダの隣にコピーして実行してください。
 
 ### 方法C: Linux から クロスコンパイル(この配布版を作っている方法)
 

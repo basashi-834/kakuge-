@@ -7,8 +7,7 @@
 // DrawGlossCap / DrawDiagonalShine / DrawHardShadow in Draw.h), never from
 // rounding corners or blurring shadows.
 #pragma once
-#include <windows.h>
-#include <gdiplus.h>
+#include "GdiPlusInclude.h"
 
 namespace kakuge {
 
