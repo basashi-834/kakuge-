@@ -24,7 +24,9 @@ class CharacterStats {
 public:
     std::string Id;             // ファイル名にもなる識別子（例: "ryu"）
     std::string Name = "Fighter"; // 画面に出す名前
-    int MaxHP = 1000;           // 最大体力
+    // 最大体力。1 ドットぶんの調整がしやすいように、SF6 と同じ
+    // 「4 桁〜5 桁」の目盛りにしています（弱パンチ 300 ダメージ相当）。
+    int MaxHP = 10000;          // 最大体力
 
     // 移動速度は「1 秒あたり何ワールド単位進むか」です。
     // 1 フレーム（1/60 秒）あたりでは 220/60 ≒ 3.7 単位進みます。
@@ -76,7 +78,7 @@ public:
         CharacterStats s;
         s.Id = obj.GetString("id", std::string());
         s.Name = obj.GetString("name", s.Id);
-        s.MaxHP = obj.GetInt("maxHP", 1000);
+        s.MaxHP = obj.GetInt("maxHP", 10000);
         s.WalkForwardSpeed = obj.GetNumber("walkForwardSpeed", 220.0);
         s.WalkBackwardSpeed = obj.GetNumber("walkBackwardSpeed", 170.0);
         s.DashSpeed = obj.GetNumber("dashSpeed", 420.0);

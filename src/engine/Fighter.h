@@ -79,7 +79,7 @@ public:
     SuperGauge Gauge;       // 超必ゲージ
     HurtboxSet Hurtboxes;   // 食らい判定（Stats からコピーされる）
 
-    int CurrentHP = 1000;
+    int CurrentHP = 10000;
     int Facing = 1;              // +1 右向き / -1 左向き
     bool FacingLocked = false;   // 技の最中は向きを変えない
     bool IsDead = false;
@@ -107,6 +107,10 @@ public:
     int ThrownTimer = 0;    // 投げられ中
     int DashTimer = 0;      // ダッシュ中
     int StepTimer = 0;      // ステップ中（決まった距離だけ前へ踏み込む）
+    // 空中技の着地硬直。空中技の硬直は空中では消化されず、
+    // 着地してからこのタイマーぶんだけ動けません。
+    int LandingRecoveryTimer = 0;
+    bool LandedDuringMove = false; // 今出している空中技で、もう着地したか
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;   // 試合開始からの総フレーム数
 
@@ -187,6 +191,8 @@ public:
         InputQueue.clear();
         BufferClock = 0;
         KnockdownTimer = WakeupTimer = ThrownTimer = DashTimer = StepTimer = 0;
+        LandingRecoveryTimer = 0;
+        LandedDuringMove = false;
         LastForwardTapFrame = -999;
         ForwardHeldPrev = false;
         ForwardTappedNow = false;
@@ -334,65 +340,55 @@ public:
     // =================================================================
     // 状態ごとの処理
     // =================================================================
+    // 順番が大事です。
+    //   1. 硬直（のけぞり・ガード硬直・技・ダウン）を 1 フレーム消化する
+    //   2. 消化しきったら、そのフレームのうちに動ける状態へ戻す
+    //   3. そのうえで、今の状態に応じた処理をする
+    //
+    // 2 を「次のフレーム」にしてしまうと、硬直が明けるのが 1 フレーム
+    // 遅れます。硬直差はフレーム単位の差そのものなので、この 1 フレーム
+    // のずれがそのまま「表の数字と実際の挙動が違う」ことになります。
     void HandleStateLogic(const RawInput& raw, const std::vector<std::string>& pressed) {
+        AdvanceStateTimers(raw);
+
         switch (SM.CurrentState) {
             case CharState::Hitstun: {
-                // のけぞり中。タイマーが切れるまで操作できません。
-                HitstunTimer -= 1;
-                if (HitstunTimer <= 0) SM.ChangeState(CharState::Idle, "");
-                // 吹き飛び速度をだんだん 0 に近づける（滑って止まる感じ）
+                // のけぞり中。吹き飛び速度をだんだん 0 に近づける。
                 VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
                 break;
             }
             case CharState::Block: {
                 // ガード状態には 2 通りの入り方があります。
                 //  (1) 実際に攻撃を受けてガードした → BlockstunTimer > 0
-                //  (2) 攻撃は来ていないが、後ろ＋下を入れて構えている
+                //  (2) 攻撃は来ていないが、後ろ（＋下）を入れて構えている
                 //      → BlockstunTimer は 0 のまま
-                //
-                // 昔、この 2 つを同じ処理にしていたためバグが出ました。
-                // (2) の場合タイマーが最初から 0 なので即 Idle に戻り、
-                // 次のフレームでまた Block に入り…を延々繰り返して、
-                // しゃがみガード中に状態が高速で点滅していたのです。
-                // 対策として「本物のガード硬直だけカウントダウンし、
-                // 硬直が無いときはボタンを離すまで Block に留まる」に
-                // 分けています。
-                bool stillGuarding = raw.Down && IsHoldingBack(raw);
+                // どちらも「いつ構えを解くか」は上の AdvanceStateTimers が
+                // 決めているので、ここは構えている間の振る舞いだけです。
                 if (BlockstunTimer > 0) {
-                    BlockstunTimer -= 1;
                     VelocityX = MoveToward(VelocityX, 0.0, 254.3 / Constants::Fps);
-                    if (BlockstunTimer <= 0 && !stillGuarding) SM.ChangeState(CharState::Idle, "");
-                } else if (!stillGuarding) {
-                    SM.ChangeState(CharState::Idle, "");
-                } else {
-                    VelocityX = 0.0;
+                    break;
                 }
+                // しゃがみガードか立ちガードかを毎フレーム更新します
+                //（食らい判定の姿勢と、出せる技の姿勢に使います）。
+                IsCrouchingGuard = raw.Down && IsHoldingBack(raw);
+                VelocityX = 0.0;
+                // ガード姿勢のままでも攻撃ボタンで技が出せます。
+                // しゃがみガード中なら、ちゃんとしゃがみ技が出ます。
+                (void)TryStartMove(raw, pressed);
                 break;
             }
-            case CharState::Throw: {
-                ThrownTimer -= 1;
-                if (ThrownTimer <= 0) EnterKnockdown(false, 0);
-                break;
-            }
+            case CharState::Throw:
+                break;  // 投げられ中は何もできない（タイマーは上で消化済み）
             case CharState::Knockdown: {
-                KnockdownTimer -= 1;
                 VelocityX = MoveToward(VelocityX, 0.0, 339.1 / Constants::Fps);
-                if (KnockdownTimer <= 0) {
-                    WakeupTimer = WakeupFrames;
-                    SM.ChangeState(CharState::WakeUp, "");
-                }
                 break;
             }
-            case CharState::WakeUp: {
-                WakeupTimer -= 1;
-                if (WakeupTimer <= 0) SM.ChangeState(CharState::Idle, "");
+            case CharState::WakeUp:
                 break;
-            }
             case CharState::Attack: {
                 // 技の最中。キャンセル可能時間帯なら次の技を受け付けます
                 //（＝コンボ）。受け付けなければ今の技を進めるだけ。
-                (void)TryStartMove(raw, pressed);
-                ProgressMove();
+                if (!TryStartMove(raw, pressed)) ProgressMove();
                 break;
             }
             case CharState::Jump: {
@@ -419,6 +415,70 @@ public:
                 break;
             }
         }
+    }
+
+    // -----------------------------------------------------------------
+    // 硬直を 1 フレーム消化して、消化しきったら動ける状態へ戻す
+    // -----------------------------------------------------------------
+    // ここで状態を戻したフレームから、上の switch がそのまま
+    // 「動ける状態の処理」を行うので、硬直が明けたフレームに
+    // ちょうど次の技を出せます。
+    void AdvanceStateTimers(const RawInput& raw) {
+        switch (SM.CurrentState) {
+            case CharState::Hitstun:
+                HitstunTimer -= 1;
+                if (HitstunTimer <= 0) ReturnToNeutral(raw);
+                break;
+            case CharState::Block:
+                if (BlockstunTimer > 0) BlockstunTimer -= 1;
+                // ガード硬直が明けたあとも、本人が構え続けているなら
+                // Block のまま。構えを解いたら、そのフレームから動けます
+                //（後ろ歩き・しゃがみ・技、どれでも）。
+                if (BlockstunTimer <= 0 && !WantsGuardPosture(raw)) ReturnToNeutral(raw);
+                break;
+            case CharState::Throw:
+                ThrownTimer -= 1;
+                if (ThrownTimer <= 0) EnterKnockdown(false, 0);
+                break;
+            case CharState::Knockdown:
+                KnockdownTimer -= 1;
+                if (KnockdownTimer <= 0) {
+                    WakeupTimer = WakeupFrames;
+                    SM.ChangeState(CharState::WakeUp, "");
+                }
+                break;
+            case CharState::WakeUp:
+                WakeupTimer -= 1;
+                if (WakeupTimer <= 0) ReturnToNeutral(raw);
+                break;
+            case CharState::Attack:
+                // 空中技の着地硬直。地上技には関係ありません。
+                if (LandingRecoveryTimer > 0) LandingRecoveryTimer -= 1;
+                if (IsMoveOver()) FinishMove(raw);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // 「今このフレーム、ガード姿勢を取りたがっているか」。
+    // ここは HandleGroundMovement がガード姿勢に入る条件と同じにします。
+    // 揃えておかないと、入った次のフレームに抜ける（またはその逆）を
+    // 繰り返して、姿勢が高速で点滅します。
+    bool WantsGuardPosture(const RawInput& raw) const {
+        if (!IsHoldingBack(raw)) return false;
+        if (raw.Down) return true; // 下＋後ろ ＝ しゃがみガードの構え
+        // 立ちガードの構えは「相手が技を出している間」だけ。
+        // そうしないと、後ろに歩きたいだけのときも構えてしまいます。
+        return Opponent != nullptr && Opponent->SM.CurrentState == CharState::Attack;
+    }
+
+    // 硬直が明けたときに戻る状態。
+    // 空中なら空中へ、下を入れているならしゃがみへ戻します。
+    void ReturnToNeutral(const RawInput& raw) {
+        if (PositionY < (GroundY - 0.01)) { SM.ChangeState(CharState::Jump, ""); return; }
+        if (raw.Down) SM.ChangeState(CharState::Crouch, "");
+        else SM.ChangeState(CharState::Idle, "");
     }
 
     // このキャラクターの前進が「ステップ」方式か。
@@ -541,7 +601,6 @@ public:
     // 逆順だと、波動拳コマンドを入れても先に立ち弱パンチが出てしまい、
     // 必殺技が永遠に出せません。
     bool TryStartMove(const RawInput& raw, const std::vector<std::string>& pressed) {
-        (void)raw;
         if (Moveset == nullptr) return false;
 
         // 「今フレーム押されたボタン」と「先行入力で覚えているボタン」を
@@ -560,7 +619,14 @@ public:
         if (hasLP && hasLK && !hasThrow) usable.push_back("Throw");
 
         if (usable.empty()) return false;
-        std::string stance = CurrentStance();
+        // 姿勢は「今フレームのレバー」から決めます。
+        //
+        // 状態（立ち / しゃがみ）だけで決めてはいけません。状態が
+        // しゃがみに変わるのは、この関数のあとに呼ばれる
+        // HandleGroundMovement なので、立ち状態から下＋ボタンを同時に
+        // 押した最初のフレームは、まだ「立ち」のままだからです。
+        // それだと、しゃがみたいのに立ち技が出てしまいます。
+        std::string stance = StanceForInput(raw);
 
         std::vector<const MoveData*> superCandidates, specialCandidates, normalCandidates;
 
@@ -595,9 +661,24 @@ public:
         return false;
     }
 
+    // 「今フレームのレバー入力から見て、どの姿勢で技を出すか」。
+    //   ・空中にいれば空中技
+    //   ・下を入れていればしゃがみ技（しゃがみガード中も含む）
+    //   ・それ以外は立ち技
+    std::string StanceForInput(const RawInput& raw) const {
+        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - 0.01)) return "air";
+        if (raw.Down && !raw.Up) return "crouch";
+        if (SM.CurrentState == CharState::Crouch) return "crouch";
+        if (SM.CurrentState == CharState::Block && IsCrouchingGuard) return "crouch";
+        return "stand";
+    }
+
+    // 「今どの姿勢か」（レバーを見ない版）。判定や描画に使います。
     std::string CurrentStance() const {
         if (SM.CurrentState == CharState::Jump) return "air";
+        if (PositionY < (GroundY - 0.01)) return "air";
         if (SM.CurrentState == CharState::Crouch) return "crouch";
+        if (SM.CurrentState == CharState::Block && IsCrouchingGuard) return "crouch";
         return "stand";
     }
 
@@ -645,8 +726,58 @@ public:
         // 出してしまいます（押していないのに 2 回出る）。
         InputQueue.clear();
 
+        LandingRecoveryTimer = 0;
+        LandedDuringMove = false;
+
         SM.ChangeState(CharState::Attack, move.Id);
+        // 技のフレームは 1 から数えます。技を出したこのフレームが 1F 目
+        // なので、発生 1F の技はこのフレームにもう攻撃判定が出ます。
+        //（ChangeState は同じ技への切り替えでは何もしないので、
+        //  同じ技を続けて出すときのために、ここで必ず 1 に戻します）
+        SM.CurrentFrame = 1;
         PendingSounds.push_back("attack");
+
+        // 1F 目の攻撃判定をこのフレームのうちに用意します。
+        // 次のフレームまで待つと、発生が 1 フレーム遅れてしまいます。
+        ProgressMove();
+    }
+
+    // 技が終わったか（＝このフレームから動けるか）。
+    //
+    // 地上技は「発生＋持続＋硬直」を過ぎたら終わりです。
+    // 空中技は違います。硬直は空中では消化されず、着地してから
+    // 着地硬直として消化するので、着地するまで終わりません。
+    bool IsMoveOver() const {
+        if (CurrentMoveData == nullptr) return true;
+        const MoveData& move = *CurrentMoveData;
+        if (move.IsAirMove()) {
+            if (PositionY < (GroundY - 0.01)) return false; // まだ空中
+            return LandedDuringMove && LandingRecoveryTimer <= 0;
+        }
+        return MoveExecutor::GetPhase(move, SM.CurrentFrame) == MovePhase::Done;
+    }
+
+    // 技を終わらせて、元の姿勢へ戻す。
+    //
+    // 立ち技のあとは立ち、しゃがみ技のあとはしゃがみへ戻します。
+    // ここで必ず Idle に戻してしまうと、しゃがみ技を出したあとに
+    // 1 フレームだけ立ち姿勢が見えてしまいます。
+    void FinishMove(const RawInput& raw) {
+        ActiveHitboxRects.clear();
+        HitboxesWereLive = false;
+        FacingLocked = false;
+        bool wasAir = PositionY < (GroundY - 1.0);
+        bool crouchMove = CurrentMoveData != nullptr && CurrentMoveData->Stance == "crouch";
+        CurrentMoveData = nullptr;
+        LandingRecoveryTimer = 0;
+        LandedDuringMove = false;
+        if (wasAir) {
+            SM.ChangeState(CharState::Jump, "");        // 空中技なら空中に戻る
+        } else if (raw.Down || (crouchMove && raw.Down)) {
+            SM.ChangeState(CharState::Crouch, "");      // しゃがんだまま
+        } else {
+            SM.ChangeState(CharState::Idle, "");
+        }
     }
 
     // 技を 1 フレーム進める。
@@ -655,6 +786,13 @@ public:
         int frame = SM.CurrentFrame;
         const MoveData& move = *CurrentMoveData;
         MovePhase phase = MoveExecutor::GetPhase(move, frame);
+
+        // 空中技の着地。着地したフレームに着地硬直を積みます。
+        if (move.IsAirMove() && !LandedDuringMove && PositionY >= (GroundY - 0.01)) {
+            LandedDuringMove = true;
+            LandingRecoveryTimer = move.LandingRecoveryFrames();
+            VelocityX = 0.0;  // 着地したらその場で止まる
+        }
 
         // 攻撃判定は毎フレーム作り直します（フレームごとに形が変わる
         // 技に対応するため）。ただし「もう当てた相手」の記録をリセット
@@ -677,15 +815,9 @@ public:
             PendingProjectileRequestData = {&move, PositionX, PositionY, Facing};
         }
 
-        // 技が終わった
-        if (phase == MovePhase::Done) {
-            ActiveHitboxRects.clear();
-            FacingLocked = false;
-            bool wasAir = PositionY < (GroundY - 1.0);
-            CurrentMoveData = nullptr;
-            if (wasAir) SM.ChangeState(CharState::Jump, ""); // 空中技なら空中に戻る
-            else SM.ChangeState(CharState::Idle, "");
-        }
+        // 技が終わったかどうかの判定と、そこからの復帰は
+        // AdvanceStateTimers / FinishMove が受け持ちます
+        //（硬直が明けたフレームにそのまま動けるようにするため）。
     }
 
     // =================================================================
@@ -713,6 +845,11 @@ public:
         CounterKind counter = CounterKind::None;
         if (SM.CurrentState == CharState::Attack && CurrentMoveData != nullptr) {
             MovePhase myPhase = MoveExecutor::GetPhase(*CurrentMoveData, SM.CurrentFrame);
+            // 空中技で着地待ち・着地硬直中なら「硬直中」とみなします
+            //（GetPhase の上では技が終わったことになっているため）。
+            if (CurrentMoveData->IsAirMove() && myPhase == MovePhase::Done) {
+                myPhase = MovePhase::Recovery;
+            }
             if (myPhase == MovePhase::Startup) counter = CounterKind::Counter;
             else if (myPhase == MovePhase::Recovery) counter = CounterKind::EffectiveCounter;
         }
@@ -733,7 +870,7 @@ public:
             // ---- ガードされた ----
             int chip = static_cast<int>(std::lround(move.Damage * move.ChipDamagePercent));
             CurrentHP = std::max(0, CurrentHP - chip); // 削りダメージ
-            BlockstunTimer = move.Blockstun;
+            BlockstunTimer = move.BlockstunFrames();
             SM.ChangeState(CharState::Block, "");
             Gauge.Add(move.MeterGain * 0.5); // ガードでもゲージは半分溜まる
             ApplyKnockback(move, attacker, true);
@@ -748,10 +885,11 @@ public:
                 ThrownTimer = ThrownLockFrames;
                 SM.ChangeState(CharState::Throw, "");
             } else if (move.HitOutcome == Constants::HitNormal) {
-                HitstunTimer = move.Hitstun;
+                HitstunTimer = move.HitstunFrames();
                 SM.ChangeState(CharState::Hitstun, "");
             } else {
-                EnterKnockdown(move.HitOutcome == std::string(Constants::HitHardKnockdown), move.Hitstun);
+                EnterKnockdown(move.HitOutcome == std::string(Constants::HitHardKnockdown),
+                               move.KnockdownDuration());
             }
             // 演出の種類を技の強さから選ぶ。
             // 弱 → 中 → 強 → 必殺 → 超必 の順に、火花が大きくなります。
@@ -968,6 +1106,10 @@ public:
         double gauge = 0, velocityX = 0, velocityY = 0;
         int hitstun = 0, blockstun = 0, hitstop = 0;
         double positionX = 0, positionY = 0;
+        // 出している技のフレームデータ（トレーニングで確認しやすいように）
+        int startup = 0, active = 0, recovery = 0, total = 0;
+        int hitAdvantage = 0, blockAdvantage = 0;
+        std::string phase;
     };
 
     DebugInfoT DebugInfo() const {
@@ -984,6 +1126,21 @@ public:
         d.positionX = PositionX;
         d.positionY = PositionY;
         d.hitstop = HitstopTimer;
+        if (CurrentMoveData != nullptr) {
+            const MoveData& m = *CurrentMoveData;
+            d.startup = m.Startup;
+            d.active = m.Active;
+            d.recovery = m.Recovery;
+            d.total = m.TotalFrames();
+            d.hitAdvantage = m.HitAdvantage;
+            d.blockAdvantage = m.BlockAdvantage;
+            switch (MoveExecutor::GetPhase(m, SM.CurrentFrame)) {
+                case MovePhase::Startup: d.phase = "STARTUP"; break;
+                case MovePhase::Active: d.phase = "ACTIVE"; break;
+                case MovePhase::Recovery: d.phase = "RECOVERY"; break;
+                case MovePhase::Done: d.phase = LandingRecoveryTimer > 0 ? "LANDING" : "DONE"; break;
+            }
+        }
         return d;
     }
 };

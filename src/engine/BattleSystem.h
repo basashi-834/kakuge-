@@ -109,7 +109,7 @@ public:
     // 同じコンボを何度でも試せます。
     bool TrainingMode = false;
     bool TrainingAutoHeal = true;
-    static constexpr int TrainingHealPerFrame = 6;
+    static constexpr int TrainingHealPerFrame = 60;
 
     void ResetHP() {
         for (Fighter* p : {&Player1, &Player2}) {
@@ -146,6 +146,9 @@ public:
         Player2.Facing = Constants::FacingLeft;
 
         CpuAI = std::make_unique<CPUAI>(&Player2, &Player1);
+        // トレーニングの「ガード」設定が飛び道具にも反応できるように、
+        // 飛び道具の一覧を CPU から見えるようにしておきます。
+        CpuAI->Projectiles = &Projectiles;
         Projectiles.clear();
         FramesLeft = roundTimeSeconds * Constants::Fps;
         MatchActive = true;

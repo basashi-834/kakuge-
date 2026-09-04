@@ -197,15 +197,27 @@ void DrawDebugOverlay(Renderer& r, const BattleSystem& bs) {
         // フレーム数は 99 で頭打ちにします（技が終わったあとも
         // 増え続ける数字が画面に出ていると読みにくいため）。
         int frame = std::min(99, d.frame);
-        std::string line1 = d.state;
+        auto sign = [](int v) {
+            return (v >= 0 ? std::string("+") : std::string("")) + std::to_string(v);
+        };
+        std::string line1 = d.state + (d.phase.empty() ? std::string() : " " + d.phase);
         std::string line2 = d.move.empty() ? std::string("-") : d.move;
         std::string line3 = "F:" + std::to_string(frame) +
                             " HS:" + std::to_string(d.hitstun) +
                             " BS:" + std::to_string(d.blockstun);
+        // 出している技のフレームデータと硬直差。
+        //   4/3/7 は 発生/持続/硬直、+4/-1 は ヒット/ガードの硬直差。
+        std::string line4;
+        if (!d.move.empty()) {
+            line4 = std::to_string(d.startup) + "/" + std::to_string(d.active) + "/" +
+                    std::to_string(d.recovery) + " " + sign(d.hitAdvantage) + "/" +
+                    sign(d.blockAdvantage);
+        }
         const auto& pal = GetPalette();
         float y = 44.0f;
-        const std::string* lines[3] = {&line1, &line2, &line3};
-        for (int i = 0; i < 3; ++i) {
+        const std::string* lines[4] = {&line1, &line2, &line3, &line4};
+        for (int i = 0; i < 4; ++i) {
+            if (lines[i]->empty()) continue;
             if (rightAlign) DrawPixelTextRight(r, *lines[i], x, y + i * 8.0f, 1.0f, pal.ArenaLine);
             else DrawPixelText(r, *lines[i], x, y + i * 8.0f, 1.0f, pal.ArenaLine);
         }

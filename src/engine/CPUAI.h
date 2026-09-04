@@ -28,6 +28,7 @@
 #include "engine/Constants.h"
 #include "engine/Fighter.h"
 #include "engine/InputSystem.h"
+#include "engine/Projectile.h"
 
 namespace kakuge {
 
@@ -45,6 +46,10 @@ public:
     int DecisionCooldown = 0; // 次に考え直すまでのフレーム数
 
     DummyMode Mode = DummyMode::CPU;
+
+    // トレーニングの「ガード」設定で使う、飛び道具の一覧。
+    // BattleSystem が自分の持っている一覧を指させます。
+    const std::vector<Projectile>* Projectiles = nullptr;
 
     // 間合いの基準（中心から中心までの距離）。
     // 立ち同士だと押し合い判定で 30 離れて止まり、
@@ -66,7 +71,7 @@ public:
         if (Mode == DummyMode::Stand) return RawInput{};
         if (Mode == DummyMode::Crouch) { RawInput r; r.Down = true; return r; }
         if (Mode == DummyMode::Jump) { RawInput r; r.Up = true; return r; }
-        if (Mode == DummyMode::Guard) return HoldBack(); // 後ろを入れ続ける
+        if (Mode == DummyMode::Guard) return GuardOnIncomingHit();
 
         // コマンド入力中なら、その続きを出す
         if (!PendingSequence.empty()) {
@@ -98,6 +103,84 @@ public:
         CurrentInput = Plan(dist, dirToOpp);
         DecisionCooldown = RandInt(8, 19); // 0.13〜0.3 秒ごとに考え直す
         return CurrentInput;
+    }
+
+    // -----------------------------------------------------------------
+    // トレーニングの「ガード」設定
+    // -----------------------------------------------------------------
+    // 後ろを入れっぱなしにするのではなく、攻撃が当たる瞬間だけ
+    // ガードを入力します。入れっぱなしだと
+    //   ・ずっと後ろに歩こうとするので間合いが変わってしまう
+    //   ・いつでもガード姿勢なので、下段/中段の使い分けを試せない
+    // という具合に、練習台として不自然になるためです。
+    //
+    // 仕組み: 相手の技がこの先 1〜2 フレームのうちに自分の食らい判定へ
+    // 触るかを先読みし、触るときだけ後ろ（下段なら下＋後ろ）を入れます。
+    // 空振りしている攻撃にはガードしません。
+    RawInput GuardOnIncomingHit() {
+        std::string guardType;
+        if (!IncomingHitSoon(&guardType)) return RawInput{}; // 何も来ていない＝棒立ち
+
+        RawInput input;
+        int facing = Self->Facing;
+        bool backIsRight = (facing == Constants::FacingLeft);
+        input.Right = backIsRight;
+        input.Left = !backIsRight;
+        // 下段はしゃがみガードでしか防げません。中段は立ちガード。
+        // それ以外（上段）は立ちガードで防げるので、そのまま。
+        if (guardType == Constants::GuardLow) input.Down = true;
+        return input;
+    }
+
+    // 相手の攻撃が、この先 1〜2 フレームのうちに自分に触るか。
+    //
+    // 「1〜2 フレーム先」なのは、この関数が呼ばれる時点では相手の
+    // 今フレームぶんの処理がまだ済んでいないためです（BattleSystem は
+    // CPU の入力を決めてから 2 人を進めます）。つまり相手の技は
+    // このあと CurrentFrame + 1 まで進みます。
+    bool IncomingHitSoon(std::string* guardTypeOut) const {
+        std::vector<RectBox> myHurt = Self->HurtboxRects();
+
+        if (Opp->SM.CurrentState == CharState::Attack && Opp->CurrentMoveData != nullptr) {
+            const MoveData& move = *Opp->CurrentMoveData;
+            // 投げはガードできないので、ガード入力もしません。
+            if (move.GuardType != Constants::GuardThrow) {
+                for (int f = Opp->SM.CurrentFrame + 1; f <= Opp->SM.CurrentFrame + 2; ++f) {
+                    if (!MoveExecutor::HasLiveHitboxes(move, f)) continue;
+                    std::vector<RectBox> hit = MoveExecutor::GetActiveHitboxRects(
+                        move, f, Opp->Facing, Opp->PositionX, Opp->PositionY);
+                    if (AnyOverlap(hit, myHurt)) {
+                        if (guardTypeOut) *guardTypeOut = move.GuardType;
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // 飛んできている飛び道具。次のフレームの位置で判定します。
+        if (Projectiles != nullptr) {
+            for (const Projectile& proj : *Projectiles) {
+                if (proj.Owner == Self || proj.HasHit || proj.Move == nullptr) continue;
+                double step = proj.Speed * proj.Facing / Constants::Fps;
+                for (int k = 1; k <= 2; ++k) {
+                    RectBox box(proj.PositionX + step * k, proj.PositionY, proj.Width, proj.Height);
+                    if (AnyOverlap({box}, myHurt)) {
+                        if (guardTypeOut) *guardTypeOut = proj.Move->GuardType;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    static bool AnyOverlap(const std::vector<RectBox>& a, const std::vector<RectBox>& b) {
+        for (const auto& r1 : a) {
+            for (const auto& r2 : b) {
+                if (r1.Intersects(r2)) return true;
+            }
+        }
+        return false;
     }
 
     // 間合いに応じて行動を決める。

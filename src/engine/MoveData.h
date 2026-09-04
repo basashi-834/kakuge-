@@ -14,9 +14,33 @@
 //   持続 (Active)    … 攻撃判定が出ている間。ここで当たる。
 //   硬直 (Recovery)  … 拳を戻している間。もう当たらないし、動けない。
 //
-//   例: 発生 8F・持続 3F・硬直 18F の技は、全部で 29 フレーム（約 0.48 秒）。
-//       ボタンを押してから 8/60 秒後に攻撃判定が出て、3/60 秒だけ続き、
-//       そのあと 18/60 秒はまったく動けません。
+// フレームの数え方（このゲーム全体で統一）
+// ---------------------------------------
+// フレームは 1 から数えます。技を出したフレームが 1F 目です。
+// 「発生 4F」は「4F 目に最初の攻撃判定が出る」という意味で、
+// 「4F 待ってから 5F 目に出る」ではありません。
+//
+//   例: 発生 4F / 持続 3F / 硬直 7F
+//       1F   発生前
+//       2F   発生前
+//       3F   発生前
+//       4F   攻撃判定      ← 発生 4F とはここのこと
+//       5F   攻撃判定
+//       6F   攻撃判定
+//       7F   硬直
+//       8F   硬直
+//        …
+//       13F  硬直          ← 硬直 7F ＝ 7〜13F の 7 フレームぶん
+//       14F  行動可能
+//
+// したがって全体フレーム（動けないフレームの数）は
+//
+//       TotalFrames = (Startup - 1) + Active + Recovery
+//                   = (4 - 1) + 3 + 7 = 13F
+//
+// です。Startup + Active + Recovery（= 14）ではありません。
+// Startup の「4」は「4F 目に出る」という位置の指定なので、
+// 攻撃判定が出る前のフレーム数は Startup - 1 だからです。
 //
 // 「発生が速い技は弱く、遅い技は強い」というバランスの根っこがこれです。
 // =====================================================================
@@ -96,20 +120,51 @@ public:
     std::string Name;  // 画面に出す名前（例 "波動拳"）
 
     // ---- フレームデータ ----
+    // 数え方はファイル冒頭のとおり、フレームは 1 始まりです。
+    //   Startup  = 何フレーム目に最初の攻撃判定が出るか（4 なら 4F 目）
+    //   Active   = 攻撃判定が出ているフレーム数
+    //   Recovery = 持続が終わったあと動けないフレーム数
     int Startup = 1;    // 発生
     int Active = 1;     // 持続
     int Recovery = 1;   // 硬直
-    int TotalFrame = 0; // 全体（＝発生＋持続＋硬直。表示用の写し）
+    int TotalFrame = 0; // 全体（表示用の写し。計算には TotalFrames() を使う）
 
-    // 技全体の長さ。技の進行判定（MoveExecutor::GetPhase）はこの値を
-    // 使うので、有利不利の計算もこれに合わせます。TotalFrame は
-    // 画面表示のための写しなので、計算にはこちらを使ってください。
-    int TotalFrames() const { return Startup + Active + Recovery; }
+    // 全体フレーム＝技を出してから動けるようになるまでの、動けない
+    // フレーム数です。攻撃判定が出る前のフレーム数は Startup - 1 なので
+    //     (Startup - 1) + Active + Recovery
+    // になります。Startup + Active + Recovery ではありません。
+    int TotalFrames() const { return (Startup - 1) + Active + Recovery; }
+
+    // 技を出したフレームを 1 としたとき、行動可能になるフレーム番号。
+    //   発生 4 / 持続 3 / 硬直 7 なら 14F 目。
+    int ActionableFrame() const { return Startup + Active + Recovery; }
 
     // ---- 当たったときの効果 ----
     int Damage = 0;     // ダメージ
-    int Hitstun = 0;    // 当てたとき相手が動けないフレーム数
-    int Blockstun = 0;  // ガードされたとき相手が動けないフレーム数
+
+    // ---- 硬直差（このゲームでは硬直差そのものを入力します）----
+    // 硬直差とは「攻撃側と防御側の、どちらが何フレーム早く動けるか」。
+    //   +4 … 攻撃側が 4 フレーム早く動ける（有利）
+    //   -1 … 防御側が 1 フレーム早く動ける（不利）
+    //
+    // のけぞり時間（Hitstun / Blockstun）は、この硬直差から自動的に
+    // 計算します（下の HitstunFrames / BlockstunFrames）。
+    // 「硬直差」と「のけぞり時間」を別々に手入力できるようにすると、
+    // 必ずどこかで食い違って「表の数字と実際の挙動が違う」ことに
+    // なるので、入力するのは硬直差だけ、という作りにしています。
+    int HitAdvantage = 0;    // ヒット時硬直差（+ が攻撃側有利）
+    int BlockAdvantage = 0;  // ガード時硬直差（- が攻撃側不利）
+
+    // ダウンさせる技（HitOutcome が Normal 以外）の、倒れている
+    // フレーム数。のけぞりではなくダウンなので、硬直差ではなく
+    // 「何フレーム倒れているか」を直接指定します。
+    // 0 なら Fighter 側の既定値（通常ダウン / 強制ダウン）を使います。
+    int KnockdownFrames = 0;
+
+    // 空中技（Stance が "air"）の着地硬直。
+    // 空中技の硬直は空中では消化されず、着地してから消化します。
+    // 0 なら Recovery と同じフレーム数を着地硬直として使います。
+    int LandingRecovery = 0;
     // ---- ストップ（当たった瞬間、双方の時間が止まる時間）----
     // ヒットとガードで長さを分けます。ガードストップのほうが短いのが
     // 一般的で、「ガードすると手応えが軽い」という差になります。
@@ -204,19 +259,66 @@ public:
     // ストップ（ヒットストップ / ガードストップ）は双方に同時に掛かり、
     // 同時に解けるので、この式には出てきません。
     //
-    // 「残り全体フレーム数」は、当たった瞬間から技が終わるまでの数です。
-    // 持続の 1 フレーム目で当てた場合（＝最も一般的な、表に載る値）は
-    //     残り ＝ 全体 － 発生 ＝ 持続 ＋ 硬直
+    // 「残り全体フレーム数」は、当たったフレームから数えて、攻撃側が
+    // あと何フレーム動けないかです。持続の 1 フレーム目（＝ Startup の
+    // フレーム）で当てた場合は
+    //     残り ＝ 持続 ＋ 硬直
     // になります。持続の後半で当てるほど残りが減り、そのぶん有利に
     // なります（いわゆる「持続当て」）。
     int RemainingFramesAt(int contactFrame) const {
-        return std::max(0, TotalFrames() - contactFrame);
+        return std::max(0, ActionableFrame() - contactFrame);
     }
     // 持続 1 フレーム目で当てたときの残り（表に載せる標準の値）。
-    int RemainingFramesOnEarliestHit() const { return Active + Recovery; }
+    //
+    // 2 つだけ例外があります。
+    //  ・飛び道具の技: 当てるのは飛んでいった弾で、当たるころには
+    //    技の硬直はもう終わっています。だから残りは 0 として数えます。
+    //  ・空中技: 硬直は空中では消化されず、着地してから着地硬直として
+    //    消化します。だから残りは着地硬直のフレーム数として数えます
+    //    （＝着地直前に当てる、いわゆる「めくり・飛び込み」の基準）。
+    int RemainingFramesOnEarliestHit() const {
+        if (Projectile.present) return 0;
+        if (IsAirMove()) return LandingRecoveryFrames();
+        return Active + Recovery;
+    }
 
-    int OnHitAdvantage() const { return Hitstun - RemainingFramesOnEarliestHit(); }
-    int OnBlockAdvantage() const { return Blockstun - RemainingFramesOnEarliestHit(); }
+    // -----------------------------------------------------------------
+    // のけぞり時間（硬直差から逆算する）
+    // -----------------------------------------------------------------
+    //     硬直差 ＝ のけぞり － (持続 ＋ 硬直)
+    // を のけぞり について解いた式です。こう決めておけば、
+    // 「入力した硬直差」と「実際に測った硬直差」は必ず一致します。
+    int HitstunFrames() const {
+        return std::max(0, HitAdvantage + RemainingFramesOnEarliestHit());
+    }
+    int BlockstunFrames() const {
+        return std::max(0, BlockAdvantage + RemainingFramesOnEarliestHit());
+    }
+
+    // ダウンさせる技が、相手を倒れさせておくフレーム数。
+    // 0（未指定）なら呼び出し側の既定値を使います。
+    int KnockdownDuration() const { return std::max(0, KnockdownFrames); }
+
+    // 空中技の着地硬直。未指定なら Recovery をそのまま使います。
+    int LandingRecoveryFrames() const {
+        return LandingRecovery > 0 ? LandingRecovery : Recovery;
+    }
+    bool IsAirMove() const { return Stance == "air" || RequiresAir; }
+
+    int OnHitAdvantage() const { return HitAdvantage; }
+    int OnBlockAdvantage() const { return BlockAdvantage; }
+
+    // -----------------------------------------------------------------
+    // コンボ・確定反撃の判定（仕様どおりの単純な比較）
+    // -----------------------------------------------------------------
+    // 前の技のヒット時硬直差が、次の技の発生フレーム以上ならつながる。
+    bool CombosInto(const MoveData& next) const {
+        return HitAdvantage >= next.Startup;
+    }
+    // ガードされたとき、発生 startupFrames の技で確定反撃を受けるか。
+    bool IsPunishableBy(int startupFrames) const {
+        return BlockAdvantage < 0 && -BlockAdvantage >= startupFrames;
+    }
 
     // -----------------------------------------------------------------
     // JSON からの読み込み
@@ -228,11 +330,27 @@ public:
         m.Startup = obj.GetInt("startup", 1);
         m.Active = obj.GetInt("active", 1);
         m.Recovery = obj.GetInt("recovery", 1);
-        int tf = obj.GetInt("totalFrame", 0);
-        m.TotalFrame = tf > 0 ? tf : (m.Startup + m.Active + m.Recovery);
         m.Damage = obj.GetInt("damage", 0);
-        m.Hitstun = obj.GetInt("hitstun", 0);
-        m.Blockstun = obj.GetInt("blockstun", 0);
+
+        // 硬直差の読み込み。
+        //   新しい形式: "hitAdvantage" / "blockAdvantage"（硬直差そのもの）
+        //   古い形式  : "hitstun" / "blockstun"（のけぞりフレーム数）
+        // 古いデータもそのまま読めるように、硬直差が書かれていなければ
+        // のけぞりフレーム数から逆算します。
+        int remain = m.Active + m.Recovery;
+        if (const Json* adv = obj.Find("hitAdvantage"); adv != nullptr) {
+            m.HitAdvantage = adv->AsInt();
+        } else {
+            m.HitAdvantage = obj.GetInt("hitstun", remain) - remain;
+        }
+        if (const Json* adv = obj.Find("blockAdvantage"); adv != nullptr) {
+            m.BlockAdvantage = adv->AsInt();
+        } else {
+            m.BlockAdvantage = obj.GetInt("blockstun", remain) - remain;
+        }
+        m.KnockdownFrames = obj.GetInt("knockdownFrames", 0);
+        m.LandingRecovery = obj.GetInt("landingRecovery", 0);
+        m.TotalFrame = m.TotalFrames();
         m.Hitstop = obj.GetInt("hitstop", 0);
         m.Guardstop = obj.GetInt("guardstop", DefaultGuardstop(m.Hitstop));
         m.GuardType = obj.GetString("guardType", "High");
@@ -342,10 +460,14 @@ public:
         j.Set("startup", Json(Startup));
         j.Set("active", Json(Active));
         j.Set("recovery", Json(Recovery));
-        j.Set("totalFrame", Json(TotalFrame));
+        j.Set("totalFrame", Json(TotalFrames()));
         j.Set("damage", Json(Damage));
-        j.Set("hitstun", Json(Hitstun));
-        j.Set("blockstun", Json(Blockstun));
+        // 硬直差だけを保存します。のけぞり時間は硬直差から必ず
+        // 計算し直されるので、保存すると二重管理になり食い違います。
+        j.Set("hitAdvantage", Json(HitAdvantage));
+        j.Set("blockAdvantage", Json(BlockAdvantage));
+        if (KnockdownFrames > 0) j.Set("knockdownFrames", Json(KnockdownFrames));
+        if (LandingRecovery > 0) j.Set("landingRecovery", Json(LandingRecovery));
         j.Set("hitstop", Json(Hitstop));
         j.Set("guardstop", Json(Guardstop));
         j.Set("guardType", Json(GuardType));

@@ -10,10 +10,25 @@
 // 「実際のフレーム数と、技の進行状況がずれる」というバグが
 // 原理的に起こりません。
 //
-//   発生   … frame が [0, Startup-1] の間
-//   持続   … frame が [Startup, Startup+Active-1] の間
-//   硬直   … frame が [Startup+Active, Startup+Active+Recovery-1] の間
-//   終了   … frame がそれ以降
+// フレームの数え方（このゲーム全体で統一）
+// ---------------------------------------
+// 技のフレームは 1 から数えます。技を出したフレームが 1F 目です。
+// 「発生 4F」は「4F 目に最初の攻撃判定が出る」という意味であって、
+// 「4F 待ってから 5F 目に出る」ではありません。
+//
+//   発生 (Startup)  … frame が [1, Startup-1]        … まだ当たらない
+//   持続 (Active)   … frame が [Startup, Startup+Active-1] … 当たる
+//   硬直 (Recovery) … frame が [Startup+Active, Startup+Active+Recovery-1]
+//   終了 (Done)     … frame が Startup+Active+Recovery 以降
+//
+//   例: 発生 4F / 持続 3F / 硬直 7F
+//       1-3F   発生前
+//       4-6F   攻撃判定（＝持続 3 フレームぶん）
+//       7-13F  硬直（＝硬直 7 フレームぶん）
+//       14F    行動可能（この 14F 目から次の技を出せます）
+//
+// 「硬直 7F」は「7F 目だけ硬直する」ではなく、
+// 「持続が終わったあと 7 フレームぶん硬直が続く」という意味です。
 // =====================================================================
 #pragma once
 #include <cmath>
@@ -29,11 +44,18 @@ namespace kakuge {
 enum class MovePhase { Startup, Active, Recovery, Done };
 
 struct MoveExecutor {
+    // frame は 1 始まり（技を出したフレームが 1）。
     static MovePhase GetPhase(const MoveData& move, int frame) {
         if (frame < move.Startup) return MovePhase::Startup;
         if (frame < move.Startup + move.Active) return MovePhase::Active;
         if (frame < move.Startup + move.Active + move.Recovery) return MovePhase::Recovery;
         return MovePhase::Done;
+    }
+
+    // 技が終わって行動可能になるフレーム番号（この番号のフレームから動ける）。
+    //   発生 4 / 持続 3 / 硬直 7 なら 14。
+    static int ActionableFrame(const MoveData& move) {
+        return move.Startup + move.Active + move.Recovery;
     }
 
     // 今このフレームで無敵かどうか。

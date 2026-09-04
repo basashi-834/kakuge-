@@ -1,7 +1,7 @@
 {
     "id": "ryu",
     "name": "RYU",
-    "maxHP": 1000,
+    "maxHP": 10000,
     "walkForwardSpeed": 67.12,
     "walkBackwardSpeed": 51.86,
     "dashSpeed": 131.19,

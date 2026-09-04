@@ -189,7 +189,7 @@ void Editor::BuildCharacterFields() {
     }
 
     addNum(Loc("最大HP", "MAX HP"), [this] { return statsDraft_.MaxHP; },
-           [this](double v) { statsDraft_.MaxHP = static_cast<int>(v); }, 10, 100, 9999, 0);
+           [this](double v) { statsDraft_.MaxHP = static_cast<int>(v); }, 100, 1000, 99999, 0);
     // 速度はすべて「1 秒あたり何ピクセル進むか」です。
     // 画面は 384px 幅なので、67 なら画面を横切るのに約 5.7 秒かかります。
     addNum(Loc("前歩き速度", "WALK FWD"), [this] { return statsDraft_.WalkForwardSpeed; },
@@ -365,52 +365,82 @@ void Editor::BuildMoveFields() {
         fields_.push_back(std::move(f));
     }
 
-    // フレームデータ
+    // ---- フレームデータ ----
+    // 数え方は「発生 4F ＝ 4F 目に最初の攻撃判定が出る」です。
+    // 攻撃判定が出る前のフレーム数は 発生 - 1 なので、
+    // 全体フレームは (発生 - 1) + 持続 + 硬直 になります。
+    auto syncTotal = [this] { moveDraft_.TotalFrame = moveDraft_.TotalFrames(); };
     addNum(Loc("発生", "STARTUP"), [this] { return moveDraft_.Startup; },
-           [this](double v) { moveDraft_.Startup = static_cast<int>(v);
-                              moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
-                                                      moveDraft_.Recovery; }, 1, 1, 60, 0, "F");
+           [this, syncTotal](double v) { moveDraft_.Startup = static_cast<int>(v); syncTotal(); },
+           1, 1, 60, 0, "F");
     addNum(Loc("持続", "ACTIVE"), [this] { return moveDraft_.Active; },
-           [this](double v) { moveDraft_.Active = static_cast<int>(v);
-                              moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
-                                                      moveDraft_.Recovery; }, 1, 1, 60, 0, "F");
+           [this, syncTotal](double v) { moveDraft_.Active = static_cast<int>(v); syncTotal(); },
+           1, 1, 60, 0, "F");
     addNum(Loc("硬直", "RECOVERY"), [this] { return moveDraft_.Recovery; },
-           [this](double v) { moveDraft_.Recovery = static_cast<int>(v);
-                              moveDraft_.TotalFrame = moveDraft_.Startup + moveDraft_.Active +
-                                                      moveDraft_.Recovery; }, 1, 1, 90, 0, "F");
+           [this, syncTotal](double v) { moveDraft_.Recovery = static_cast<int>(v); syncTotal(); },
+           1, 1, 90, 0, "F");
 
-    {   // 全体フレーム（発生＋持続＋硬直）。硬直差の計算に使う数です。
+    {   // フレーム表の読み方をそのまま出します（何F目に何が起きるか）。
         Field f;
         f.kind = Field::Kind::Info;
         f.label = Loc("全体フレーム", "TOTAL FRAMES");
         f.getInfo = [this] {
-            return std::to_string(moveDraft_.TotalFrames()) + "F  (" +
-                   Loc("当たり時の残り ", "REMAIN ") +
-                   std::to_string(moveDraft_.RemainingFramesOnEarliestHit()) + "F)";
+            const MoveData& m = moveDraft_;
+            std::string active = std::to_string(m.Startup) + "-" +
+                                 std::to_string(m.Startup + m.Active - 1);
+            std::string recov = std::to_string(m.Startup + m.Active) + "-" +
+                                std::to_string(m.ActionableFrame() - 1);
+            return std::to_string(m.TotalFrames()) + "F  " +
+                   Loc("判定", "ACT") + active + " " + Loc("硬直", "REC") + recov + " " +
+                   Loc("行動可", "FREE") + std::to_string(m.ActionableFrame()) + "F";
         };
         fields_.push_back(std::move(f));
     }
 
-    {   // 有利・不利フレームは、調整で一番よく見る数字なので必ず出します
+    // ---- 硬直差（ここが入力欄。のけぞり時間は自動で決まります）----
+    addNum(Loc("ヒット時硬直差", "HIT ADV"), [this] { return moveDraft_.HitAdvantage; },
+           [this](double v) { moveDraft_.HitAdvantage = static_cast<int>(v); }, 1, -40, 40, 0, "F");
+    addNum(Loc("ガード時硬直差", "BLOCK ADV"), [this] { return moveDraft_.BlockAdvantage; },
+           [this](double v) { moveDraft_.BlockAdvantage = static_cast<int>(v); }, 1, -40, 40, 0, "F");
+
+    {   // 硬直差から決まるのけぞり時間。手で入力する値ではありません。
         Field f;
         f.kind = Field::Kind::Info;
-        f.label = Loc("硬直差 ヒット/ガード", "ADV HIT/BLOCK");
+        f.label = Loc("のけぞり ヒット/ガード", "STUN HIT/BLOCK");
         f.getInfo = [this] {
-            auto sign = [](int v) {
-                return (v >= 0 ? std::string("+") : std::string("")) + std::to_string(v);
-            };
-            return sign(moveDraft_.OnHitAdvantage()) + " / " + sign(moveDraft_.OnBlockAdvantage());
+            return std::to_string(moveDraft_.HitstunFrames()) + "F / " +
+                   std::to_string(moveDraft_.BlockstunFrames()) + "F";
+        };
+        fields_.push_back(std::move(f));
+    }
+
+    {   // 硬直差から分かること（コンボ・確定反撃の目安）。
+        Field f;
+        f.kind = Field::Kind::Info;
+        f.label = Loc("つながる発生 / 反撃される発生", "COMBO / PUNISH");
+        f.getInfo = [this] {
+            std::string combo = moveDraft_.HitAdvantage >= 1
+                                    ? (Loc("発生", "") + std::to_string(moveDraft_.HitAdvantage) +
+                                       Loc("F以下", "F OR FASTER"))
+                                    : Loc("なし", "NONE");
+            std::string punish = moveDraft_.BlockAdvantage < 0
+                                     ? (Loc("発生", "") + std::to_string(-moveDraft_.BlockAdvantage) +
+                                        Loc("F以下", "F OR FASTER"))
+                                     : Loc("なし", "NONE");
+            return combo + " / " + punish;
         };
         fields_.push_back(std::move(f));
     }
 
     // 当たったときの効果
     addNum(Loc("ダメージ", "DAMAGE"), [this] { return moveDraft_.Damage; },
-           [this](double v) { moveDraft_.Damage = static_cast<int>(v); }, 5, 0, 999, 0);
-    addNum(Loc("ヒットのけぞり", "HITSTUN"), [this] { return moveDraft_.Hitstun; },
-           [this](double v) { moveDraft_.Hitstun = static_cast<int>(v); }, 1, 0, 120, 0, "F");
-    addNum(Loc("ガードのけぞり", "BLOCKSTUN"), [this] { return moveDraft_.Blockstun; },
-           [this](double v) { moveDraft_.Blockstun = static_cast<int>(v); }, 1, 0, 120, 0, "F");
+           [this](double v) { moveDraft_.Damage = static_cast<int>(v); }, 10, 0, 9990, 0);
+    // ダウンさせる技だけ意味のある値（倒れているフレーム数）。
+    addNum(Loc("ダウン時間", "KNOCKDOWN"), [this] { return moveDraft_.KnockdownFrames; },
+           [this](double v) { moveDraft_.KnockdownFrames = static_cast<int>(v); }, 1, 0, 180, 0, "F");
+    // 空中技だけ意味のある値。空中技の硬直は着地してから消化します。
+    addNum(Loc("着地硬直", "LANDING REC"), [this] { return moveDraft_.LandingRecovery; },
+           [this](double v) { moveDraft_.LandingRecovery = static_cast<int>(v); }, 1, 0, 60, 0, "F");
     // ストップは打撃感の要。仕様の目安は 弱2-4 / 中4-6 / 強6-9。
     // ヒットとガードで別の値を持ちます（ガードのほうを短くすると
     // 「ガードすると手応えが軽い」という差が出ます）。

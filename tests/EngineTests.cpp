@@ -270,14 +270,15 @@ int main(int argc, char** argv) {
         fighter.FrameStep(dt, lightInput);
         Check("LP を押すと立ち弱パンチが出る", fighter.SM.CurrentMove == "standing_light");
 
+        // 技を出したフレームが 1F 目なので、4 フレーム進めると 5F 目。
         for (int i = 0; i < 4; i++) fighter.FrameStep(dt, neutral2);
         Check("4 フレーム後もまだ立ち弱パンチ中",
-              fighter.SM.CurrentMove == "standing_light" && fighter.SM.CurrentFrame == 4);
+              fighter.SM.CurrentMove == "standing_light" && fighter.SM.CurrentFrame == 5);
 
         RawInput heavyInput; heavyInput.Buttons.HP = true;
         fighter.FrameStep(dt, heavyInput);
         Check("キャンセル可能時間内に強パンチでコンボが繋がる",
-              fighter.SM.CurrentMove == "standing_heavy" && fighter.SM.CurrentFrame == 0);
+              fighter.SM.CurrentMove == "standing_heavy" && fighter.SM.CurrentFrame == 1);
     }
 
     // =================================================================
@@ -403,11 +404,13 @@ int main(int argc, char** argv) {
         const MoveData* lk = dm.GetMove("ryu", "standing_light_kick");
         const MoveData* hk = dm.GetMove("ryu", "standing_heavy_kick");
         const MoveData* clk = dm.GetMove("ryu", "crouch_light");
+        // 全体フレームは (発生 - 1) + 持続 + 硬直。
+        //   弱P 3+3+7=13 / 強P 6+3+13=22 / 弱K 4+3+8=15 / 強K 8+4+16=28
         Check("フレームデータ: 弱P 4/3/7、強P 7/3/13、弱K 5/3/8、強K 9/4/16",
-              lp->Startup == 4 && lp->Active == 3 && lp->Recovery == 7 && lp->TotalFrame == 14 &&
-              hp->Startup == 7 && hp->Active == 3 && hp->Recovery == 13 && hp->TotalFrame == 23 &&
-              lk->Startup == 5 && lk->Active == 3 && lk->Recovery == 8 && lk->TotalFrame == 16 &&
-              hk->Startup == 9 && hk->Active == 4 && hk->Recovery == 16 && hk->TotalFrame == 29);
+              lp->Startup == 4 && lp->Active == 3 && lp->Recovery == 7 && lp->TotalFrames() == 13 &&
+              hp->Startup == 7 && hp->Active == 3 && hp->Recovery == 13 && hp->TotalFrames() == 22 &&
+              lk->Startup == 5 && lk->Active == 3 && lk->Recovery == 8 && lk->TotalFrames() == 15 &&
+              hk->Startup == 9 && hk->Active == 4 && hk->Recovery == 16 && hk->TotalFrames() == 28);
 
         // 右向きで X=100 から出したときの弱パンチの判定位置
         auto rightBoxes = MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup, Constants::FacingRight, 100, 0);
@@ -425,7 +428,9 @@ int main(int argc, char** argv) {
               std::abs((100 - leftBoxes[0].CenterX) - (rightBoxes[0].CenterX - 100)) < 0.001 &&
               leftBoxes[0].Width == rightBoxes[0].Width);
         Check("発生フレーム中には攻撃判定が存在しない",
-              MoveExecutor::GetActiveHitboxRects(*lp, 0, Constants::FacingRight, 100, 0).empty());
+              MoveExecutor::GetActiveHitboxRects(*lp, 1, Constants::FacingRight, 100, 0).empty() &&
+              MoveExecutor::GetActiveHitboxRects(*lp, lp->Startup - 1, Constants::FacingRight, 100, 0)
+                  .empty());
 
         auto hkBoxes = MoveExecutor::GetActiveHitboxRects(*hk, hk->Startup, Constants::FacingRight, 0, 0);
         Check("強キックは弱パンチより遠くまで届く",
@@ -653,6 +658,124 @@ int main(int argc, char** argv) {
     }
 
     // =================================================================
+    std::cout << "\n=== フレームの数え方（発生4F = 4F目に判定）===\n";
+    // =================================================================
+    // 仕様:
+    //   発生 4F / 持続 3F / 硬直 7F の技は
+    //     1-3F   発生前
+    //     4-6F   攻撃判定
+    //     7-13F  硬直
+    //     14F    行動可能
+    //   全体フレーム = (発生 - 1) + 持続 + 硬直 = 13F
+    {
+        MoveData m;
+        m.Startup = 4; m.Active = 3; m.Recovery = 7;
+        m.Hitboxes.push_back({20, -60, 16, 10});
+
+        bool phasesOk = true;
+        for (int f = 1; f <= 3; ++f) {
+            if (MoveExecutor::GetPhase(m, f) != MovePhase::Startup) phasesOk = false;
+        }
+        for (int f = 4; f <= 6; ++f) {
+            if (MoveExecutor::GetPhase(m, f) != MovePhase::Active) phasesOk = false;
+        }
+        for (int f = 7; f <= 13; ++f) {
+            if (MoveExecutor::GetPhase(m, f) != MovePhase::Recovery) phasesOk = false;
+        }
+        Check("1-3F 発生前 / 4-6F 持続 / 7-13F 硬直", phasesOk);
+        Check("14F 目には技が終わっている（行動可能）",
+              MoveExecutor::GetPhase(m, 14) == MovePhase::Done && m.ActionableFrame() == 14);
+        Check("全体フレームは (発生-1)+持続+硬直 = 13F", m.TotalFrames() == 13);
+
+        bool hitboxOk = true;
+        for (int f = 1; f <= 14; ++f) {
+            bool live = MoveExecutor::HasLiveHitboxes(m, f);
+            bool expected = (f >= 4 && f <= 6);
+            if (live != expected) hitboxOk = false;
+        }
+        Check("攻撃判定が出るのは 4・5・6F 目だけ", hitboxOk);
+
+        MoveData fast;
+        fast.Startup = 1; fast.Active = 1; fast.Recovery = 5;
+        fast.Hitboxes.push_back({20, -60, 16, 10});
+        Check("発生 1F の技は 1F 目にもう判定が出る",
+              MoveExecutor::HasLiveHitboxes(fast, 1) && fast.TotalFrames() == 6 &&
+              fast.ActionableFrame() == 7);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 硬直差は入力値、のけぞりはそこから決まる ===\n";
+    // =================================================================
+    {
+        // 仕様書の例: 立ち弱P 4/3/7、ヒット +4、ガード -1
+        const MoveData* lp = dm.GetMove("ryu", "standing_light");
+        Check("立ち弱P は 発生4/持続3/硬直7、硬直差 +4 / -1",
+              lp->Startup == 4 && lp->Active == 3 && lp->Recovery == 7 &&
+              lp->HitAdvantage == 4 && lp->BlockAdvantage == -1);
+        // 仕様書の例: 立ち中P 6/3/10、ヒット +5、ガード -2
+        const MoveData* mp = dm.GetMove("ryu", "standing_medium");
+        Check("立ち中P は 発生6/持続3/硬直10、硬直差 +5 / -2",
+              mp->Startup == 6 && mp->Active == 3 && mp->Recovery == 10 &&
+              mp->HitAdvantage == 5 && mp->BlockAdvantage == -2);
+
+        // のけぞり = 硬直差 + (持続 + 硬直)
+        Check("のけぞりは硬直差から決まる（弱P ヒット 14F / ガード 9F）",
+              lp->HitstunFrames() == 14 && lp->BlockstunFrames() == 9);
+        Check("ヒット時とガード時で別々の値になる",
+              lp->HitstunFrames() != lp->BlockstunFrames() &&
+              lp->HitAdvantage != lp->BlockAdvantage);
+
+        // 入力した硬直差と、そこから計算した値は必ず一致する（矛盾しない）
+        bool consistent = true;
+        for (const auto& kv : *dm.GetMoveset("ryu")) {
+            const MoveData& m = kv.second;
+            int hit = m.HitstunFrames() - m.RemainingFramesOnEarliestHit();
+            int blk = m.BlockstunFrames() - m.RemainingFramesOnEarliestHit();
+            if (m.HitAdvantage >= 0 && hit != m.HitAdvantage) consistent = false;
+            if (m.BlockAdvantage >= -m.RemainingFramesOnEarliestHit() && blk != m.BlockAdvantage) {
+                consistent = false;
+            }
+        }
+        Check("全技で「入力した硬直差」と「のけぞりから逆算した硬直差」が一致", consistent);
+
+        // 硬直差を変えると、のけぞりも自動で変わる
+        MoveData edited = *lp;
+        edited.HitAdvantage = 8;
+        Check("硬直差を +8 にするとのけぞりも 18F になる",
+              edited.HitstunFrames() == 18 && edited.HitstunFrames() == lp->HitstunFrames() + 4);
+
+        // 保存して読み直しても硬直差が保たれる
+        MoveData saved = *lp;
+        saved.HitAdvantage = 6;
+        saved.BlockAdvantage = -5;
+        MoveData reloaded = MoveData::FromJson(saved.ToJson());
+        Check("硬直差は JSON に保存・復元される",
+              reloaded.HitAdvantage == 6 && reloaded.BlockAdvantage == -5 &&
+              reloaded.HitstunFrames() == 6 + saved.Active + saved.Recovery);
+    }
+
+    // =================================================================
+    std::cout << "\n=== コンボ成立条件と確定反撃 ===\n";
+    // =================================================================
+    {
+        MoveData first;  first.Startup = 5; first.Active = 3; first.Recovery = 10;
+        first.HitAdvantage = 5; first.BlockAdvantage = -6;
+        MoveData next4;  next4.Startup = 4;
+        MoveData next5;  next5.Startup = 5;
+        MoveData next6;  next6.Startup = 6;
+        Check("ヒット +5 なら 発生 5F 以下の技がつながる",
+              first.CombosInto(next4) && first.CombosInto(next5) && !first.CombosInto(next6));
+        Check("ガード -6 なら 発生 6F 以下の技で確定反撃",
+              first.IsPunishableBy(4) && first.IsPunishableBy(6) && !first.IsPunishableBy(7));
+
+        MoveData safe; safe.Startup = 4; safe.Active = 3; safe.Recovery = 7;
+        safe.BlockAdvantage = -2;
+        Check("ガード -2 は 発生 4F の技では反撃にならない", !safe.IsPunishableBy(4));
+        MoveData plus; plus.BlockAdvantage = 1;
+        Check("ガードして有利な技には確定反撃が無い", !plus.IsPunishableBy(1));
+    }
+
+    // =================================================================
     std::cout << "\n=== ヒットストップ（技の強さで段階的に）===\n";
     // =================================================================
     {
@@ -769,7 +892,7 @@ int main(int argc, char** argv) {
                 const MoveData* mv = dm.GetMove("ryu", id);
                 Measured m = run(id, DummyMode::Stand);
                 // 定義: 硬直差 = 防御側の硬直F - 攻撃側の残り全体F
-                int expected = mv->Hitstun - mv->RemainingFramesAt(m.attackerFrameAtContact);
+                int expected = mv->HitstunFrames() - mv->RemainingFramesAt(m.attackerFrameAtContact);
                 if (m.advantage != expected) {
                     ok = false;
                     detail += std::string(" ") + id + "(" + std::to_string(m.advantage) +
@@ -802,7 +925,7 @@ int main(int argc, char** argv) {
                 const MoveData* mv = dm.GetMove("ryu", id);
                 Measured m = run(id, DummyMode::Guard);
                 if (!m.blocked) { ok = false; detail += std::string(" ") + id + "(ガードせず)"; continue; }
-                int expected = mv->Blockstun - mv->RemainingFramesAt(m.attackerFrameAtContact);
+                int expected = mv->BlockstunFrames() - mv->RemainingFramesAt(m.attackerFrameAtContact);
                 if (m.advantage != expected) {
                     ok = false;
                     detail += std::string(" ") + id + "(" + std::to_string(m.advantage) +
@@ -941,6 +1064,321 @@ int main(int argc, char** argv) {
         }
     }
 
+
+    // =================================================================
+    std::cout << "\n=== 実測: 入力した硬直差どおりに動くか ===\n";
+    // =================================================================
+    // 「硬直差 +4」と入力した技は、本当に攻撃側が 4 フレーム早く
+    // 動けるようになるのか。実際に試合を回して数えます。
+    {
+        // ノックバックがあると 2 発目の間合いが変わってしまうので、
+        // 測定用に「押し戻さない」技のコピーを作ります。
+        std::unordered_map<std::string, MoveData> ms = *dm.GetMoveset("ryu");
+        for (auto& kv : ms) { kv.second.KnockbackX = 0.0; kv.second.KnockbackY = 0.0; }
+        const CharacterStats* cs = dm.GetCharacter("ryu");
+
+        // 技を 1 回出して、攻撃側・防御側が「動けるようになる」フレームを
+        // それぞれ数え、その差（＝硬直差）を返します。
+        struct Result { int advantage = 0; int contactMoveFrame = -1; bool blocked = false;
+                        bool connected = false; };
+        auto measure = [&](const std::string& moveId, DummyMode dummy) {
+            const MoveData& mv = ms.at(moveId);
+            BattleSystem bs;
+            bs.StartMatch(*cs, &ms, *cs, &ms, 99);
+            bs.TrainingMode = true;
+            bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = dummy;
+            bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+
+            RawInput in;
+            if (moveId.rfind("crouch_", 0) == 0) in.Down = true;
+            in.Buttons.Set(mv.Button, true);
+
+            Result r;
+            int attackerFree = -1, defenderFree = -1, contactFrame = -1;
+            for (int f = 0; f < 400; ++f) {
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.Set(mv.Button, false); // 1 フレームだけ押す
+                bool stunned = bs.Player2.HitstunTimer > 0 || bs.Player2.BlockstunTimer > 0;
+                if (contactFrame < 0 && stunned) {
+                    contactFrame = f;
+                    r.connected = true;
+                    r.blocked = bs.Player2.BlockstunTimer > 0;
+                    // 当たった瞬間の、攻撃側の技の経過フレーム
+                    r.contactMoveFrame = bs.Player1.SM.CurrentFrame;
+                }
+                if (contactFrame >= 0) {
+                    if (attackerFree < 0 && bs.Player1.SM.IsActionable()) attackerFree = f;
+                    if (defenderFree < 0 && bs.Player2.SM.IsActionable()) defenderFree = f;
+                }
+                if (attackerFree >= 0 && defenderFree >= 0) break;
+            }
+            r.advantage = defenderFree - attackerFree;
+            return r;
+        };
+
+        const char* groundNormals[] = {"standing_light", "standing_medium", "standing_light_kick",
+                                       "standing_medium_kick", "crouch_light", "crouch_medium"};
+        {
+            bool ok = true;
+            std::string detail;
+            for (const char* id : groundNormals) {
+                Result r = measure(id, DummyMode::Stand);
+                const MoveData& mv = ms.at(id);
+                if (!r.connected || r.contactMoveFrame != mv.Startup) {
+                    ok = false; detail += std::string(" ") + id + "(当たらず)"; continue;
+                }
+                if (r.advantage != mv.HitAdvantage) {
+                    ok = false;
+                    detail += std::string(" ") + id + "(" + std::to_string(r.advantage) +
+                              "!=" + std::to_string(mv.HitAdvantage) + ")";
+                }
+            }
+            Check("ヒット時の硬直差が入力値と一致する（実測）" + detail, ok);
+        }
+        {
+            bool ok = true;
+            std::string detail;
+            for (const char* id : groundNormals) {
+                Result r = measure(id, DummyMode::Guard);
+                const MoveData& mv = ms.at(id);
+                if (!r.connected || !r.blocked) {
+                    ok = false; detail += std::string(" ") + id + "(ガードせず)"; continue;
+                }
+                if (r.advantage != mv.BlockAdvantage) {
+                    ok = false;
+                    detail += std::string(" ") + id + "(" + std::to_string(r.advantage) +
+                              "!=" + std::to_string(mv.BlockAdvantage) + ")";
+                }
+            }
+            Check("ガード時の硬直差が入力値と一致する（実測）" + detail, ok);
+        }
+
+        // ---- コンボ成立条件（前の技のヒット時硬直差 >= 次の技の発生）----
+        //
+        // 立ち弱P は +4。発生 4F の技（立ち弱P）ならつながり、
+        // しゃがみ弱K（+3）から発生 4F の技はつながりません。
+        auto comboCount = [&](const std::string& firstId, const std::string& secondId) {
+            const MoveData& first = ms.at(firstId);
+            const MoveData& second = ms.at(secondId);
+            BattleSystem bs;
+            bs.StartMatch(*cs, &ms, *cs, &ms, 99);
+            bs.TrainingMode = true;
+            bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Stand;
+            bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+
+            RawInput in;
+            bool firstCrouch = firstId.rfind("crouch_", 0) == 0;
+            bool secondCrouch = secondId.rfind("crouch_", 0) == 0;
+            in.Down = firstCrouch;
+            in.Buttons.Set(first.Button, true);
+            int best = 0;
+            bool queued = false;
+            for (int f = 0; f < 200; ++f) {
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.Set(first.Button, false);
+                in.Buttons.Set(second.Button, false);
+                best = std::max(best, bs.P1ComboCount);
+                // 1 発目の硬直が明ける少し前に 2 発目を先行入力しておく。
+                // 先行入力は動けるようになった最初のフレームで技になります。
+                if (!queued && bs.Player1.SM.CurrentMove == firstId &&
+                    bs.Player1.SM.CurrentFrame >= first.ActionableFrame() - 3) {
+                    in.Buttons.Set(second.Button, true);
+                    in.Down = secondCrouch;
+                    queued = true;
+                }
+            }
+            return best;
+        };
+        Check("+4 の技から発生 4F の技はコンボになる (" +
+                  std::to_string(comboCount("standing_light", "standing_light")) + " ヒット)",
+              comboCount("standing_light", "standing_light") >= 2);
+        Check("+3 の技から発生 4F の技はコンボにならない (" +
+                  std::to_string(comboCount("crouch_light", "standing_light")) + " ヒット)",
+              comboCount("crouch_light", "standing_light") < 2);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 技のあとの姿勢・しゃがみガード中の攻撃 ===\n";
+    // =================================================================
+    {
+        double dt = 1.0 / 60.0;
+        const CharacterStats* cs = dm.GetCharacter("ryu");
+        const auto* ms = dm.GetMoveset("ryu");
+
+        // ---- しゃがみ技のあとは、しゃがみのまま ----
+        Fighter f;
+        f.Setup(*cs, ms);
+        f.Opponent = &f;
+        RawInput down; down.Down = true;
+        RawInput downLK = down; downLK.Buttons.LK = true;
+        f.FrameStep(dt, downLK);
+        bool startedCrouchMove = f.SM.CurrentMove == "crouch_light";
+        bool sawStanding = false;
+        for (int i = 0; i < 40; ++i) {
+            f.FrameStep(dt, down);
+            if (f.SM.CurrentState == CharState::Idle) sawStanding = true;
+        }
+        Check("しゃがみ攻撃を出したあと、一瞬も立ち状態にならない",
+              startedCrouchMove && !sawStanding && f.SM.CurrentState == CharState::Crouch);
+
+        // ---- 立ち技のあとは立ち ----
+        Fighter f2;
+        f2.Setup(*cs, ms);
+        f2.Opponent = &f2;
+        RawInput lp; lp.Buttons.LP = true;
+        f2.FrameStep(dt, lp);
+        bool sawCrouch = false;
+        for (int i = 0; i < 40; ++i) {
+            f2.FrameStep(dt, RawInput{});
+            if (f2.SM.CurrentState == CharState::Crouch) sawCrouch = true;
+        }
+        Check("立ち攻撃のあとは立ち状態に戻る",
+              !sawCrouch && f2.SM.CurrentState == CharState::Idle);
+
+        // ---- しゃがみガード中でも攻撃ボタンで技が出る ----
+        Fighter f3;
+        f3.Setup(*cs, ms);
+        f3.Opponent = &f3;                 // 自分が相手＝右向き。後ろは左。
+        RawInput guard; guard.Down = true; guard.Left = true;
+        for (int i = 0; i < 5; ++i) f3.FrameStep(dt, guard);
+        bool inCrouchGuard = f3.SM.CurrentState == CharState::Block && f3.IsCrouchingGuard;
+        RawInput guardLK = guard; guardLK.Buttons.LK = true;
+        f3.FrameStep(dt, guardLK);
+        Check("しゃがみガード中に弱K を押すとしゃがみ弱K が出る",
+              inCrouchGuard && f3.SM.CurrentState == CharState::Attack &&
+              f3.SM.CurrentMove == "crouch_light");
+
+        // ---- 立ちガード中は立ち技が出る ----
+        Fighter f4;
+        f4.Setup(*cs, ms);
+        f4.Opponent = &f4;
+        RawInput back; back.Left = true;
+        for (int i = 0; i < 5; ++i) f4.FrameStep(dt, back);
+        RawInput backLP = back; backLP.Buttons.LP = true;
+        f4.FrameStep(dt, backLP);
+        Check("立ちガード姿勢から弱P を押すと立ち弱P が出る",
+              f4.SM.CurrentState == CharState::Attack && f4.SM.CurrentMove == "standing_light");
+
+        // ---- ガード姿勢はレバーを離せばすぐ解ける ----
+        Fighter f5;
+        f5.Setup(*cs, ms);
+        f5.Opponent = &f5;
+        RawInput crouchGuard; crouchGuard.Down = true; crouchGuard.Left = true;
+        for (int i = 0; i < 5; ++i) f5.FrameStep(dt, crouchGuard);
+        bool wasGuarding = f5.SM.CurrentState == CharState::Block;
+        RawInput backOnly; backOnly.Left = true;
+        f5.FrameStep(dt, backOnly);   // 下を離す → 後ろ歩きへ
+        bool walksBack = f5.SM.CurrentState == CharState::WalkBackward;
+        f5.FrameStep(dt, RawInput{}); // 全部離す → 立ち
+        Check("ガード姿勢から下を離すと、その場で後ろ歩きに戻れる",
+              wasGuarding && walksBack && f5.SM.CurrentState == CharState::Idle);
+    }
+
+    // =================================================================
+    std::cout << "\n=== ジャンプ攻撃の硬直は着地後 ===\n";
+    // =================================================================
+    {
+        double dt = 1.0 / 60.0;
+        const CharacterStats* cs = dm.GetCharacter("ryu");
+        const auto* ms = dm.GetMoveset("ryu");
+        const MoveData* air = dm.GetMove("ryu", "jump_light_kick");
+
+        Fighter f;
+        f.Setup(*cs, ms);
+        f.Opponent = &f;
+        RawInput up; up.Up = true;
+        f.FrameStep(dt, up);                      // ジャンプ
+        for (int i = 0; i < 5; ++i) f.FrameStep(dt, RawInput{});
+        RawInput lk; lk.Buttons.LK = true;
+        f.FrameStep(dt, lk);                      // 空中で弱K
+        bool startedAirMove = f.SM.CurrentMove == "jump_light_kick";
+
+        // 持続が終わっても、着地するまで技は終わらない
+        for (int i = 0; i < air->ActionableFrame() + 2; ++i) f.FrameStep(dt, RawInput{});
+        bool stillAirborneAttack = f.SM.CurrentState == CharState::Attack && f.PositionY < -1.0;
+
+        // 着地したフレームに着地硬直が積まれ、そのぶん動けない
+        int landedFrame = -1, freeFrame = -1;
+        for (int i = 0; i < 120; ++i) {
+            f.FrameStep(dt, RawInput{});
+            if (landedFrame < 0 && f.LandedDuringMove) landedFrame = i;
+            if (landedFrame >= 0 && freeFrame < 0 && f.SM.IsActionable()) freeFrame = i;
+            if (freeFrame >= 0) break;
+        }
+        Check("空中技は着地するまで終わらない", startedAirMove && stillAirborneAttack);
+        Check("着地硬直は技データどおりのフレーム数 (" +
+                  std::to_string(freeFrame - landedFrame) + "F / 設定 " +
+                  std::to_string(air->LandingRecoveryFrames()) + "F)",
+              landedFrame >= 0 && freeFrame - landedFrame == air->LandingRecoveryFrames());
+        Check("着地硬直は技データで指定できる",
+              air->LandingRecovery > 0 &&
+              air->LandingRecoveryFrames() == air->LandingRecovery);
+    }
+
+    // =================================================================
+    std::cout << "\n=== トレーニングのガード設定（当たる瞬間だけ入力）===\n";
+    // =================================================================
+    {
+        const CharacterStats* cs = dm.GetCharacter("ryu");
+        const auto* ms = dm.GetMoveset("ryu");
+
+        // ---- 届かない距離で振っても、練習相手は動かない ----
+        {
+            BattleSystem bs;
+            bs.StartMatch(*cs, ms, *cs, ms, 99);
+            bs.TrainingMode = true;
+            bs.CpuAI->Mode = DummyMode::Guard;
+            bs.Player1.PositionX = -120; bs.Player2.PositionX = 120; // 遠い
+            double startX = bs.Player2.PositionX;
+            RawInput in; in.Buttons.LP = true;
+            bool guarded = false, moved = false;
+            for (int f = 0; f < 60; ++f) {
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.LP = false;
+                if (bs.Player2.SM.CurrentState == CharState::Block ||
+                    bs.Player2.SM.CurrentState == CharState::WalkBackward) guarded = true;
+                if (std::abs(bs.Player2.PositionX - startX) > 0.5) moved = true;
+            }
+            Check("空振りにはガードしない（棒立ちのまま）", !guarded);
+            Check("ガード設定でも後ろに下がっていかない", !moved);
+        }
+
+        // ---- 当たる距離なら、その瞬間だけガードする ----
+        auto guardTest = [&](const char* moveId, bool useDown) {
+            BattleSystem bs;
+            bs.StartMatch(*cs, ms, *cs, ms, 99);
+            bs.TrainingMode = true;
+            bs.TrainingAutoHeal = false;
+            bs.CpuAI->Mode = DummyMode::Guard;
+            bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+            int startHp = bs.Player2.CurrentHP;
+            RawInput in;
+            in.Down = useDown;
+            in.Buttons.Set(dm.GetMove("ryu", moveId)->Button, true);
+            bool blocked = false;
+            int guardInputFrames = 0;
+            for (int f = 0; f < 120; ++f) {
+                bs.Update(1.0 / 60.0, in);
+                in.Buttons.Set(dm.GetMove("ryu", moveId)->Button, false);
+                if (bs.Player2.BlockstunTimer > 0) blocked = true;
+                // 「後ろを入れている」フレーム数を数える
+                if (!bs.Player2.InputBuf.History.empty()) {
+                    int digit = bs.Player2.InputBuf.History.back().digit;
+                    if (digit == 1 || digit == 4 || digit == 7) guardInputFrames++;
+                }
+            }
+            return std::make_pair(blocked && bs.Player2.CurrentHP == startHp, guardInputFrames);
+        };
+        auto standing = guardTest("standing_light", false);
+        auto low = guardTest("crouch_heavy", true);   // 下段（しゃがみガードでしか防げない）
+        Check("届く距離ならガードする（体力が減らない）", standing.first);
+        Check("下段はしゃがみガードで防ぐ", low.first);
+        Check("ガード入力は当たる瞬間の数フレームだけ (" +
+                  std::to_string(standing.second) + "F)",
+              standing.second > 0 && standing.second <= 6);
+    }
 
     // =================================================================
     std::cout << "\n=== 前へ踏み込む方式（ダッシュ / ステップ）===\n";
