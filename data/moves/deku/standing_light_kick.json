@@ -1,0 +1,82 @@
+{
+    "id": "standing_light_kick",
+    "name": "立ち弱キック",
+    "startup": 4,
+    "active": 3,
+    "recovery": 7,
+    "totalFrame": 13,
+    "damage": 240,
+    "hitAdvantage": 4,
+    "blockAdvantage": -1,
+    "hitstop": 4,
+    "guardstop": 2,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 28.0,
+            "offsetY": -40.0,
+            "width": 20.0,
+            "height": 12.0
+        }
+    ],
+    "knockbackX": 42.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "tags": [
+        "Light",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LK",
+    "stance": "stand",
+    "effectiveRange": 36.0,
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "standing_medium",
+                "standing_medium_kick"
+            ]
+        }
+    }
+}

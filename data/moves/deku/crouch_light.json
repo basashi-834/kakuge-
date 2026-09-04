@@ -1,0 +1,83 @@
+{
+    "id": "crouch_light",
+    "name": "しゃがみ弱キック",
+    "startup": 4,
+    "active": 3,
+    "recovery": 6,
+    "totalFrame": 12,
+    "damage": 230,
+    "hitAdvantage": 4,
+    "blockAdvantage": -1,
+    "hitstop": 4,
+    "guardstop": 2,
+    "guardType": "Low",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 26.0,
+            "offsetY": -10.0,
+            "width": 22.0,
+            "height": 12.0
+        }
+    ],
+    "knockbackX": 40.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "tags": [
+        "Light",
+        "Normal",
+        "Low"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LK",
+    "stance": "crouch",
+    "effectiveRange": 34.0,
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 6,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "crouch_medium",
+                "crouch_medium_punch"
+            ]
+        }
+    }
+}

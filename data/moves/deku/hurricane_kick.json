@@ -1,0 +1,101 @@
+{
+    "id": "hurricane_kick",
+    "name": "回転蹴り",
+    "startup": 8,
+    "active": 12,
+    "recovery": 18,
+    "totalFrame": 37,
+    "damage": 700,
+    "hitAdvantage": 0,
+    "blockAdvantage": -20,
+    "knockdownFrames": 32,
+    "hitstop": 8,
+    "guardstop": 6,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 28.0,
+            "offsetY": -46.0,
+            "width": 40.0,
+            "height": 34.0
+        }
+    ],
+    "hurtboxes": [
+        {
+            "part": "head",
+            "offsetX": 0.0,
+            "offsetY": -80.0,
+            "width": 19.0,
+            "height": 18.0
+        },
+        {
+            "part": "torso",
+            "offsetX": 0.0,
+            "offsetY": -58.0,
+            "width": 30.0,
+            "height": 26.0
+        },
+        {
+            "part": "leg",
+            "offsetX": 8.0,
+            "offsetY": -30.0,
+            "width": 44.0,
+            "height": 30.0
+        }
+    ],
+    "knockbackX": 105.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 12,
+    "meterCost": 0,
+    "tags": [
+        "Special"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "214",
+    "button": "AnyK",
+    "stance": "stand",
+    "effectiveRange": 60.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 8,
+            "endFrame": 19,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 8,
+            "endFrame": 19,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 8,
+            "endFrame": 19,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 8,
+            "endFrame": 19,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

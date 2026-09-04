@@ -1,0 +1,103 @@
+{
+    "id": "crouch_heavy",
+    "name": "足払い",
+    "startup": 8,
+    "active": 4,
+    "recovery": 19,
+    "totalFrame": 30,
+    "damage": 850,
+    "hitAdvantage": 24,
+    "blockAdvantage": -11,
+    "knockdownFrames": 34,
+    "hitstop": 8,
+    "guardstop": 6,
+    "guardType": "Low",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 34.0,
+            "offsetY": -10.0,
+            "width": 40.0,
+            "height": 16.0
+        }
+    ],
+    "hurtboxes": [
+        {
+            "part": "head",
+            "offsetX": 0.0,
+            "offsetY": -54.0,
+            "width": 19.0,
+            "height": 16.0
+        },
+        {
+            "part": "torso",
+            "offsetX": 0.0,
+            "offsetY": -39.0,
+            "width": 32.0,
+            "height": 26.0
+        },
+        {
+            "part": "leg",
+            "offsetX": 16.0,
+            "offsetY": -8.0,
+            "width": 64.0,
+            "height": 16.0
+        }
+    ],
+    "knockbackX": 100.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 12,
+    "meterCost": 0,
+    "tags": [
+        "Heavy",
+        "Normal",
+        "Low"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HK",
+    "stance": "crouch",
+    "effectiveRange": 52.0,
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 8,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 8,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": true,
+            "startFrame": 8,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 8,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

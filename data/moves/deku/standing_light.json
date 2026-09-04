@@ -1,0 +1,82 @@
+{
+    "id": "standing_light",
+    "name": "立ち弱パンチ",
+    "startup": 3,
+    "active": 3,
+    "recovery": 6,
+    "totalFrame": 11,
+    "damage": 220,
+    "hitAdvantage": 5,
+    "blockAdvantage": 0,
+    "hitstop": 4,
+    "guardstop": 2,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 26.0,
+            "offsetY": -66.0,
+            "width": 18.0,
+            "height": 11.0
+        }
+    ],
+    "knockbackX": 40.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "tags": [
+        "Light",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LP",
+    "stance": "stand",
+    "effectiveRange": 34.0,
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 3,
+            "endFrame": 5,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 3,
+            "endFrame": 5,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": true,
+            "startFrame": 3,
+            "endFrame": 5,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": true,
+            "startFrame": 3,
+            "endFrame": 5,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "standing_medium",
+                "standing_medium_kick"
+            ]
+        }
+    }
+}

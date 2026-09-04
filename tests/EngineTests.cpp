@@ -2074,6 +2074,140 @@ int main(int argc, char** argv) {
               !broken.LoadFromFile((tempUserDir / "missing.ttf").string()));
     }
 
+    // =================================================================
+    std::cout << "\n=== 付属キャラクターのデータ点検（全キャラ共通）===\n";
+    // =================================================================
+    // キャラクターを増やしたときに、データの書き間違いを自動で
+    // 見つけるための点検です。ここが通っていれば、少なくとも
+    // 「出せない技」「絶対に当たらない技」は入っていません。
+    {
+        for (const std::string& charId : dm.GetCharacterIds()) {
+            const CharacterStats* cs = dm.GetCharacter(charId);
+            const auto* moveset = dm.GetMoveset(charId);
+            Check(charId + ": キャラクターと技一覧が読み込める",
+                  cs != nullptr && moveset != nullptr && !moveset->empty());
+            if (!cs || !moveset) continue;
+
+            bool framesOk = true, boxesOk = true, hurtOk = true, buttonsOk = true;
+            std::string firstBad;
+            for (const auto& kv : *moveset) {
+                const MoveData& m = kv.second;
+                // フレームは 1 以上。全体フレームは (発生-1)+持続+硬直。
+                if (m.Startup < 1 || m.Active < 1 || m.Recovery < 1 ||
+                    m.TotalFrame != m.TotalFrames()) {
+                    framesOk = false;
+                    if (firstBad.empty()) firstBad = m.Id + "(フレーム)";
+                }
+                // 出し方: コマンド技でなければボタンの指定が要ります
+                //（無いと、どのボタンでも出せない技になります）。
+                if (m.InputCommand.empty() && m.Button.empty()) {
+                    buttonsOk = false;
+                    if (firstBad.empty()) firstBad = m.Id + "(ボタン)";
+                }
+                // 攻撃判定: 投げと飛び道具以外は、判定が無いと当たりません。
+                bool needsHitbox = m.GuardType != Constants::GuardThrow &&
+                                   !m.Projectile.present;
+                if (needsHitbox && m.Hitboxes.empty()) {
+                    boxesOk = false;
+                    if (firstBad.empty()) firstBad = m.Id + "(攻撃判定なし)";
+                }
+                // 技ごとの食らい判定は、攻撃判定より前に出てはいけません。
+                // 出ていると「自分から相手の拳へ体を差し出す技」になります。
+                if (m.HasHurtboxOverride() && !m.Hitboxes.empty()) {
+                    double hurtFront = -1e9, hitFront = -1e9;
+                    for (const auto& p : m.Hurtboxes) {
+                        hurtFront = std::max(hurtFront, p.Box.Right());
+                    }
+                    for (const auto& hb : m.Hitboxes) {
+                        hitFront = std::max(hitFront, hb.offsetX + hb.width / 2.0);
+                    }
+                    if (hurtFront > hitFront) {
+                        hurtOk = false;
+                        if (firstBad.empty()) firstBad = m.Id + "(食らい判定が前すぎ)";
+                    }
+                }
+            }
+            Check(charId + ": すべての技のフレーム数が筋が通っている" +
+                      (framesOk ? "" : " -> " + firstBad), framesOk);
+            Check(charId + ": すべての技に出し方（ボタンかコマンド）がある", buttonsOk);
+            Check(charId + ": 打撃技には攻撃判定がある", boxesOk);
+            Check(charId + ": 技ごとの食らい判定が攻撃判定より前に出ていない", hurtOk);
+        }
+    }
+
+    // =================================================================
+    std::cout << "\n=== サンプルキャラクター デク ===\n";
+    // =================================================================
+    // 追加したキャラクターが「データとして正しい」だけでなく、
+    // 実際に動かして技が出るところまで確かめます。
+    {
+        double dt = 1.0 / 60.0;
+        const CharacterStats* cs = dm.GetCharacter("deku");
+        const auto* ms = dm.GetMoveset("deku");
+        Check("デクが読み込める", cs != nullptr && ms != nullptr);
+        if (cs != nullptr && ms != nullptr) {
+            Check("デクはリュウより速く、体力が低い",
+                  cs->WalkForwardSpeed > dm.GetCharacter("ryu")->WalkForwardSpeed &&
+                  cs->MaxHP < dm.GetCharacter("ryu")->MaxHP);
+            Check("デクの前進は「ステップ」方式（前・前 で 1 体ぶん踏み込む）",
+                  cs->ForwardMoveType == "step" && cs->StepDistance > 0);
+
+            // 立ち弱パンチが実際に出る
+            Fighter f;
+            f.Setup(*cs, ms);
+            f.Opponent = &f;
+            RawInput lp;
+            lp.Buttons.LP = true;
+            f.FrameStep(dt, lp);
+            Check("弱P を押すと立ち弱パンチが出る",
+                  f.SM.CurrentState == CharState::Attack &&
+                  f.SM.CurrentMove == "standing_light");
+
+            // 弱P（+5）から中P（発生 5F）へつながる
+            const MoveData* light = dm.GetMove("deku", "standing_light");
+            const MoveData* medium = dm.GetMove("deku", "standing_medium");
+            Check("立ち弱P から立ち中P がつながる（+5 ≧ 発生 5F）",
+                  light != nullptr && medium != nullptr && light->CombosInto(*medium));
+
+            // 236 + P でエアバースト（飛び道具）が出る
+            BattleSystem bs;
+            bs.StartMatch(*cs, ms, *cs, ms, 99);
+            Fighter& p1 = bs.Player1;
+            const int cmdDigits[3] = {2, 3, 6};
+            for (int i = 0; i < 3; ++i) {
+                RawInput in;
+                in.Down = (cmdDigits[i] == 2 || cmdDigits[i] == 3);
+                in.Right = (cmdDigits[i] == 3 || cmdDigits[i] == 6);
+                bs.Update(dt, in);
+            }
+            RawInput punch;
+            punch.Right = true;
+            punch.Buttons.HP = true;
+            bs.Update(dt, punch);
+            bool started = (p1.SM.CurrentState == CharState::Attack &&
+                            p1.SM.CurrentMove == "fireball");
+            // 持続フレームに入ると弾が生まれます。
+            for (int i = 0; i < 20 && bs.Projectiles.empty(); ++i) {
+                bs.Update(dt, RawInput{});
+            }
+            Check("236＋P でエアバースト（飛び道具）が出る",
+                  started && !bs.Projectiles.empty());
+
+            // 足払いは、伸ばした脚が食らい判定になる
+            const MoveData* sweep = dm.GetMove("deku", "crouch_heavy");
+            double front = -1e9;
+            if (sweep != nullptr) {
+                for (const auto& p : sweep->Hurtboxes) front = std::max(front, p.Box.Right());
+            }
+            double crouchFront = -1e9;
+            for (const auto& p : cs->Hurtboxes.Crouch) {
+                crouchFront = std::max(crouchFront, p.Box.Right());
+            }
+            Check("足払いは食らい判定も前へ伸びている（技ごとの食らい判定）",
+                  sweep != nullptr && sweep->HasHurtboxOverride() && front > crouchFront);
+        }
+    }
+
     // 一時フォルダを片付ける
     std::error_code ec;
     fs::remove_all(tempUserDir, ec);

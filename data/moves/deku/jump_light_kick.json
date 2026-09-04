@@ -1,0 +1,77 @@
+{
+    "id": "jump_light_kick",
+    "name": "ジャンプ弱キック",
+    "startup": 4,
+    "active": 5,
+    "recovery": 8,
+    "totalFrame": 16,
+    "damage": 340,
+    "hitAdvantage": 8,
+    "blockAdvantage": 2,
+    "landingRecovery": 4,
+    "hitstop": 5,
+    "guardstop": 3,
+    "guardType": "Overhead",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 26.0,
+            "offsetY": -34.0,
+            "width": 22.0,
+            "height": 16.0
+        }
+    ],
+    "knockbackX": 50.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 5,
+    "meterCost": 0,
+    "tags": [
+        "Light",
+        "Normal",
+        "Overhead"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "LK",
+    "stance": "air",
+    "effectiveRange": 40.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 8,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 8,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 8,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 8,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

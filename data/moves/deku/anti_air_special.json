@@ -1,0 +1,86 @@
+{
+    "id": "anti_air_special",
+    "name": "アッパーキック",
+    "startup": 4,
+    "active": 8,
+    "recovery": 26,
+    "totalFrame": 37,
+    "damage": 1100,
+    "hitAdvantage": 22,
+    "blockAdvantage": -20,
+    "knockdownFrames": 45,
+    "hitstop": 10,
+    "guardstop": 8,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 20.0,
+            "offsetY": -92.0,
+            "width": 30.0,
+            "height": 46.0
+        }
+    ],
+    "knockbackX": 45.0,
+    "knockbackY": 290.0,
+    "hitOutcome": "HardKnockdown",
+    "meterGain": 15,
+    "meterCost": 0,
+    "tags": [
+        "Special",
+        "AntiAir",
+        "Reversal"
+    ],
+    "invincibility": {
+        "type": "Strike",
+        "start_frame": 1,
+        "end_frame": 5
+    },
+    "airborne": {
+        "enabled": true,
+        "startFrame": 4,
+        "durationFrames": 0,
+        "mode": "UntilLanding"
+    },
+    "input": "623",
+    "button": "AnyP",
+    "stance": "stand",
+    "effectiveRange": 115.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

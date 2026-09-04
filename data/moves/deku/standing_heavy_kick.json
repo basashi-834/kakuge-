@@ -1,0 +1,109 @@
+{
+    "id": "standing_heavy_kick",
+    "name": "立ち強キック",
+    "startup": 9,
+    "active": 4,
+    "recovery": 15,
+    "totalFrame": 27,
+    "damage": 950,
+    "hitAdvantage": 25,
+    "blockAdvantage": -7,
+    "knockdownFrames": 32,
+    "hitstop": 8,
+    "guardstop": 6,
+    "guardType": "High",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 36.0,
+            "offsetY": -44.0,
+            "width": 28.0,
+            "height": 16.0
+        }
+    ],
+    "hurtboxes": [
+        {
+            "part": "head",
+            "offsetX": 0.0,
+            "offsetY": -86.0,
+            "width": 19.0,
+            "height": 18.0
+        },
+        {
+            "part": "torso",
+            "offsetX": 0.0,
+            "offsetY": -61.0,
+            "width": 32.0,
+            "height": 32.0
+        },
+        {
+            "part": "leg",
+            "offsetX": 14.0,
+            "offsetY": -40.0,
+            "width": 58.0,
+            "height": 18.0
+        },
+        {
+            "part": "back_leg",
+            "offsetX": -2.0,
+            "offsetY": -22.5,
+            "width": 26.0,
+            "height": 45.0
+        }
+    ],
+    "knockbackX": 95.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 12,
+    "meterCost": 0,
+    "tags": [
+        "Heavy",
+        "Normal"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HK",
+    "stance": "stand",
+    "effectiveRange": 50.0,
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 9,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 9,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": true,
+            "startFrame": 9,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 9,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

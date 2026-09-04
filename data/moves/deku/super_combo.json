@@ -1,0 +1,76 @@
+{
+    "id": "super_combo",
+    "name": "フルスロットル",
+    "startup": 5,
+    "active": 8,
+    "recovery": 32,
+    "totalFrame": 44,
+    "damage": 2600,
+    "hitAdvantage": 30,
+    "blockAdvantage": -22,
+    "knockdownFrames": 50,
+    "hitstop": 12,
+    "guardstop": 8,
+    "guardType": "High",
+    "chipDamagePercent": 0.08,
+    "hitbox": [
+        {
+            "offsetX": 34.0,
+            "offsetY": -60.0,
+            "width": 46.0,
+            "height": 44.0
+        }
+    ],
+    "knockbackX": 120.0,
+    "knockbackY": 180.0,
+    "hitOutcome": "HardKnockdown",
+    "meterGain": 0,
+    "meterCost": 100,
+    "tags": [
+        "Super",
+        "Reversal"
+    ],
+    "invincibility": {
+        "type": "Full",
+        "start_frame": 1,
+        "end_frame": 6
+    },
+    "input": "236236",
+    "button": "AnyP",
+    "stance": "stand",
+    "effectiveRange": 90.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 5,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 5,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 5,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 5,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

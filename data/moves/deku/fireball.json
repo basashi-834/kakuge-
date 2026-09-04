@@ -1,0 +1,79 @@
+{
+    "id": "fireball",
+    "name": "エアバースト",
+    "startup": 11,
+    "active": 2,
+    "recovery": 26,
+    "totalFrame": 38,
+    "damage": 550,
+    "hitAdvantage": 14,
+    "blockAdvantage": 10,
+    "hitstop": 8,
+    "guardstop": 6,
+    "guardType": "High",
+    "chipDamagePercent": 0.05,
+    "hitbox": [],
+    "knockbackX": 70.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 10,
+    "meterCost": 0,
+    "tags": [
+        "Special",
+        "Projectile"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "236",
+    "button": "AnyP",
+    "stance": "stand",
+    "projectile": {
+        "speed": 210.0,
+        "lifetime": 38,
+        "width": 22.0,
+        "height": 22.0,
+        "spawnOffsetX": 38.0,
+        "spawnOffsetY": -46.0
+    },
+    "effectiveRange": 180.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 11,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 11,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 11,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 11,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

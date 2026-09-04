@@ -1,0 +1,77 @@
+{
+    "id": "jump_heavy_punch",
+    "name": "ジャンプ強パンチ",
+    "startup": 6,
+    "active": 7,
+    "recovery": 11,
+    "totalFrame": 23,
+    "damage": 820,
+    "hitAdvantage": 12,
+    "blockAdvantage": 4,
+    "landingRecovery": 6,
+    "hitstop": 8,
+    "guardstop": 6,
+    "guardType": "Overhead",
+    "chipDamagePercent": 0.0,
+    "hitbox": [
+        {
+            "offsetX": 32.0,
+            "offsetY": -52.0,
+            "width": 28.0,
+            "height": 18.0
+        }
+    ],
+    "knockbackX": 50.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Normal",
+    "meterGain": 10,
+    "meterCost": 0,
+    "tags": [
+        "Heavy",
+        "Normal",
+        "Overhead"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "HP",
+    "stance": "air",
+    "effectiveRange": 40.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 6,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 6,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 6,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 6,
+            "endFrame": 12,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}

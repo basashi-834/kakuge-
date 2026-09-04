@@ -1,0 +1,70 @@
+{
+    "id": "standing_throw",
+    "name": "投げ",
+    "startup": 3,
+    "active": 2,
+    "recovery": 22,
+    "totalFrame": 26,
+    "damage": 1300,
+    "hitAdvantage": 30,
+    "blockAdvantage": 0,
+    "knockdownFrames": 34,
+    "hitstop": 10,
+    "guardstop": 0,
+    "guardType": "Throw",
+    "chipDamagePercent": 0.0,
+    "hitbox": [],
+    "throwRange": 30.0,
+    "knockbackX": 95.0,
+    "knockbackY": 0.0,
+    "hitOutcome": "Knockdown",
+    "meterGain": 10,
+    "meterCost": 0,
+    "tags": [
+        "Normal",
+        "Throw"
+    ],
+    "invincibility": {
+        "type": "None",
+        "start_frame": 0,
+        "end_frame": 0
+    },
+    "input": "",
+    "button": "Throw",
+    "stance": "stand",
+    "effectiveRange": 30.0,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 3,
+            "endFrame": 4,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 3,
+            "endFrame": 4,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 3,
+            "endFrame": 4,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 3,
+            "endFrame": 4,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
+}
