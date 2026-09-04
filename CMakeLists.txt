@@ -250,11 +250,23 @@ target_link_libraries(Kakuge PRIVATE
 # そこでビルドが終わった直後に、CMake 自身にコピーさせます。
 
 # (1) data フォルダを丸ごと .exe の隣へ
-add_custom_command(TARGET Kakuge POST_BUILD
+#
+# ここを「Kakuge のビルド後（POST_BUILD）」にしてはいけません。
+# POST_BUILD はプログラムを作り直したときにしか動かないので、
+# JSON（技のデータ）だけを書き換えてビルドし直しても
+# 「何も変更がありません」と言われて終わり、コピーされないまま
+# 古いデータで遊ぶことになります（実際にそうなっていました）。
+#
+# 独立した「毎回動く仕事」として登録し、Kakuge より先に必ず実行させます。
+# こうすれば、data\moves\*.json を書き換えて
+#     cmake --build build --config Release
+# と打つだけで、必ず新しいデータが .exe の隣へ届きます。
+add_custom_target(KakugeData ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_SOURCE_DIR}/data"
             "$<TARGET_FILE_DIR:Kakuge>/data"
     COMMENT "data フォルダを実行ファイルの隣にコピーしています")
+add_dependencies(Kakuge KakugeData)
 
 # (2) 必要な DLL（SDL2.dll など）を .exe の隣へ。
 #     $<TARGET_RUNTIME_DLLS:Kakuge> が「このアプリの実行に必要な DLL」を

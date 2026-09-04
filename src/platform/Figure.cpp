@@ -354,7 +354,7 @@ void DrawFighter(Renderer& r, const Fighter& fighter) {
 
     // 対戦中の表示倍率は常に 100%（カメラは拡大縮小しません）。
     // 間合いの感覚を狂わせないための、このゲームの基本方針です。
-    bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
+    bool airborne = fighter.IsPhysicallyAirborne();
 
     // ダウン中・KO 後の「倒れている姿」（DrawHumanoid が描き分けます）。
     auto drawLying = [&](Color body) {

@@ -172,6 +172,12 @@ public:
     bool BackDoubleTapped = false;
 
     static constexpr double GroundY = 0.0;
+    // 「地面に着いているか」を測るときの許容誤差（ピクセル）。
+    // 座標は小数で計算するので、着地した瞬間がぴったり 0.0 になるとは
+    // 限りません。0.001 だけ浮いているのを「空中」と呼ぶと、着地の
+    // 処理が 1 フレーム遅れたり、姿勢が立ちと空中で点滅したりします。
+    // ゲーム中のどこでもこの 1 つの値を使って判定します。
+    static constexpr double AirborneEpsilon = 0.01;
     static constexpr int DashInputWindow = 14;   // 前・前 をこのフレーム以内に入れるとダッシュ
     static constexpr int DashDuration = 14;
     static constexpr int KnockdownFrames = 40;
@@ -245,7 +251,7 @@ public:
             if (PositionY > GroundY) { PositionY = GroundY; VelocityY = 0.0; }
             // 減り方はダウン中（Knockdown）と同じにします。倒れた体の
             // 滑り方が、KO かダウンかで変わるのは不自然なためです。
-            if (PositionY >= GroundY - 0.01) {
+            if (PositionY >= GroundY - AirborneEpsilon) {
                 VelocityX = MoveToward(VelocityX, 0.0, 339.1 / Constants::Fps);
             }
             ClampToStage();
@@ -508,7 +514,7 @@ public:
     // 硬直が明けたときに戻る状態。
     // 空中なら空中へ、下を入れているならしゃがみへ戻します。
     void ReturnToNeutral(const RawInput& raw) {
-        if (PositionY < (GroundY - 0.01)) { SM.ChangeState(CharState::Jump, ""); return; }
+        if (PositionY < (GroundY - AirborneEpsilon)) { SM.ChangeState(CharState::Jump, ""); return; }
         if (raw.Down) SM.ChangeState(CharState::Crouch, "");
         else SM.ChangeState(CharState::Idle, "");
     }
@@ -761,7 +767,7 @@ public:
     //   ・下を入れていればしゃがみ技（しゃがみガード中も含む）
     //   ・それ以外は立ち技
     std::string StanceForInput(const RawInput& raw) const {
-        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - 0.01)) return "air";
+        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - AirborneEpsilon)) return "air";
         if (raw.Down && !raw.Up) return "crouch";
         if (SM.CurrentState == CharState::Crouch) return "crouch";
         if (SM.CurrentState == CharState::Block && IsCrouchingGuard) return "crouch";
@@ -771,7 +777,7 @@ public:
     // 「今どの姿勢か」（レバーを見ない版）。判定や描画に使います。
     std::string CurrentStance() const {
         if (SM.CurrentState == CharState::Jump) return "air";
-        if (PositionY < (GroundY - 0.01)) return "air";
+        if (PositionY < (GroundY - AirborneEpsilon)) return "air";
         if (SM.CurrentState == CharState::Crouch) return "crouch";
         if (SM.CurrentState == CharState::Block && IsCrouchingGuard) return "crouch";
         return "stand";
@@ -848,7 +854,7 @@ public:
         if (CurrentMoveData == nullptr) return true;
         const MoveData& move = *CurrentMoveData;
         if (move.IsAirMove()) {
-            if (PositionY < (GroundY - 0.01)) return false; // まだ空中
+            if (PositionY < (GroundY - AirborneEpsilon)) return false; // まだ空中
             return LandedDuringMove && LandingRecoveryTimer <= 0;
         }
         return MoveExecutor::GetPhase(move, SM.CurrentFrame) == MovePhase::Done;
@@ -863,15 +869,20 @@ public:
         ActiveHitboxRects.clear();
         HitboxesWereLive = false;
         FacingLocked = false;
-        bool wasAir = PositionY < (GroundY - 1.0);
-        bool crouchMove = CurrentMoveData != nullptr && CurrentMoveData->Stance == "crouch";
+        // 「まだ空中にいるか」の判定は、ゲーム中どこでも同じ基準
+        //（AirborneEpsilon）を使います。ここだけ別の値にすると、
+        // 着地したのに空中に戻る（またはその逆）が起こり得ます。
+        bool wasAir = IsPhysicallyAirborne();
         CurrentMoveData = nullptr;
         LandingRecoveryTimer = 0;
         LandedDuringMove = false;
         if (wasAir) {
             SM.ChangeState(CharState::Jump, "");        // 空中技なら空中に戻る
-        } else if (raw.Down || (crouchMove && raw.Down)) {
-            SM.ChangeState(CharState::Crouch, "");      // しゃがんだまま
+        } else if (raw.Down) {
+            // 下を入れっぱなしならしゃがんだまま。技を出す前が
+            // しゃがみでも、下を離していれば立ちに戻ります
+            //（この 1 フレームあとの HandleGroundMovement とも一致します）。
+            SM.ChangeState(CharState::Crouch, "");
         } else {
             SM.ChangeState(CharState::Idle, "");
         }
@@ -885,7 +896,7 @@ public:
         MovePhase phase = MoveExecutor::GetPhase(move, frame);
 
         // 空中技の着地。着地したフレームに着地硬直を積みます。
-        if (move.IsAirMove() && !LandedDuringMove && PositionY >= (GroundY - 0.01)) {
+        if (move.IsAirMove() && !LandedDuringMove && PositionY >= (GroundY - AirborneEpsilon)) {
             LandedDuringMove = true;
             LandingRecoveryTimer = move.LandingRecoveryFrames();
             VelocityX = 0.0;  // 着地したらその場で止まる
@@ -1065,7 +1076,7 @@ public:
     // =================================================================
     void ApplyPhysics(double dt) {
         // 空中なら重力で下向きに加速。地上なら縦速度は 0。
-        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - 0.01)) {
+        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - AirborneEpsilon)) {
             VelocityY += Stats.Gravity * dt;
         } else {
             VelocityY = 0.0;
@@ -1144,7 +1155,7 @@ public:
     // 2 があるおかげで、見た目は地面に足がついていても空中扱いに
     // でき（昇龍拳の出際など）、地上投げを避けられます。逆に、
     // 指定が無ければ少し浮いて見えても地上判定のままです。
-    bool IsPhysicallyAirborne() const { return PositionY < (GroundY - 0.01); }
+    bool IsPhysicallyAirborne() const { return PositionY < (GroundY - AirborneEpsilon); }
 
     bool IsAirborne() const {
         if (IsPhysicallyAirborne()) return true;
@@ -1162,17 +1173,37 @@ public:
         return "stand";
     }
 
+    // 今まさに技を出しているなら、その技のデータ。そうでなければ nullptr。
+    // 「技の設定で判定を上書きしていいか」の入口を 1 か所にまとめた関数です。
+    // 技が終わったあと（のけぞり中など）に、前の技の判定が残ってしまう
+    // 事故を防ぐため、状態が Attack のときだけ返します。
+    const MoveData* ActiveMoveForBoxes() const {
+        if (SM.CurrentState != CharState::Attack) return nullptr;
+        return CurrentMoveData;
+    }
+
     // 今のフレームに対する判定の上書き指定（あれば）。
     const FrameBoxSet* CurrentFrameBoxes() const {
-        if (SM.CurrentState != CharState::Attack || CurrentMoveData == nullptr) return nullptr;
-        return CurrentMoveData->FrameBoxesAt(SM.CurrentFrame);
+        const MoveData* move = ActiveMoveForBoxes();
+        if (move == nullptr) return nullptr;
+        return move->FrameBoxesAt(SM.CurrentFrame);
     }
 
     // 今フレームの食らい判定（ワールド座標）。
-    // 技による上書きがあればそちら、無ければ姿勢ごとの標準を使います。
+    //
+    // どこを見て、どれを使うか。上から順に調べて、最初に見つかったものです。
+    //   1. 技の frameBoxes（このフレームだけの上書き）
+    //   2. 技の hurtboxes（その技の間ずっとの上書き）
+    //   3. 姿勢ごとの標準（立ち / しゃがみ / 空中）
+    // どれも「キャラクター中心 X・足元 Y からの相対」で持っているので、
+    // PlaceParts / RectsForStance でワールド座標へ直してから返します。
     std::vector<RectBox> HurtboxRects() const {
         if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasHurtboxes) {
             return HurtboxSet::PlaceParts(fb->hurtboxes, Facing, PositionX, PositionY);
+        }
+        if (const MoveData* move = ActiveMoveForBoxes();
+            move != nullptr && move->HasHurtboxOverride()) {
+            return HurtboxSet::PlaceParts(move->Hurtboxes, Facing, PositionX, PositionY);
         }
         return Hurtboxes.RectsForStance(Stance(), Facing, PositionX, PositionY);
     }

@@ -531,6 +531,7 @@ void Game::StartMatch() {
     ResetCamera(battle_->Player1.PositionX, battle_->Player2.PositionX);
     effects_.clear();
     matchFinished_ = false;
+    matchEndDelay_ = 0.0;
     paused_ = false;
     p1ComboFade_ = p2ComboFade_ = 0.0;
     lastP1Combo_ = lastP2Combo_ = 0;
@@ -675,10 +676,16 @@ void Game::Update(double dt) {
 
     // 試合が終わったら、少し余韻を置いてから結果画面へ。
     // すぐ切り替えると、KO の瞬間が見えません。
+    //
+    // この待ち時間は「メンバー変数」で持ちます。以前はここで
+    // static（関数の中に 1 つだけ、ゲームを閉じるまで残る変数）を
+    // 使っていましたが、KO の余韻の途中でポーズから試合をやめると
+    // 数え途中の値が残り、次の試合の KO 演出がその分だけ短くなる、
+    // という不具合になっていました。試合ごとの値は試合ごとの
+    // 置き場所（StartMatch で 0 に戻す）に持たせるのが正解です。
     if (matchFinished_) {
-        static double endDelay = 0.0;
-        endDelay += dt;
-        if (endDelay > 1.5) { endDelay = 0.0; GoResult(); }
+        matchEndDelay_ += dt;
+        if (matchEndDelay_ > 1.5) { matchEndDelay_ = 0.0; GoResult(); }
     }
 }
 

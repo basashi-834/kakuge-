@@ -21,6 +21,29 @@
             "height": 16.19
         }
     ],
+    "hurtboxes": [
+        {
+            "part": "head",
+            "offsetX": 0.0,
+            "offsetY": -54.0,
+            "width": 19.0,
+            "height": 16.0
+        },
+        {
+            "part": "torso",
+            "offsetX": 0.0,
+            "offsetY": -39.0,
+            "width": 32.0,
+            "height": 26.0
+        },
+        {
+            "part": "leg",
+            "offsetX": 16.0,
+            "offsetY": -8.0,
+            "width": 66.0,
+            "height": 16.0
+        }
+    ],
     "knockbackX": 109.83,
     "knockbackY": 0.0,
     "hitOutcome": "Knockdown",

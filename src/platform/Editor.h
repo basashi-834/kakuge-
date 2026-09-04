@@ -34,6 +34,13 @@
 //   L            … 表示を日本語 / 英語で切り替える
 //   Esc          … 戻る（文字入力中なら入力の取り消し）
 //
+// 保存していない編集は消えません
+// --------------------------
+// 技やキャラクターを切り替えても、まだ保存していない編集は覚えています
+// （下の pendingMoves_ / pendingChars_）。3 つの技を続けて調整してから
+// 最後に S を 1 回押す、という使い方ができます。保存すると、覚えている
+// ぶんも含めてまとめてファイルへ書き出します。
+//
 // 表示言語
 // -------
 // 既定は日本語です。項目名は 8x8 のカナで表示します（漢字はフォントに
@@ -47,6 +54,7 @@
 
 #include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "engine/CharacterStats.h"
@@ -141,8 +149,17 @@ private:
     enum class Tab { Character, Move, Boxes };
 
     // BOXES タブで、どの判定を編集しているか。
-    // 番号は HurtParts() の引数にも使うので、並びを変えないでください。
-    enum class BoxTarget { Hitbox, HurtStand, HurtCrouch, HurtAir,
+    //
+    //   Hitbox     … 今選んでいる技の攻撃判定
+    //   HurtMove   … 今選んでいる技だけの食らい判定（技ごとの設定）
+    //   HurtStand / HurtCrouch / HurtAir … 姿勢ごとの食らい判定（技を出して
+    //                 いないときの標準の形。キャラクター全体の設定）
+    //   Push*      … 姿勢ごとの押し合い判定
+    //
+    // Hitbox と HurtMove は「技」のデータ（moveDraft_）を、
+    // それ以外は「キャラクター」のデータ（statsDraft_）を書き換えます。
+    // 保存先が違うので、混同しないよう名前を分けています。
+    enum class BoxTarget { Hitbox, HurtMove, HurtStand, HurtCrouch, HurtAir,
                            PushStand, PushCrouch, PushAir };
 
     // ---- 状態 ----
@@ -164,6 +181,28 @@ private:
     std::vector<std::string> moveIds_;
     int moveIndex_ = 0;
     MoveData moveDraft_;
+
+    // ---- 保存していない編集の預かり所 ----
+    //
+    // 下書き（statsDraft_ / moveDraft_）は 1 つぶんしかありません。
+    // 技を切り替えると、その 1 つが新しい技で上書きされます。
+    // 以前はここで、保存していない編集が黙って消えていました
+    //（弱パンチを調整 → 強パンチを見に行った → 弱パンチの調整が消える）。
+    //
+    // そこで、切り替える直前に「まだ保存していない下書き」をここへ
+    // 預けておき、戻ってきたらそれを読み直します。S キーで保存する
+    // ときは、預かっているものも全部まとめてファイルへ書きます。
+    //   pendingMoves_ の鍵は "キャラクターID/技ID"
+    //   pendingChars_ の鍵は "キャラクターID"
+    std::unordered_map<std::string, MoveData> pendingMoves_;
+    std::unordered_map<std::string, CharacterStats> pendingChars_;
+
+    // 今の下書きを預かり所に入れる。
+    //   onlyIfDirty = true  … 変更があるときだけ（切り替えのとき）
+    //   onlyIfDirty = false … 変更が無くても必ず（保存のとき）
+    void RememberDrafts(bool onlyIfDirty);
+    // 預かり所にあればそれを、無ければファイルの内容を下書きにする。
+    void LoadMoveInternal(int index);
 
     BoxTarget boxTarget_ = BoxTarget::Hitbox;
     int boxIndex_ = 0;
@@ -256,6 +295,15 @@ private:
     int CurrentBoxCount() const;
     std::string CurrentStanceName() const;
     bool IsPushboxTarget() const;       // 押し合い判定を編集中か
+    bool IsMoveHurtTarget() const;      // 技ごとの食らい判定を編集中か
+    // 今編集している食らい判定の「部位一覧」。
+    // 技ごとの設定なら技の下書きを、姿勢ごとの設定ならキャラクターの
+    // 下書きを指します。攻撃判定・押し合い判定のときは nullptr。
+    std::vector<HurtboxPart>* CurrentHurtParts();
+    const std::vector<HurtboxPart>* CurrentHurtParts() const;
+    // 今の姿勢の食らい判定を、技ごとの食らい判定へ丸ごと写す。
+    // 一から置くより、標準の形を写してから伸ばすほうが早いためです。
+    void CopyStanceHurtboxesToMove();
     RectBox* CurrentPushbox();          // 編集中の押し合い判定（無ければ nullptr）
     const RectBox* CurrentPushbox() const;
 

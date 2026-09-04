@@ -254,7 +254,7 @@ const SpriteCell* PickFighterCell(const CharacterSprites& sprites, const Fighter
     MovePhase phase = MovePhase::Startup;
     const SpriteAnimation* anim = nullptr;
 
-    bool airborne = fighter.PositionY < (Fighter::GroundY - 1.0);
+    bool airborne = fighter.IsPhysicallyAirborne();
 
     switch (sm.CurrentState) {
         case CharState::Attack: {

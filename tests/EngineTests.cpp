@@ -481,6 +481,160 @@ int main(int argc, char** argv) {
     }
 
     // =================================================================
+    std::cout << "\n=== 技ごとの食らい判定 ===\n";
+    // =================================================================
+    // 技を出している間だけ、その技専用の食らい判定に差し替わることを
+    // 確かめます。優先順位は
+    //   frameBoxes（フレーム単位）＞ 技ごと ＞ 姿勢ごと
+    // です。技が終われば姿勢ごとの標準に戻らなければいけません。
+    {
+        // 前へ長く伸ばした脚を表す、技ごとの食らい判定。
+        MoveData kick;
+        kick.Id = "test_kick";
+        kick.Startup = 4; kick.Active = 3; kick.Recovery = 8;
+        kick.Hitboxes.push_back({40, -14, 24, 10});
+        kick.HurtboxOverrideEnabled = true;
+        kick.Hurtboxes.push_back({"torso", RectBox{0, -50, 24, 40}});
+        kick.Hurtboxes.push_back({"leg", RectBox{22, -12, 60, 20}}); // 前へ 52 まで伸びる
+
+        Fighter f;
+        f.Setup(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"));
+        f.Opponent = &f;
+        f.PositionX = 0;
+
+        std::vector<RectBox> standing = f.HurtboxRects();
+        double standRight = -1e9;
+        for (const auto& r : standing) standRight = std::max(standRight, r.Right());
+
+        f.CurrentMoveData = &kick;
+        f.SM.ChangeState(CharState::Attack, kick.Id);
+        std::vector<RectBox> during = f.HurtboxRects();
+        double kickRight = -1e9;
+        for (const auto& r : during) kickRight = std::max(kickRight, r.Right());
+
+        Check("技を出すと、その技の食らい判定に差し替わる",
+              during.size() == 2 && kickRight > standRight && kickRight == 52);
+
+        // 左を向けば、攻撃判定と同じように左右反転する。
+        f.Facing = Constants::FacingLeft;
+        std::vector<RectBox> flipped = f.HurtboxRects();
+        double kickLeft = 1e9;
+        for (const auto& r : flipped) kickLeft = std::min(kickLeft, r.Left());
+        Check("技ごとの食らい判定も左右反転する", kickLeft == -52);
+        f.Facing = Constants::FacingRight;
+
+        // 使わない設定にすれば、中身を残したまま姿勢どおりに戻る。
+        kick.HurtboxOverrideEnabled = false;
+        Check("使わない設定なら、中身を残したまま姿勢どおりに戻る",
+              !kick.Hurtboxes.empty() && f.HurtboxRects().size() == standing.size());
+        kick.HurtboxOverrideEnabled = true;
+
+        // frameBoxes のほうが強い（同じフレームなら frameBoxes が勝つ）。
+        FrameBoxSet fb;
+        fb.startFrame = 0; fb.endFrame = 99; // 今のフレーム（0）を含める
+        fb.hasHurtboxes = true;
+        fb.hurtboxes.push_back({"body", RectBox{0, -30, 10, 60}});
+        kick.FrameBoxes.push_back(fb);
+        Check("frameBoxes の指定は技ごとの指定より優先される",
+              f.HurtboxRects().size() == 1 && f.HurtboxRects()[0].Width == 10);
+        kick.FrameBoxes.clear();
+
+        // 技が終われば姿勢ごとの標準へ戻る。
+        f.SM.ChangeState(CharState::Idle, "");
+        Check("技が終われば姿勢ごとの食らい判定に戻る",
+              f.HurtboxRects().size() == standing.size());
+
+        // JSON への書き出しと読み込みで、内容が保たれること。
+        MoveData reloaded = MoveData::FromJson(kick.ToJson());
+        Check("技ごとの食らい判定は保存・読み込みで保たれる",
+              reloaded.HasHurtboxOverride() && reloaded.Hurtboxes.size() == 2 &&
+              reloaded.Hurtboxes[1].Name == "leg" &&
+              reloaded.Hurtboxes[1].Box.Width == 60);
+
+        // 「使わない」で保存した場合も、中身は残り、設定だけが伝わること。
+        kick.HurtboxOverrideEnabled = false;
+        MoveData reloadedOff = MoveData::FromJson(kick.ToJson());
+        Check("使わない設定も保存・読み込みで保たれる",
+              !reloadedOff.HasHurtboxOverride() && reloadedOff.Hurtboxes.size() == 2);
+
+        // 昔ながらの「配列だけ」の書き方でも読めること。
+        Json legacy = Json::MakeObject();
+        legacy.Set("id", Json(std::string("legacy")));
+        Json parts = Json::MakeArray();
+        Json one = Json::MakeObject();
+        one.Set("part", Json(std::string("torso")));
+        one.Set("offsetX", Json(0.0));
+        one.Set("offsetY", Json(-40.0));
+        one.Set("width", Json(20.0));
+        one.Set("height", Json(80.0));
+        parts.Push(std::move(one));
+        legacy.Set("hurtboxes", std::move(parts));
+        MoveData legacyMove = MoveData::FromJson(legacy);
+        Check("配列だけの書き方（\"hurtboxes\": [...]）も使える",
+              legacyMove.HasHurtboxOverride() && legacyMove.Hurtboxes.size() == 1 &&
+              legacyMove.Hurtboxes[0].Box.Height == 80);
+
+        // 実際に試合の中で、伸ばした脚を狙って当てられること。
+        // 技を出していないときは届かない距離に相手を置き、技を出した
+        // 瞬間だけ当たるようになることを確かめます。
+        BattleSystem bs;
+        bs.StartMatch(*dm.GetCharacter("ryu"), dm.GetMoveset("ryu"),
+                      *dm.GetCharacter("ryu"), dm.GetMoveset("ryu"), 99);
+        Fighter& atk = bs.Player1;
+        Fighter& def = bs.Player2;
+        atk.PositionX = 0;
+        // 立ち姿勢の食らい判定は体の中心から 15 しか広がらないので、
+        // 攻撃判定（28〜52）は届きません。技で脚を 52 まで伸ばして
+        // はじめて届く距離に置きます。
+        def.PositionX = 70;
+        // 攻撃側は「相手の脚に届く」判定を持つ技を出す。
+        MoveData poke;
+        poke.Id = "test_poke";
+        poke.Startup = 1; poke.Active = 3; poke.Recovery = 5;
+        poke.Damage = 100;
+        poke.Hitboxes.push_back({40, -12, 24, 12}); // 28〜52 の範囲を叩く
+        atk.CurrentMoveData = &poke;
+        atk.SM.ChangeState(CharState::Attack, poke.Id);
+        atk.SM.CurrentFrame = 1;
+        atk.ActiveHitboxRects = MoveExecutor::GetActiveHitboxRects(
+            poke, 1, atk.Facing, atk.PositionX, atk.PositionY);
+
+        int hpBefore = def.CurrentHP;
+        bs.ResolveCombat(atk, def);            // 相手は立ち姿勢 → 届かない
+        bool missedWhileStanding = (def.CurrentHP == hpBefore);
+
+        kick.HurtboxOverrideEnabled = true;
+        def.CurrentMoveData = &kick;           // 相手が脚を伸ばす技を出した
+        def.SM.ChangeState(CharState::Attack, kick.Id);
+        atk.AlreadyHit.clear();
+        bs.ResolveCombat(atk, def);            // 伸びた脚に当たる
+        Check("伸ばした脚（技ごとの食らい判定）を狙って潰せる",
+              missedWhileStanding && def.CurrentHP < hpBefore);
+
+        // 付属データの例（しゃがみ強キック＝足払い）。
+        // 脚を前へ伸ばすので、姿勢どおりの判定より前に出ているはずです。
+        const MoveData* sweep = dm.GetMove("ryu", "crouch_heavy");
+        const CharacterStats* ryu = dm.GetCharacter("ryu");
+        double sweepFront = -1e9, crouchFront = -1e9;
+        if (sweep != nullptr) {
+            for (const auto& p : sweep->Hurtboxes) sweepFront = std::max(sweepFront, p.Box.Right());
+        }
+        for (const auto& p : ryu->Hurtboxes.Crouch) crouchFront = std::max(crouchFront, p.Box.Right());
+        Check("付属データ: しゃがみ強キックは食らい判定も前へ伸びている",
+              sweep != nullptr && sweep->HasHurtboxOverride() && sweepFront > crouchFront);
+        // 攻撃判定より食らい判定が前に出ていたら、技として成立しません
+        //（自分から相手の拳に脚を差し出していることになるため）。
+        double sweepHit = -1e9;
+        if (sweep != nullptr) {
+            for (const auto& hb : sweep->Hitboxes) {
+                sweepHit = std::max(sweepHit, hb.offsetX + hb.width / 2.0);
+            }
+        }
+        Check("付属データ: 攻撃判定のほうが食らい判定より前に出ている",
+              sweep != nullptr && sweepHit > sweepFront);
+    }
+
+    // =================================================================
     std::cout << "\n=== 投げの距離判定 ===\n";
     // =================================================================
     {

@@ -258,6 +258,50 @@ public:
     std::vector<HitboxDef> Hitboxes;    // 持続フレーム中に出る攻撃判定（複数可）
     std::vector<FrameBoxSet> FrameBoxes;// フレーム単位の上書き指定
 
+    // ---- 技ごとの食らい判定（ハートボックス）----
+    //
+    // どこが、どうなって、こうなるのか
+    // -------------------------------
+    // ふだんの食らい判定は「姿勢（立ち / しゃがみ / 空中）」で決まります
+    //（CharacterStats::Hurtboxes）。しかし技を出している間だけは、
+    // 体の形が姿勢とはまるで違うものになります。
+    //
+    //   しゃがみ強キック … 足を長く前へ伸ばすので、脚が長くなる
+    //   昇龍拳の出際     … 体が縮こまり、腕だけが上へ伸びる
+    //   飛び道具の硬直   … 前へ突き出した腕が「殴れる場所」になる
+    //
+    // 「攻撃判定は伸びているのに、食らい判定は突っ立ったときのまま」だと、
+    // 差し合い（お互いの技を当てに行く読み合い）が成立しません。
+    // 伸ばした脚を狙って潰す、という反撃ができなくなるからです。
+    //
+    // そこで、技ごとに専用の食らい判定を持てるようにしてあります。
+    //   Hurtboxes            … その技の間ずっと使う食らい判定（部位の一覧）
+    //   HurtboxOverrideEnabled … それを使うかどうか（false なら姿勢の判定）
+    //
+    // 判定に使う四角形は、次の順に決まります（上ほど優先）。
+    //   1. FrameBoxes の "hurtboxes"（フレーム単位の上書き）
+    //   2. この Hurtboxes（技全体の上書き）      ← 今回の項目
+    //   3. 姿勢ごとの標準（CharacterStats::Hurtboxes）
+    // 実際に選んでいるのは Fighter::HurtboxRects() です。
+    //
+    // JSON では技ファイルの一番上に、こう書きます。
+    //   "hurtboxes": [
+    //     {"part":"head",  "offsetX":0,  "offsetY":-86, "width":19, "height":18},
+    //     {"part":"leg",   "offsetX":14, "offsetY":-10, "width":58, "height":20}
+    //   ]
+    // 一時的に切りたいときは、次の形でも書けます（消さずに残せます）。
+    //   "hurtboxes": {"enabled": false, "parts": [ ... ]}
+    bool HurtboxOverrideEnabled = false;
+    std::vector<HurtboxPart> Hurtboxes;
+
+    // この技専用の食らい判定を使うか。
+    // 「使う設定になっていて、かつ中身が 1 個以上ある」ときだけ true。
+    // 空の一覧をそのまま使うと、食らい判定がまったく無い（＝絶対に
+    // 当たらない）キャラクターができてしまうので、その事故を防ぎます。
+    bool HasHurtboxOverride() const {
+        return HurtboxOverrideEnabled && !Hurtboxes.empty();
+    }
+
     // 投げ（GuardType が "Throw"）は攻撃判定ではなく、
     // 中心どうしの距離で成立します。その距離。
     double ThrowRange = GameSpec::NormalThrowRange;
@@ -502,6 +546,31 @@ public:
             for (const Json& hb : hitboxes->Items()) m.Hitboxes.push_back(readHitbox(hb));
         }
 
+        // ---- 技ごとの食らい判定 ----
+        // 2 通りの書き方を許しています。
+        //   配列   : "hurtboxes": [ {部位}, {部位} ]        → そのまま使う
+        //   オブジェクト: "hurtboxes": {"enabled":false, "parts":[...]}
+        //                → 中身を残したまま、使う / 使わないを切り替えられる
+        // 書かれていなければ、これまでどおり姿勢ごとの判定を使います。
+        auto readHurtPart = [](const Json& pj) {
+            HurtboxPart part;
+            part.Name = pj.GetString("part", "body");
+            part.Box = RectBox(pj.GetNumber("offsetX", 0.0), pj.GetNumber("offsetY", 0.0),
+                               pj.GetNumber("width", 40.0), pj.GetNumber("height", 40.0));
+            return part;
+        };
+        if (const Json* hurt = obj.Find("hurtboxes"); hurt != nullptr) {
+            if (hurt->IsArray()) {
+                for (const Json& pj : hurt->Items()) m.Hurtboxes.push_back(readHurtPart(pj));
+                m.HurtboxOverrideEnabled = !m.Hurtboxes.empty();
+            } else if (hurt->IsObject()) {
+                if (const Json* parts = hurt->Find("parts"); parts && parts->IsArray()) {
+                    for (const Json& pj : parts->Items()) m.Hurtboxes.push_back(readHurtPart(pj));
+                }
+                m.HurtboxOverrideEnabled = hurt->GetBool("enabled", !m.Hurtboxes.empty());
+            }
+        }
+
         if (const Json* frameBoxes = obj.Find("frameBoxes"); frameBoxes && frameBoxes->IsArray()) {
             for (const Json& fj : frameBoxes->Items()) {
                 FrameBoxSet fb;
@@ -509,13 +578,8 @@ public:
                 fb.endFrame = fj.GetInt("endFrame", fb.startFrame);
                 if (const Json* hurt = fj.Find("hurtboxes"); hurt && hurt->IsArray()) {
                     fb.hasHurtboxes = true;
-                    for (const Json& pj : hurt->Items()) {
-                        HurtboxPart part;
-                        part.Name = pj.GetString("part", "body");
-                        part.Box = RectBox(pj.GetNumber("offsetX", 0.0), pj.GetNumber("offsetY", 0.0),
-                                           pj.GetNumber("width", 40.0), pj.GetNumber("height", 40.0));
-                        fb.hurtboxes.push_back(part);
-                    }
+                    // 部位の読み方は技全体のものと同じなので、同じ関数を使います。
+                    for (const Json& pj : hurt->Items()) fb.hurtboxes.push_back(readHurtPart(pj));
                 }
                 if (const Json* pb = fj.Find("pushbox"); pb && pb->IsObject()) {
                     fb.hasPushbox = true;
@@ -670,6 +734,31 @@ public:
         for (const auto& hb : Hitboxes) hitboxArr.Push(hitboxJson(hb));
         j.Set("hitbox", std::move(hitboxArr));
 
+        // 部位 1 個ぶんを JSON にする（技全体の食らい判定と
+        // frameBoxes の中で同じ形を使うので、関数にまとめます）。
+        auto hurtPartJson = [](const HurtboxPart& part) {
+            Json p = Json::MakeObject();
+            p.Set("part", Json(part.Name));
+            p.Set("offsetX", Json(part.Box.CenterX));
+            p.Set("offsetY", Json(part.Box.CenterY));
+            p.Set("width", Json(part.Box.Width));
+            p.Set("height", Json(part.Box.Height));
+            return p;
+        };
+
+        // ---- 技ごとの食らい判定 ----
+        // 中身が無いときは、キーそのものを書きません。全部の技ファイルに
+        // 空の "hurtboxes": [] が並ぶと、何も設定していないのか
+        // 「わざと空にした」のか読み分けられなくなるためです。
+        if (!Hurtboxes.empty()) {
+            Json parts = Json::MakeArray();
+            for (const auto& part : Hurtboxes) parts.Push(hurtPartJson(part));
+            Json hurt = Json::MakeObject();
+            hurt.Set("enabled", Json(HurtboxOverrideEnabled));
+            hurt.Set("parts", std::move(parts));
+            j.Set("hurtboxes", std::move(hurt));
+        }
+
         if (!FrameBoxes.empty()) {
             Json arr = Json::MakeArray();
             for (const auto& fb : FrameBoxes) {
@@ -678,15 +767,7 @@ public:
                 fj.Set("endFrame", Json(fb.endFrame));
                 if (fb.hasHurtboxes) {
                     Json parts = Json::MakeArray();
-                    for (const auto& part : fb.hurtboxes) {
-                        Json p = Json::MakeObject();
-                        p.Set("part", Json(part.Name));
-                        p.Set("offsetX", Json(part.Box.CenterX));
-                        p.Set("offsetY", Json(part.Box.CenterY));
-                        p.Set("width", Json(part.Box.Width));
-                        p.Set("height", Json(part.Box.Height));
-                        parts.Push(std::move(p));
-                    }
+                    for (const auto& part : fb.hurtboxes) parts.Push(hurtPartJson(part));
                     fj.Set("hurtboxes", std::move(parts));
                 }
                 if (fb.hasPushbox) {

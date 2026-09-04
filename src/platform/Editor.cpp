@@ -62,6 +62,15 @@ std::string FormatNumber(double v, int decimals) {
     return buf;
 }
 
+// 姿勢の値（データに入っている英語）を、日本語の呼び名にする。
+// データそのものは英語のままにしておき、画面に出すときだけ変えます
+//（日本語をデータに書き込むと、ファイルを直接編集する人が困るため）。
+std::string StanceLabelJp(const std::string& stance) {
+    if (stance == "crouch") return "しゃがみ";
+    if (stance == "air") return "空中";
+    return "立ち";
+}
+
 // 選択肢の中から、今の値の位置を探す（見つからなければ 0）。
 int IndexOfOption(const std::vector<std::string>& options, const std::string& value) {
     for (size_t i = 0; i < options.size(); ++i) {
@@ -87,17 +96,46 @@ void Editor::Open(DataManager* dm) {
     boxIndex_ = 0;
     message_.clear();
     messageTimer_ = 0.0;
+    pendingChars_.clear();
+    pendingMoves_.clear();
 
     charIds_ = dm_->GetCharacterIds();
     charIndex_ = 0;
     LoadCharacter(0);
 }
 
+// -----------------------------------------------------------------
+// 保存していない編集の預かり・取り出し
+// -----------------------------------------------------------------
+// 下書きは 1 つぶんしかないので、切り替える前にここへ預けます。
+// 鍵は「キャラクターID/技ID」。キャラクターをまたいでも、
+// 同じ名前の技どうしが混ざらないようにするためです。
+namespace {
+std::string MoveKey(const std::string& charId, const std::string& moveId) {
+    return charId + "/" + moveId;
+}
+} // namespace
+
+void Editor::RememberDrafts(bool onlyIfDirty) {
+    if (onlyIfDirty && !dirty_) return;
+    if (!statsDraft_.Id.empty()) pendingChars_[statsDraft_.Id] = statsDraft_;
+    if (!moveDraft_.Id.empty() && !statsDraft_.Id.empty()) {
+        pendingMoves_[MoveKey(statsDraft_.Id, moveDraft_.Id)] = moveDraft_;
+    }
+}
+
 void Editor::LoadCharacter(int index) {
     if (charIds_.empty()) return;
+    // 切り替える前に、今の下書きを預かり所へ（変更があるときだけ）。
+    RememberDrafts(true);
     charIndex_ = std::clamp(index, 0, static_cast<int>(charIds_.size()) - 1);
-    const CharacterStats* stats = dm_->GetCharacter(charIds_[static_cast<size_t>(charIndex_)]);
-    if (stats) statsDraft_ = *stats;
+    const std::string& id = charIds_[static_cast<size_t>(charIndex_)];
+    // 預かり所にあれば、そちら（編集の続き）を優先します。
+    if (auto it = pendingChars_.find(id); it != pendingChars_.end()) {
+        statsDraft_ = it->second;
+    } else if (const CharacterStats* stats = dm_->GetCharacter(id)) {
+        statsDraft_ = *stats;
+    }
 
     // 技の一覧を作る。unordered_map は順番がばらばらなので、
     // 毎回同じ並びになるよう ID で並べ替えます
@@ -108,15 +146,29 @@ void Editor::LoadCharacter(int index) {
         std::sort(moveIds_.begin(), moveIds_.end());
     }
     moveIndex_ = 0;
-    LoadMove(0);
+    // ここでは預かりません（すぐ上で預けたばかりなので）。
+    LoadMoveInternal(0);
     RebuildFields();
 }
 
+// 技を切り替える（外から呼ばれる入口）。
+// 切り替える前に、今の下書きを預かり所へ入れます。
 void Editor::LoadMove(int index) {
+    RememberDrafts(true);
+    LoadMoveInternal(index);
+}
+
+// 実際の読み込み。預かり所にあればそれを、無ければファイルの内容を使います。
+void Editor::LoadMoveInternal(int index) {
     if (moveIds_.empty()) { moveDraft_ = MoveData(); return; }
     moveIndex_ = std::clamp(index, 0, static_cast<int>(moveIds_.size()) - 1);
-    const MoveData* move = dm_->GetMove(statsDraft_.Id, moveIds_[static_cast<size_t>(moveIndex_)]);
-    if (move) moveDraft_ = *move;
+    const std::string& moveId = moveIds_[static_cast<size_t>(moveIndex_)];
+    if (auto it = pendingMoves_.find(MoveKey(statsDraft_.Id, moveId));
+        it != pendingMoves_.end()) {
+        moveDraft_ = it->second;  // 保存していない編集の続きから
+    } else if (const MoveData* move = dm_->GetMove(statsDraft_.Id, moveId)) {
+        moveDraft_ = *move;
+    }
     boxIndex_ = 0;
 }
 
@@ -741,7 +793,7 @@ void Editor::BuildBoxFields() {
 
     // 何の判定を編集するか
     addChoice(Loc("対象", "TARGET"),
-              {"HITBOX", "HURT STAND", "HURT CROUCH", "HURT AIR",
+              {"HITBOX", "HURT MOVE", "HURT STAND", "HURT CROUCH", "HURT AIR",
                "PUSH STAND", "PUSH CROUCH", "PUSH AIR"},
               [this] { return static_cast<int>(boxTarget_); },
               [this](int i) {
@@ -749,13 +801,14 @@ void Editor::BuildBoxFields() {
                   boxIndex_ = 0;
                   RebuildFields();
               },
-              japanese_ ? std::vector<std::string>{"攻撃判定", "食らい 立ち",
+              japanese_ ? std::vector<std::string>{"攻撃判定", "食らい この技",
+                                                   "食らい 立ち",
                                                    "食らい しゃがみ", "食らい 空中",
                                                    "押し合い 立ち", "押し合い しゃがみ",
                                                    "押し合い 空中"}
                         : std::vector<std::string>{});
 
-    if (boxTarget_ == BoxTarget::Hitbox) {
+    if (boxTarget_ == BoxTarget::Hitbox || IsMoveHurtTarget()) {
         // どの技の判定かが分かるように、技名も出します
         Field f;
         f.kind = Field::Kind::Info;
@@ -763,6 +816,42 @@ void Editor::BuildBoxFields() {
         f.getInfo = [this] { return moveIds_.empty() ? std::string("-")
                                                      : moveIds_[static_cast<size_t>(moveIndex_)]; };
         fields_.push_back(std::move(f));
+    }
+
+    // ---- 技ごとの食らい判定の「使う / 使わない」----
+    // 技を出している間だけ、体の形が変わります（脚を伸ばす等）。
+    // 「使わない」にすると、判定の中身を残したまま姿勢どおりの
+    // 標準の形に戻ります。試しに切って比べる、という使い方ができます。
+    if (IsMoveHurtTarget()) {
+        // ラベルと値はどちらも 1 行に収まる短さにします（ラベルは左寄せ、
+        // 値は右寄せで描くので、長いと画面の真ん中で重なって読めません）。
+        addChoice(Loc("この技の判定", "MOVE HURTBOX"), {"off", "on"},
+                  [this] { return moveDraft_.HurtboxOverrideEnabled ? 1 : 0; },
+                  [this](int i) {
+                      moveDraft_.HurtboxOverrideEnabled = (i == 1);
+                      RebuildFields();
+                  },
+                  japanese_ ? std::vector<std::string>{"使わない", "使う"}
+                            : std::vector<std::string>{"OFF", "ON"});
+        {   // 「今このフレームで実際に使われるのはどちらか」を出します。
+            // 使わない設定のときに何が起きているのかが、ここで分かります。
+            Field f;
+            f.kind = Field::Kind::Info;
+            f.label = Loc("使用中", "IN USE");
+            f.getInfo = [this] {
+                if (moveDraft_.HasHurtboxOverride()) return Loc("この技", "MOVE");
+                return Loc("姿勢:" + StanceLabelJp(moveDraft_.Stance),
+                           "STANCE " + moveDraft_.Stance);
+            };
+            fields_.push_back(std::move(f));
+        }
+        {   // 姿勢の判定を写してくる（一から作るより早い）。
+            Field f;
+            f.kind = Field::Kind::Action;
+            f.label = Loc("> 姿勢の判定をコピー", "> COPY FROM STANCE");
+            f.onActivate = [this] { CopyStanceHurtboxesToMove(); };
+            fields_.push_back(std::move(f));
+        }
     }
 
     int count = CurrentBoxCount();
@@ -838,17 +927,12 @@ RectBox ToRect(const HitboxDef& d) { return RectBox(d.offsetX, d.offsetY, d.widt
 } // namespace
 
 int Editor::CurrentBoxCount() const {
-    switch (boxTarget_) {
-        case BoxTarget::Hitbox: return static_cast<int>(moveDraft_.Hitboxes.size());
-        case BoxTarget::HurtStand: return static_cast<int>(statsDraft_.Hurtboxes.Stand.size());
-        case BoxTarget::HurtCrouch: return static_cast<int>(statsDraft_.Hurtboxes.Crouch.size());
-        case BoxTarget::HurtAir: return static_cast<int>(statsDraft_.Hurtboxes.Air.size());
-        // 押し合い判定は姿勢ごとに 1 個だけです（増やす意味がないので）。
-        case BoxTarget::PushStand:
-        case BoxTarget::PushCrouch:
-        case BoxTarget::PushAir: return 1;
-    }
-    return 0;
+    if (boxTarget_ == BoxTarget::Hitbox) return static_cast<int>(moveDraft_.Hitboxes.size());
+    // 押し合い判定は姿勢ごとに 1 個だけです（増やす意味がないので）。
+    if (IsPushboxTarget()) return 1;
+    // 残りは食らい判定（技ごと / 姿勢ごと）。どちらも部位の一覧です。
+    const auto* parts = CurrentHurtParts();
+    return parts ? static_cast<int>(parts->size()) : 0;
 }
 
 // 押し合い判定を編集しているか（追加・削除ができない対象）。
@@ -857,8 +941,15 @@ bool Editor::IsPushboxTarget() const {
            boxTarget_ == BoxTarget::PushAir;
 }
 
+// 技ごとの食らい判定を編集しているか（保存先が技のファイルになる対象）。
+bool Editor::IsMoveHurtTarget() const { return boxTarget_ == BoxTarget::HurtMove; }
+
+// プレビューで、どの姿勢のキャラクターを立たせるか。
+// 技の判定（攻撃・技ごとの食らい）を見ているときは、その技の姿勢です。
 std::string Editor::CurrentStanceName() const {
     switch (boxTarget_) {
+        case BoxTarget::Hitbox:
+        case BoxTarget::HurtMove: return moveDraft_.Stance;
         case BoxTarget::HurtCrouch:
         case BoxTarget::PushCrouch: return "crouch";
         case BoxTarget::HurtAir:
@@ -877,25 +968,42 @@ const RectBox* Editor::CurrentPushbox() const {
     return &statsDraft_.Pushboxes.ForStance(CurrentStanceName());
 }
 
-// 今の対象の「部位一覧」を取り出す（攻撃判定のときは nullptr）。
-namespace {
-const std::vector<HurtboxPart>* HurtPartsConst(const CharacterStats& stats, int target) {
-    switch (target) {
-        case 1: return &stats.Hurtboxes.Stand;
-        case 2: return &stats.Hurtboxes.Crouch;
-        case 3: return &stats.Hurtboxes.Air;
+// 今の対象の「部位一覧」を取り出す（攻撃判定・押し合い判定なら nullptr）。
+//
+// 技ごとの食らい判定だけは、書き換える先が技の下書き（moveDraft_）です。
+// 姿勢ごとの食らい判定はキャラクターの下書き（statsDraft_）になります。
+// 保存されるファイルが違うので、ここで行き先をはっきり分けています。
+//   技ごと → data/moves/<キャラ>/<技>.json（の "hurtboxes"）
+//   姿勢   → data/characters/<キャラ>.json（の "hurtboxes"）
+//
+// const 版と非 const 版の 2 つあるのは C++ の作法です（読むだけなら上、
+// 書き換えるなら下）。中身が同じなので、片方はもう片方を呼んでいます。
+const std::vector<HurtboxPart>* Editor::CurrentHurtParts() const {
+    switch (boxTarget_) {
+        case BoxTarget::HurtMove: return &moveDraft_.Hurtboxes;
+        case BoxTarget::HurtStand: return &statsDraft_.Hurtboxes.Stand;
+        case BoxTarget::HurtCrouch: return &statsDraft_.Hurtboxes.Crouch;
+        case BoxTarget::HurtAir: return &statsDraft_.Hurtboxes.Air;
         default: return nullptr;
     }
 }
-std::vector<HurtboxPart>* HurtParts(CharacterStats& stats, int target) {
-    switch (target) {
-        case 1: return &stats.Hurtboxes.Stand;
-        case 2: return &stats.Hurtboxes.Crouch;
-        case 3: return &stats.Hurtboxes.Air;
-        default: return nullptr;
-    }
+std::vector<HurtboxPart>* Editor::CurrentHurtParts() {
+    // const 版の結果から const を外します。元は非 const のメンバなので安全です。
+    const Editor* self = this;
+    return const_cast<std::vector<HurtboxPart>*>(self->CurrentHurtParts());
 }
-} // namespace
+
+// 姿勢ごとの食らい判定を、技ごとの食らい判定へ丸ごと写す。
+void Editor::CopyStanceHurtboxesToMove() {
+    if (!IsMoveHurtTarget()) return;
+    // 写す元は、その技の姿勢（立ち技なら立ちの判定）です。
+    moveDraft_.Hurtboxes = statsDraft_.Hurtboxes.PartsForStance(moveDraft_.Stance);
+    moveDraft_.HurtboxOverrideEnabled = true; // 写したらそのまま使う
+    boxIndex_ = 0;
+    dirty_ = true;
+    SetMessage("姿勢の判定をコピーしました", "COPIED FROM STANCE");
+    RebuildFields();
+}
 
 bool Editor::GetBoxRect(int index, RectBox& out) const {
     if (index < 0 || index >= CurrentBoxCount()) return false;
@@ -908,7 +1016,7 @@ bool Editor::GetBoxRect(int index, RectBox& out) const {
         out = ToRect(moveDraft_.Hitboxes[i]);
         return true;
     }
-    const auto* parts = HurtPartsConst(statsDraft_, static_cast<int>(boxTarget_));
+    const auto* parts = CurrentHurtParts();
     if (!parts) return false;
     out = (*parts)[i].Box;
     return true;
@@ -949,7 +1057,7 @@ void Editor::SetBoxValue(int which, double value) {
         }
         return;
     }
-    auto* parts = HurtParts(statsDraft_, static_cast<int>(boxTarget_));
+    auto* parts = CurrentHurtParts();
     if (!parts) return;
     RectBox& b = (*parts)[i].Box;
     switch (which) {
@@ -973,13 +1081,17 @@ void Editor::AddBox() {
         moveDraft_.Hitboxes.push_back(d);
         boxIndex_ = static_cast<int>(moveDraft_.Hitboxes.size()) - 1;
     } else {
-        auto* parts = HurtParts(statsDraft_, static_cast<int>(boxTarget_));
+        auto* parts = CurrentHurtParts();
         if (!parts) return;
         HurtboxPart part;
         part.Name = "part" + std::to_string(parts->size() + 1);
         part.Box = RectBox(0, -30, 24, 24);
         parts->push_back(part);
         boxIndex_ = static_cast<int>(parts->size()) - 1;
+        // 技ごとの食らい判定に足したときは、自動で「使う」にします。
+        // 足したのに何も変わらない（＝使う設定を別に入れる必要がある）
+        // のは、まず間違いなく意図と違うためです。
+        if (IsMoveHurtTarget()) moveDraft_.HurtboxOverrideEnabled = true;
     }
     dirty_ = true;
     SetMessage("判定を追加しました", "BOX ADDED");
@@ -998,7 +1110,7 @@ void Editor::DeleteBox() {
     if (boxTarget_ == BoxTarget::Hitbox) {
         moveDraft_.Hitboxes.erase(moveDraft_.Hitboxes.begin() + idx);
     } else {
-        auto* parts = HurtParts(statsDraft_, static_cast<int>(boxTarget_));
+        auto* parts = CurrentHurtParts();
         if (!parts) return;
         parts->erase(parts->begin() + idx);
     }
@@ -1013,10 +1125,28 @@ void Editor::DeleteBox() {
 // =====================================================================
 void Editor::Save() {
     if (!dm_) return;
-    dm_->SaveCharacter(statsDraft_);
-    if (!moveIds_.empty()) dm_->SaveMove(statsDraft_.Id, moveDraft_);
+    // 今の下書きも、預かってあるぶんも、まとめて書き出します。
+    // これが無いと「技を切り替えながら 3 つ直して、最後に S」で
+    // 最後の 1 つしか保存されません。
+    RememberDrafts(false);
+
+    for (const auto& kv : pendingChars_) dm_->SaveCharacter(kv.second);
+    int moveCount = 0;
+    for (const auto& kv : pendingMoves_) {
+        // 鍵は "キャラクターID/技ID"。前半を取り出して保存先を決めます。
+        std::string::size_type slash = kv.first.find('/');
+        if (slash == std::string::npos) continue;
+        dm_->SaveMove(kv.first.substr(0, slash), kv.second);
+        ++moveCount;
+    }
+    int charCount = static_cast<int>(pendingChars_.size());
+    pendingChars_.clear();
+    pendingMoves_.clear();
     dirty_ = false;
-    SetMessage("ユーザーフォルダに保存しました", "SAVED TO USER FOLDER");
+    SetMessage("保存しました（キャラ " + std::to_string(charCount) + " / 技 " +
+                   std::to_string(moveCount) + "）",
+               "SAVED " + std::to_string(charCount) + " CHAR / " +
+                   std::to_string(moveCount) + " MOVES");
 }
 
 void Editor::CreateNewCharacter() {
@@ -1197,6 +1327,9 @@ void Editor::DeleteCurrentMove() {
     }
 
     dm_->DeleteMove(statsDraft_.Id, id);
+    // 預かり所にも残っていたら消します。残したままだと、次に保存した
+    // ときに「消したはずの技」が書き戻されてしまいます。
+    pendingMoves_.erase(MoveKey(statsDraft_.Id, id));
     auto mit = std::find(statsDraft_.MoveIds.begin(), statsDraft_.MoveIds.end(), id);
     if (mit != statsDraft_.MoveIds.end()) {
         statsDraft_.MoveIds.erase(mit);
@@ -1306,7 +1439,7 @@ void Editor::SetBoxRect(int index, const RectBox& box) {
         d.offsetX = cx; d.offsetY = cy; d.width = w; d.height = h;
         return;
     }
-    auto* parts = HurtParts(statsDraft_, static_cast<int>(boxTarget_));
+    auto* parts = CurrentHurtParts();
     if (!parts) return;
     (*parts)[i].Box = RectBox(cx, cy, w, h);
 }
@@ -1775,10 +1908,12 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
 
     HumanoidPose pose;
     pose.facing = 1;
+    // どの姿勢で立たせるか。技の判定（攻撃・技ごとの食らい）を見るときは、
+    // その技の姿勢です（CurrentStanceName がそう返します）。
     std::string stance = CurrentStanceName();
-    if (boxTarget_ == BoxTarget::Hitbox) {
-        // 技の判定を見るときは、その技の姿勢で立たせます。
-        stance = moveDraft_.Stance;
+    if (boxTarget_ == BoxTarget::Hitbox || IsMoveHurtTarget()) {
+        // 技を出している最中の見た目にします。腕（または脚）を伸ばした
+        // 絵になるので、伸ばした先に判定が付いているか確かめられます。
         if (moveDraft_.Button.size() >= 2 && moveDraft_.Button.back() == 'K') pose.legKick = 34;
         else pose.armReach = 34;
     }
@@ -1788,9 +1923,10 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
     DrawHumanoid(r, footX, footY,
                  Color(statsDraft_.ColorR, statsDraft_.ColorG, statsDraft_.ColorB), pose);
 
-    // 判定の枠を重ねて描く。
-    //   緑 … 食らい判定（ハートボックス）
+    // 判定の枠を重ねて描く。色はゲーム内のデバッグ表示（F1）と同じです。
     //   赤 … 攻撃判定（ヒットボックス）
+    //   緑 … 食らい判定（ハートボックス）
+    //   青 … 押し合い判定（プッシュボックス）
     // 今選んでいる箱だけ濃く描いて、どれを編集中か分かるようにします。
     auto drawBox = [&](const RectBox& b, Color color, bool highlight) {
         float bx = footX + static_cast<float>(b.Left());
@@ -1802,10 +1938,24 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
     };
 
     if (boxTarget_ == BoxTarget::Hitbox) {
-        // 参考として、その姿勢の食らい判定も薄く出します
+        // 参考として、その技のときに実際に使われる食らい判定を薄く出します
         //（攻撃判定が体のどこから出ているかが分かるように）。
+        const std::vector<HurtboxPart>& ref =
+            moveDraft_.HasHurtboxOverride() ? moveDraft_.Hurtboxes
+                                            : statsDraft_.Hurtboxes.PartsForStance(moveDraft_.Stance);
+        for (const auto& p : ref) drawBox(p.Box, Color(40, 170, 80), false);
+    } else if (IsMoveHurtTarget()) {
+        // 技ごとの食らい判定を編集するときは、比べる相手として
+        //   ・姿勢ごとの標準の食らい判定（薄い緑）
+        //   ・その技の攻撃判定（薄い赤）
+        // を薄く出します。「どれだけ伸ばしたか」「攻撃判定より
+        // 食らい判定が前に出ていないか」がその場で分かります。
         for (const auto& p : statsDraft_.Hurtboxes.PartsForStance(moveDraft_.Stance)) {
             drawBox(p.Box, Color(40, 170, 80), false);
+        }
+        for (const auto& hb : moveDraft_.Hitboxes) {
+            drawBox(RectBox(hb.offsetX, hb.offsetY, hb.width, hb.height),
+                    Color(220, 50, 40), false);
         }
     } else if (IsPushboxTarget()) {
         // 押し合い判定を編集するときは、同じ姿勢の食らい判定を

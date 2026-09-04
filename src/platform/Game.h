@@ -115,6 +115,9 @@ private:
     int pauseIndex_ = 0;
     std::vector<LiveEffect> effects_;
     bool matchFinished_ = false;
+    // 試合が終わってから結果画面へ移るまでの余韻（秒）。
+    // 試合ごとの値なので、必ず試合開始（StartMatch）で 0 に戻します。
+    double matchEndDelay_ = 0.0;
     DummyMode p2DummyMode_ = DummyMode::CPU;
     double p1ComboFade_ = 0.0, p2ComboFade_ = 0.0;
     int lastP1Combo_ = 0, lastP2Combo_ = 0;
