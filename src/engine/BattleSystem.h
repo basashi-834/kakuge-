@@ -389,6 +389,13 @@ public:
                                   defender.SM.CurrentState == CharState::Knockdown);
         HitResult result = defender.ReceiveHit(move, attacker);
 
+        // 「この技は当たったのか、ガードされたのか」を攻撃側に覚えさせます。
+        // キャンセルの条件（ヒット時だけ / ガード時も可）に使います。
+        if (!result.whiffed) {
+            attacker.CurrentMoveContact =
+                result.blocked ? MoveContact::Blocked : MoveContact::Hit;
+        }
+
         // ストップは攻撃側にも同じ長さで掛かります（両者が同時に止まる）。
         // ヒットなら Hitstop、ガードなら Guardstop。
         ApplyStop(attacker, defender, result.stopFrames);

@@ -227,6 +227,30 @@ void Editor::BuildCharacterFields() {
         addNum(Loc("ダッシュ速度", "DASH SPEED"), [this] { return statsDraft_.DashSpeed; },
                [this](double v) { statsDraft_.DashSpeed = v; }, 1, 0, 800, 1, "PX/S");
     }
+
+    // ---- 後ろ・後ろ で下がる（バックステップ）----
+    // 前へ踏み込む設定とは別の数値です。前を変えても後ろは変わりません。
+    addChoice(Loc("後退の方式", "BACK MOVE"), {"step", "dash"},
+              [this] { return statsDraft_.BackMoveType == "dash" ? 1 : 0; },
+              [this](int i) {
+                  statsDraft_.BackMoveType = (i == 1) ? "dash" : "step";
+                  RebuildFields();
+              },
+              japanese_ ? std::vector<std::string>{"バックステップ", "バックダッシュ"}
+                        : std::vector<std::string>{"BACK STEP", "BACK DASH"});
+    if (statsDraft_.BackMoveType == "step") {
+        addNum(Loc("バックステップ距離", "BACK DISTANCE"),
+               [this] { return statsDraft_.BackStepDistance; },
+               [this](double v) { statsDraft_.BackStepDistance = v; }, 2, 4, 240, 0, "PX");
+        addNum(Loc("バックステップ時間", "BACK FRAMES"),
+               [this] { return statsDraft_.BackStepFrames; },
+               [this](double v) { statsDraft_.BackStepFrames = static_cast<int>(v); },
+               1, 1, 60, 0, "F");
+    } else {
+        addNum(Loc("バックダッシュ速度", "BACK DASH SPEED"),
+               [this] { return statsDraft_.BackDashSpeed; },
+               [this](double v) { statsDraft_.BackDashSpeed = v; }, 1, 0, 800, 1, "PX/S");
+    }
     // ジャンプ初速は上向きがマイナス。数値が小さいほど高く跳びます。
     addNum(Loc("ジャンプ初速", "JUMP VEL"), [this] { return statsDraft_.JumpVelocity; },
            [this](double v) { statsDraft_.JumpVelocity = v; }, 1, -600, -1, 1, "PX/S");
@@ -398,8 +422,34 @@ void Editor::BuildMoveFields() {
     }
 
     // ---- 硬直差（ここが入力欄。のけぞり時間は自動で決まります）----
-    addNum(Loc("ヒット時硬直差", "HIT ADV"), [this] { return moveDraft_.HitAdvantage; },
-           [this](double v) { moveDraft_.HitAdvantage = static_cast<int>(v); }, 1, -40, 40, 0, "F");
+    //
+    // ヒット時の欄には数値のほかに「D」と入れられます。
+    // D はダウン（Down / Knockdown）の意味で、のけぞらせるかわりに
+    // 相手を転ばせます。内部では数値とは別の項目（HitOutcome）として
+    // 持っているので、数値欄に文字が混ざることはありません。
+    {
+        Field f;
+        f.kind = Field::Kind::Number;
+        f.label = Loc("ヒット時硬直差(D=ダウン)", "HIT ADV (D=DOWN)");
+        f.getNum = [this] { return moveDraft_.HitAdvantage; };
+        f.setNum = [this](double v) { moveDraft_.HitAdvantage = static_cast<int>(v); };
+        f.step = 1; f.minV = -40; f.maxV = 40; f.hasRange = true;
+        f.decimals = 0; f.unit = "F";
+        f.getDown = [this] { return moveDraft_.HitOutcome != Constants::HitNormal; };
+        f.setDown = [this](bool down) {
+            if (down) {
+                if (moveDraft_.HitOutcome == Constants::HitNormal) {
+                    moveDraft_.HitOutcome = Constants::HitKnockdown;
+                }
+                // ダウン時間が未設定なら、標準のダウン時間を入れておきます。
+                if (moveDraft_.KnockdownFrames <= 0) moveDraft_.KnockdownFrames = 30;
+            } else {
+                moveDraft_.HitOutcome = Constants::HitNormal;
+            }
+            RebuildFields();
+        };
+        fields_.push_back(std::move(f));
+    }
     addNum(Loc("ガード時硬直差", "BLOCK ADV"), [this] { return moveDraft_.BlockAdvantage; },
            [this](double v) { moveDraft_.BlockAdvantage = static_cast<int>(v); }, 1, -40, 40, 0, "F");
 
@@ -435,6 +485,27 @@ void Editor::BuildMoveFields() {
     // 当たったときの効果
     addNum(Loc("ダメージ", "DAMAGE"), [this] { return moveDraft_.Damage; },
            [this](double v) { moveDraft_.Damage = static_cast<int>(v); }, 10, 0, 9990, 0);
+    // ヒット後にどうなるか。上の欄に D と入れるとダウン（Knockdown）に
+    // なりますが、強制ダウン（長いダウン）などはここで選びます。
+    addChoice(Loc("ヒット後", "ON HIT RESULT"),
+              {"Normal", "Knockdown", "HardKnockdown"},
+              [this] {
+                  static const std::vector<std::string> opts =
+                      {"Normal", "Knockdown", "HardKnockdown"};
+                  return IndexOfOption(opts, moveDraft_.HitOutcome);
+              },
+              [this](int i) {
+                  static const std::vector<std::string> opts =
+                      {"Normal", "Knockdown", "HardKnockdown"};
+                  moveDraft_.HitOutcome = opts[static_cast<size_t>(i)];
+                  if (moveDraft_.HitOutcome != Constants::HitNormal &&
+                      moveDraft_.KnockdownFrames <= 0) {
+                      moveDraft_.KnockdownFrames = 30;
+                  }
+                  RebuildFields();
+              },
+              japanese_ ? std::vector<std::string>{"のけぞり", "ダウン", "強制ダウン"}
+                        : std::vector<std::string>{});
     // ダウンさせる技だけ意味のある値（倒れているフレーム数）。
     addNum(Loc("ダウン時間", "KNOCKDOWN"), [this] { return moveDraft_.KnockdownFrames; },
            [this](double v) { moveDraft_.KnockdownFrames = static_cast<int>(v); }, 1, 0, 180, 0, "F");
@@ -470,14 +541,187 @@ void Editor::BuildMoveFields() {
            [this](double v) { moveDraft_.MeterGain = static_cast<int>(v); }, 1, 0, 100, 0);
     addNum(Loc("ゲージ消費", "METER COST"), [this] { return moveDraft_.MeterCost; },
            [this](double v) { moveDraft_.MeterCost = static_cast<int>(v); }, 5, 0, 100, 0);
-    // キャンセル可能時間帯。ここが開いている間だけ次の技につなげます
-    //（＝コンボの成立条件）。
-    addNum(Loc("キャンセル開始F", "CANCEL FROM"), [this] { return moveDraft_.CancelStartFrame; },
-           [this](double v) { moveDraft_.CancelStartFrame = static_cast<int>(v); }, 1, 0, 90, 0, "F");
-    addNum(Loc("キャンセル終了F", "CANCEL TO"), [this] { return moveDraft_.CancelEndFrame; },
-           [this](double v) { moveDraft_.CancelEndFrame = static_cast<int>(v); }, 1, 0, 90, 0, "F");
     addNum(Loc("投げ距離", "THROW RANGE"), [this] { return moveDraft_.ThrowRange; },
            [this](double v) { moveDraft_.ThrowRange = v; }, 1, 0, 120, 0, "PX");
+
+    // ---- 技中の空中判定 ----
+    // 見た目の高さ（Y 座標）とは別に、「このフレームからは空中扱い」と
+    // 決められます。地上投げを避けたり、空中喰らいにしたりできます。
+    addChoice(Loc("空中判定", "AIRBORNE"), {"off", "on"},
+              [this] { return moveDraft_.AirborneEnabled ? 1 : 0; },
+              [this](int i) { moveDraft_.AirborneEnabled = (i == 1); RebuildFields(); },
+              japanese_ ? std::vector<std::string>{"なし", "あり"}
+                        : std::vector<std::string>{"OFF", "ON"});
+    if (moveDraft_.AirborneEnabled) {
+        addNum(Loc("  空中開始F", "  AIR FROM"), [this] { return moveDraft_.AirborneStart; },
+               [this](double v) { moveDraft_.AirborneStart = static_cast<int>(v); },
+               1, 1, 90, 0, "F");
+        addChoice(Loc("  空中の続き方", "  AIR MODE"), {"FixedDuration", "UntilLanding"},
+                  [this] {
+                      return moveDraft_.AirborneKind == AirborneMode::UntilLanding ? 1 : 0;
+                  },
+                  [this](int i) {
+                      moveDraft_.AirborneKind = (i == 1) ? AirborneMode::UntilLanding
+                                                         : AirborneMode::FixedDuration;
+                      RebuildFields();
+                  },
+                  japanese_ ? std::vector<std::string>{"指定フレーム", "着地まで"}
+                            : std::vector<std::string>{});
+        if (moveDraft_.AirborneKind == AirborneMode::FixedDuration) {
+            addNum(Loc("  空中の長さ", "  AIR FRAMES"),
+                   [this] { return moveDraft_.AirborneDuration; },
+                   [this](double v) { moveDraft_.AirborneDuration = static_cast<int>(v); },
+                   1, 1, 90, 0, "F");
+            Field f;
+            f.kind = Field::Kind::Info;
+            f.label = Loc("  空中の区間", "  AIRBORNE RANGE");
+            f.getInfo = [this] {
+                int a = std::max(1, moveDraft_.AirborneStart);
+                int b = a + std::max(1, moveDraft_.AirborneDuration) - 1;
+                return std::to_string(a) + "-" + std::to_string(b) + "F";
+            };
+            fields_.push_back(std::move(f));
+        }
+    }
+
+    // ---- キャンセル（種類ごとに別々の設定）----
+    BuildCancelFields();
+
+    // ---- 技の管理（追加 / 複製 / 削除）----
+    {
+        Field f;
+        f.kind = Field::Kind::Action;
+        f.label = Loc("> ＋ 技を追加", "> + ADD MOVE");
+        f.onActivate = [this] { AddMove(); };
+        fields_.push_back(std::move(f));
+    }
+    {
+        Field f;
+        f.kind = Field::Kind::Action;
+        f.label = Loc("> 技を複製", "> DUPLICATE MOVE");
+        f.onActivate = [this] { DuplicateMove(); };
+        fields_.push_back(std::move(f));
+    }
+    {
+        Field f;
+        f.kind = Field::Kind::Action;
+        f.label = Loc("> 技を削除", "> DELETE MOVE");
+        f.onActivate = [this] { RequestDeleteMove(); };
+        fields_.push_back(std::move(f));
+    }
+}
+
+// ---------------------------------------------------------------------
+// キャンセル設定（4 種類ぶん）
+// ---------------------------------------------------------------------
+// 種類ごとに同じ 6 項目（＋派生先）を並べます。種類を増やしたときも
+// ここは書き換え不要で、MoveData 側に 1 つ足すだけで並びます。
+void Editor::BuildCancelFields() {
+    auto addNum = [&](const std::string& label, std::function<double()> get,
+                      std::function<void(double)> set, double lo, double hi) {
+        Field f;
+        f.kind = Field::Kind::Number;
+        f.label = label;
+        f.getNum = std::move(get);
+        f.setNum = std::move(set);
+        f.step = 1;
+        f.minV = lo; f.maxV = hi; f.hasRange = true;
+        f.decimals = 0;
+        f.unit = "F";
+        fields_.push_back(std::move(f));
+    };
+    auto addFlag = [&](const std::string& label, std::function<bool()> get,
+                       std::function<void(bool)> set) {
+        Field f;
+        f.kind = Field::Kind::Choice;
+        f.label = label;
+        f.options = {"off", "on"};
+        f.optionLabels = japanese_ ? std::vector<std::string>{"×", "○"}
+                                   : std::vector<std::string>{"NO", "YES"};
+        f.getIndex = [get] { return get() ? 1 : 0; };
+        f.setIndex = [set](int i) { set(i == 1); };
+        fields_.push_back(std::move(f));
+    };
+
+    const struct { CancelKind kind; const char* jp; const char* en; } kinds[] = {
+        {CancelKind::Special, "必殺技キャンセル", "SPECIAL CANCEL"},
+        {CancelKind::Super, "超必キャンセル", "SUPER CANCEL"},
+        {CancelKind::DriveRush, "ドライブラッシュ", "DRIVE RUSH"},
+        {CancelKind::TargetCombo, "ターゲットコンボ", "TARGET COMBO"},
+    };
+
+    for (const auto& entry : kinds) {
+        CancelKind kind = entry.kind;
+        CancelRule& rule = moveDraft_.Cancel(kind);
+        {
+            Field f;
+            f.kind = Field::Kind::Choice;
+            f.label = Loc(entry.jp, entry.en);
+            f.options = {"off", "on"};
+            f.optionLabels = japanese_ ? std::vector<std::string>{"なし", "あり"}
+                                       : std::vector<std::string>{"OFF", "ON"};
+            f.getIndex = [this, kind] { return moveDraft_.Cancel(kind).Enabled ? 1 : 0; };
+            f.setIndex = [this, kind](int i) {
+                moveDraft_.Cancel(kind).Enabled = (i == 1);
+                RebuildFields(); // 有効にしたら中身の項目を出す
+            };
+            fields_.push_back(std::move(f));
+        }
+        if (!rule.Enabled) continue;
+
+        addNum(Loc("  開始F", "  FROM"),
+               [this, kind] { return moveDraft_.Cancel(kind).StartFrame; },
+               [this, kind](double v) {
+                   moveDraft_.Cancel(kind).StartFrame = static_cast<int>(v);
+               }, 0, 90);
+        addNum(Loc("  終了F", "  TO"),
+               [this, kind] { return moveDraft_.Cancel(kind).EndFrame; },
+               [this, kind](double v) {
+                   moveDraft_.Cancel(kind).EndFrame = static_cast<int>(v);
+               }, 0, 90);
+        addFlag(Loc("  ヒット時", "  ON HIT"),
+                [this, kind] { return moveDraft_.Cancel(kind).OnHit; },
+                [this, kind](bool v) { moveDraft_.Cancel(kind).OnHit = v; });
+        addFlag(Loc("  ガード時", "  ON BLOCK"),
+                [this, kind] { return moveDraft_.Cancel(kind).OnBlock; },
+                [this, kind](bool v) { moveDraft_.Cancel(kind).OnBlock = v; });
+        addFlag(Loc("  空振り時", "  ON WHIFF"),
+                [this, kind] { return moveDraft_.Cancel(kind).OnWhiff; },
+                [this, kind](bool v) { moveDraft_.Cancel(kind).OnWhiff = v; });
+
+        // 派生先（この技からつなげてよい技の ID）。
+        // 空なら制限なし。ドライブラッシュは技へ移らないので出しません。
+        if (kind != CancelKind::DriveRush) {
+            Field f;
+            f.kind = Field::Kind::Text;
+            f.label = Loc("  派生先(空=全部)", "  ALLOWED MOVES");
+            f.getText = [this, kind] {
+                const auto& allowed = moveDraft_.Cancel(kind).AllowedMoves;
+                if (allowed.empty()) return Loc("(すべての技)", "(ANY MOVE)");
+                std::string out;
+                for (const auto& id : allowed) {
+                    if (!out.empty()) out += ",";
+                    out += id;
+                }
+                return out;
+            };
+            f.setText = [this, kind](const std::string& v) {
+                // 「,」区切りで技 ID を並べます。空にすれば制限なし。
+                std::vector<std::string> ids;
+                std::string cur;
+                for (char c : v) {
+                    if (c == ',' || c == ' ') {
+                        if (!cur.empty()) { ids.push_back(cur); cur.clear(); }
+                    } else {
+                        cur += c;
+                    }
+                }
+                if (!cur.empty()) ids.push_back(cur);
+                moveDraft_.Cancel(kind).AllowedMoves = ids;
+            };
+            fields_.push_back(std::move(f));
+        }
+    }
 }
 
 void Editor::BuildBoxFields() {
@@ -497,7 +741,8 @@ void Editor::BuildBoxFields() {
 
     // 何の判定を編集するか
     addChoice(Loc("対象", "TARGET"),
-              {"HITBOX", "HURT STAND", "HURT CROUCH", "HURT AIR"},
+              {"HITBOX", "HURT STAND", "HURT CROUCH", "HURT AIR",
+               "PUSH STAND", "PUSH CROUCH", "PUSH AIR"},
               [this] { return static_cast<int>(boxTarget_); },
               [this](int i) {
                   boxTarget_ = static_cast<BoxTarget>(i);
@@ -505,7 +750,9 @@ void Editor::BuildBoxFields() {
                   RebuildFields();
               },
               japanese_ ? std::vector<std::string>{"攻撃判定", "食らい 立ち",
-                                                   "食らい しゃがみ", "食らい 空中"}
+                                                   "食らい しゃがみ", "食らい 空中",
+                                                   "押し合い 立ち", "押し合い しゃがみ",
+                                                   "押し合い 空中"}
                         : std::vector<std::string>{});
 
     if (boxTarget_ == BoxTarget::Hitbox) {
@@ -596,16 +843,38 @@ int Editor::CurrentBoxCount() const {
         case BoxTarget::HurtStand: return static_cast<int>(statsDraft_.Hurtboxes.Stand.size());
         case BoxTarget::HurtCrouch: return static_cast<int>(statsDraft_.Hurtboxes.Crouch.size());
         case BoxTarget::HurtAir: return static_cast<int>(statsDraft_.Hurtboxes.Air.size());
+        // 押し合い判定は姿勢ごとに 1 個だけです（増やす意味がないので）。
+        case BoxTarget::PushStand:
+        case BoxTarget::PushCrouch:
+        case BoxTarget::PushAir: return 1;
     }
     return 0;
 }
 
+// 押し合い判定を編集しているか（追加・削除ができない対象）。
+bool Editor::IsPushboxTarget() const {
+    return boxTarget_ == BoxTarget::PushStand || boxTarget_ == BoxTarget::PushCrouch ||
+           boxTarget_ == BoxTarget::PushAir;
+}
+
 std::string Editor::CurrentStanceName() const {
     switch (boxTarget_) {
-        case BoxTarget::HurtCrouch: return "crouch";
-        case BoxTarget::HurtAir: return "air";
+        case BoxTarget::HurtCrouch:
+        case BoxTarget::PushCrouch: return "crouch";
+        case BoxTarget::HurtAir:
+        case BoxTarget::PushAir: return "air";
         default: return "stand";
     }
+}
+
+// 今編集している押し合い判定（対象でなければ nullptr）。
+RectBox* Editor::CurrentPushbox() {
+    if (!IsPushboxTarget()) return nullptr;
+    return &statsDraft_.Pushboxes.ForStance(CurrentStanceName());
+}
+const RectBox* Editor::CurrentPushbox() const {
+    if (!IsPushboxTarget()) return nullptr;
+    return &statsDraft_.Pushboxes.ForStance(CurrentStanceName());
 }
 
 // 今の対象の「部位一覧」を取り出す（攻撃判定のときは nullptr）。
@@ -631,6 +900,10 @@ std::vector<HurtboxPart>* HurtParts(CharacterStats& stats, int target) {
 bool Editor::GetBoxRect(int index, RectBox& out) const {
     if (index < 0 || index >= CurrentBoxCount()) return false;
     size_t i = static_cast<size_t>(index);
+    if (const RectBox* push = CurrentPushbox(); push != nullptr) {
+        out = *push;
+        return true;
+    }
     if (boxTarget_ == BoxTarget::Hitbox) {
         out = ToRect(moveDraft_.Hitboxes[i]);
         return true;
@@ -657,6 +930,15 @@ void Editor::SetBoxValue(int which, double value) {
     if (count == 0) return;
     size_t i = static_cast<size_t>(std::clamp(boxIndex_, 0, count - 1));
 
+    if (RectBox* push = CurrentPushbox(); push != nullptr) {
+        switch (which) {
+            case 0: push->CenterX = value; break;
+            case 1: push->CenterY = value; break;
+            case 2: push->Width = value; break;
+            default: push->Height = value; break;
+        }
+        return;
+    }
     if (boxTarget_ == BoxTarget::Hitbox) {
         HitboxDef& d = moveDraft_.Hitboxes[i];
         switch (which) {
@@ -679,6 +961,10 @@ void Editor::SetBoxValue(int which, double value) {
 }
 
 void Editor::AddBox() {
+    if (IsPushboxTarget()) {
+        SetMessage("押し合い判定は姿勢ごとに 1 個です", "ONE PUSHBOX PER STANCE");
+        return;
+    }
     if (boxTarget_ == BoxTarget::Hitbox) {
         // 新しい判定は、前方の胸の高さに小さめで作ります
         //（そこから調整するのが一番やりやすい位置）。
@@ -701,6 +987,10 @@ void Editor::AddBox() {
 }
 
 void Editor::DeleteBox() {
+    if (IsPushboxTarget()) {
+        SetMessage("押し合い判定は消せません", "PUSHBOX CANNOT BE DELETED");
+        return;
+    }
     int count = CurrentBoxCount();
     if (count == 0) return;
     int idx = std::clamp(boxIndex_, 0, count - 1);
@@ -754,10 +1044,386 @@ void Editor::CreateNewCharacter() {
     SetMessage(newId + " を作成しました", "CREATED " + newId);
 }
 
+// =====================================================================
+// 技の追加・複製・削除
+// =====================================================================
+// 保存の仕組みは今までどおりです（DataManager がユーザーフォルダの
+// JSON に書きます）。ここでは「下書きを作って保存を呼ぶ」だけなので、
+// 追加した技もゲームを閉じて開き直せばそのまま残ります。
+
+// 使われていない技 ID を作る。
+// 見た目の名前（Name）と内部の ID は別物です。名前は日本語でも
+// かまいませんが、ID はファイル名になるので英数字にします。
+std::string Editor::MakeUniqueMoveId(const std::string& base, bool alwaysNumber) const {
+    auto taken = [this](const std::string& id) {
+        return std::find(moveIds_.begin(), moveIds_.end(), id) != moveIds_.end();
+    };
+    if (!alwaysNumber && !base.empty() && !taken(base)) return base;
+    for (int n = 1; n < 1000; ++n) {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%s_%03d", base.empty() ? "move" : base.c_str(), n);
+        if (!taken(buf)) return buf;
+    }
+    return base + "_x";
+}
+
+void Editor::SelectMoveById(const std::string& moveId) {
+    for (size_t i = 0; i < moveIds_.size(); ++i) {
+        if (moveIds_[i] == moveId) { LoadMove(static_cast<int>(i)); break; }
+    }
+    RebuildFields();
+}
+
+void Editor::AddMove() {
+    if (!dm_) return;
+    // 安全な初期値の技を作ります。フレームは 1/1/1、硬直差 0、
+    // キャンセルも空中判定も無し。ここから調整していきます。
+    MoveData m;
+    m.Id = MakeUniqueMoveId("move", true); // move_001, move_002, ...
+    m.Name = Loc("新しい技", "New Move");
+    m.Startup = 1;
+    m.Active = 1;
+    m.Recovery = 1;
+    m.TotalFrame = m.TotalFrames();
+    m.Button = "LP";
+    m.Stance = "stand";
+    m.Tags = {Constants::TagNormal};
+    m.Hitboxes.push_back({28, -60, 18, 12});
+
+    dm_->SaveMove(statsDraft_.Id, m);
+    // キャラクター側の技一覧にも足しておきます（表示用の一覧）。
+    if (std::find(statsDraft_.MoveIds.begin(), statsDraft_.MoveIds.end(), m.Id) ==
+        statsDraft_.MoveIds.end()) {
+        statsDraft_.MoveIds.push_back(m.Id);
+        dm_->SaveCharacter(statsDraft_);
+    }
+
+    moveIds_.push_back(m.Id);
+    std::sort(moveIds_.begin(), moveIds_.end());
+    SelectMoveById(m.Id);
+    dirty_ = false;
+    SetMessage(m.Id + " を追加しました", "ADDED " + m.Id);
+
+    // 名前をすぐ変えられるように、名前の行へ移して入力を始めます。
+    for (size_t i = 0; i < fields_.size(); ++i) {
+        if (fields_[i].kind == Field::Kind::Text && fields_[i].setText) {
+            selected_ = static_cast<int>(i);
+            ActivateSelected();
+            break;
+        }
+    }
+}
+
+void Editor::DuplicateMove() {
+    if (!dm_ || moveIds_.empty()) return;
+    // 中身はそのまま、ID と名前だけ新しくします。
+    MoveData copy = moveDraft_;
+    copy.Id = MakeUniqueMoveId(moveDraft_.Id + "_copy");
+    copy.Name = moveDraft_.Name + Loc(" のコピー", " Copy");
+
+    dm_->SaveMove(statsDraft_.Id, copy);
+    if (std::find(statsDraft_.MoveIds.begin(), statsDraft_.MoveIds.end(), copy.Id) ==
+        statsDraft_.MoveIds.end()) {
+        statsDraft_.MoveIds.push_back(copy.Id);
+        dm_->SaveCharacter(statsDraft_);
+    }
+    moveIds_.push_back(copy.Id);
+    std::sort(moveIds_.begin(), moveIds_.end());
+    SelectMoveById(copy.Id);
+    dirty_ = false;
+    SetMessage(copy.Id + " に複製しました", "DUPLICATED TO " + copy.Id);
+}
+
+// この技を「派生先」に指定している技を探す。
+// 消したあとに、どこからも行けない技 ID が残らないようにするためです。
+std::vector<std::string> Editor::MovesReferencing(const std::string& moveId) const {
+    std::vector<std::string> found;
+    if (!dm_) return found;
+    const auto* moveset = dm_->GetMoveset(statsDraft_.Id);
+    if (!moveset) return found;
+    for (const auto& kv : *moveset) {
+        if (kv.first == moveId) continue;
+        for (int i = 0; i < CancelKindCount; ++i) {
+            const auto& allowed = kv.second.Cancels[i].AllowedMoves;
+            if (std::find(allowed.begin(), allowed.end(), moveId) != allowed.end()) {
+                found.push_back(kv.first);
+                break;
+            }
+        }
+    }
+    std::sort(found.begin(), found.end());
+    return found;
+}
+
+void Editor::RequestDeleteMove() {
+    if (moveIds_.empty()) return;
+    std::string id = moveIds_[static_cast<size_t>(moveIndex_)];
+    std::vector<std::string> refs = MovesReferencing(id);
+
+    std::string detail;
+    if (!refs.empty()) {
+        detail = Loc("この技は他の技から参照されています: ",
+                     "REFERENCED BY: ");
+        for (size_t i = 0; i < refs.size() && i < 4; ++i) {
+            if (i > 0) detail += ",";
+            detail += refs[i];
+        }
+        if (refs.size() > 4) detail += "...";
+    }
+    OpenConfirm(moveDraft_.Name + Loc(" を削除しますか?", " - DELETE?"), detail,
+                [this] { DeleteCurrentMove(); });
+}
+
+void Editor::DeleteCurrentMove() {
+    if (!dm_ || moveIds_.empty()) return;
+    std::string id = moveIds_[static_cast<size_t>(moveIndex_)];
+
+    // 参照している技から、この ID を取り除きます
+    //（消えた技を指したままの派生先が残らないように）。
+    if (const auto* moveset = dm_->GetMoveset(statsDraft_.Id)) {
+        std::vector<MoveData> fixed;
+        for (const auto& kv : *moveset) {
+            if (kv.first == id) continue;
+            MoveData m = kv.second;
+            bool changed = false;
+            for (int i = 0; i < CancelKindCount; ++i) {
+                auto& allowed = m.Cancels[i].AllowedMoves;
+                auto it = std::find(allowed.begin(), allowed.end(), id);
+                if (it != allowed.end()) { allowed.erase(it); changed = true; }
+            }
+            if (changed) fixed.push_back(m);
+        }
+        for (const auto& m : fixed) dm_->SaveMove(statsDraft_.Id, m);
+    }
+
+    dm_->DeleteMove(statsDraft_.Id, id);
+    auto mit = std::find(statsDraft_.MoveIds.begin(), statsDraft_.MoveIds.end(), id);
+    if (mit != statsDraft_.MoveIds.end()) {
+        statsDraft_.MoveIds.erase(mit);
+        dm_->SaveCharacter(statsDraft_);
+    }
+
+    auto it = std::find(moveIds_.begin(), moveIds_.end(), id);
+    if (it != moveIds_.end()) moveIds_.erase(it);
+    moveIndex_ = std::max(0, moveIndex_ - 1);
+    LoadMove(moveIndex_);
+    dirty_ = false;
+    RebuildFields();
+    SetMessage(id + " を削除しました", "DELETED " + id);
+}
+
+// =====================================================================
+// 確認ダイアログ
+// =====================================================================
+// 取り返しのつかない操作（技の削除）の前に必ず出します。
+void Editor::OpenConfirm(const std::string& title, const std::string& detail,
+                         std::function<void()> action) {
+    confirmActive_ = true;
+    confirmTitle_ = title;
+    confirmDetail_ = detail;
+    confirmChoice_ = 0; // 既定は「キャンセル」。誤って消さないように。
+    confirmAction_ = std::move(action);
+}
+
+bool Editor::HandleConfirmKey(SDL_Keycode key) {
+    switch (key) {
+        case SDLK_LEFT:
+        case SDLK_RIGHT:
+        case SDLK_TAB:
+            confirmChoice_ = confirmChoice_ == 0 ? 1 : 0;
+            return true;
+        case SDLK_RETURN:
+        case SDLK_KP_ENTER: {
+            bool run = (confirmChoice_ == 1);
+            auto action = confirmAction_;
+            confirmActive_ = false;
+            confirmAction_ = nullptr;
+            if (run && action) action();
+            return true;
+        }
+        case SDLK_ESCAPE:
+            confirmActive_ = false;
+            confirmAction_ = nullptr;
+            return true;
+        default:
+            return true; // ダイアログ中は他のキーを通さない
+    }
+}
+
 void Editor::SetMessage(const std::string& jp, const std::string& en) {
     message_ = Loc(jp, en);
     messageTimer_ = 2.5;
 }
+
+// =====================================================================
+// マウスで判定を編集する
+// =====================================================================
+// 数値を ← → で 1 ずつ動かすのは正確ですが、「だいたいこの辺」を
+// 決めるには向きません。逆にマウスは大まかに置くのが得意です。
+// 両方から同じデータ（moveDraft_ / statsDraft_）を書き換えるので、
+// どちらで動かしても数値欄と画面の四角形は必ず一致します。
+
+// マウス位置（内部キャンバスの座標）を、判定の座標へ直す。
+// 判定の座標はキャラクターの中心（X）と足元（Y）からの相対で、
+// プレビューは等倍で描いているので、原点を引くだけで戻せます。
+bool Editor::PreviewToBox(double vx, double vy, double& bx, double& by) const {
+    if (previewW_ <= 0 || previewH_ <= 0) return false;
+    if (vx < previewX_ || vx > previewX_ + previewW_) return false;
+    if (vy < previewY_ || vy > previewY_ + previewH_) return false;
+    bx = vx - previewFootX_;
+    by = vy - previewFootY_;
+    return true;
+}
+
+// 目盛りに合わせる。OFF なら 1px 単位（整数）に丸めるだけです。
+// 判定の座標を小数のままにすると、描画とゲーム内の判定で
+// 丸め方が変わってずれるので、必ず整数にします。
+double Editor::SnapValue(double v) const {
+    if (gridSnap_ && gridSize_ > 1) {
+        return std::round(v / gridSize_) * gridSize_;
+    }
+    return std::round(v);
+}
+
+void Editor::SetBoxRect(int index, const RectBox& box) {
+    int count = CurrentBoxCount();
+    if (index < 0 || index >= count) return;
+    size_t i = static_cast<size_t>(index);
+    if (RectBox* push = CurrentPushbox(); push != nullptr) {
+        push->CenterX = std::round(box.CenterX);
+        push->CenterY = std::round(box.CenterY);
+        push->Width = std::max(1.0, std::round(box.Width));
+        push->Height = std::max(1.0, std::round(box.Height));
+        return;
+    }
+    // 幅・高さは 1px 未満にしない（潰れた判定は当たらないので）。
+    double w = std::max(1.0, std::round(box.Width));
+    double h = std::max(1.0, std::round(box.Height));
+    double cx = std::round(box.CenterX);
+    double cy = std::round(box.CenterY);
+    if (boxTarget_ == BoxTarget::Hitbox) {
+        HitboxDef& d = moveDraft_.Hitboxes[i];
+        d.offsetX = cx; d.offsetY = cy; d.width = w; d.height = h;
+        return;
+    }
+    auto* parts = HurtParts(statsDraft_, static_cast<int>(boxTarget_));
+    if (!parts) return;
+    (*parts)[i].Box = RectBox(cx, cy, w, h);
+}
+
+// その位置にある判定を探す。重なっているときは、
+// 手前（あとから描かれる＝番号の大きいほう）を優先します。
+int Editor::BoxAtPoint(double vx, double vy) const {
+    double bx = 0, by = 0;
+    if (!PreviewToBox(vx, vy, bx, by)) return -1;
+    for (int i = CurrentBoxCount() - 1; i >= 0; --i) {
+        RectBox b;
+        if (!GetBoxRect(i, b)) continue;
+        if (bx >= b.Left() && bx <= b.Right() && by >= b.Top() && by <= b.Bottom()) return i;
+    }
+    return -1;
+}
+
+// 四角形のどこをつかんだか（角・辺・内側）。
+Editor::DragMode Editor::HandleAtPoint(const RectBox& box, double bx, double by) const {
+    const double grip = 3.0; // つかめる幅（px）
+    bool nearLeft = std::abs(bx - box.Left()) <= grip;
+    bool nearRight = std::abs(bx - box.Right()) <= grip;
+    bool nearTop = std::abs(by - box.Top()) <= grip;
+    bool nearBottom = std::abs(by - box.Bottom()) <= grip;
+    bool insideX = bx >= box.Left() - grip && bx <= box.Right() + grip;
+    bool insideY = by >= box.Top() - grip && by <= box.Bottom() + grip;
+    if (!insideX || !insideY) return DragMode::None;
+
+    if (nearLeft && nearTop) return DragMode::TopLeft;
+    if (nearRight && nearTop) return DragMode::TopRight;
+    if (nearLeft && nearBottom) return DragMode::BottomLeft;
+    if (nearRight && nearBottom) return DragMode::BottomRight;
+    if (nearLeft) return DragMode::Left;
+    if (nearRight) return DragMode::Right;
+    if (nearTop) return DragMode::Top;
+    if (nearBottom) return DragMode::Bottom;
+    // 内側なら丸ごと移動
+    if (bx >= box.Left() && bx <= box.Right() && by >= box.Top() && by <= box.Bottom()) {
+        return DragMode::Move;
+    }
+    return DragMode::None;
+}
+
+void Editor::HandleMouseDown(double vx, double vy) {
+    mouseVx_ = vx; mouseVy_ = vy;
+    if (confirmActive_ || tab_ != Tab::Boxes) return;
+    double bx = 0, by = 0;
+    if (!PreviewToBox(vx, vy, bx, by)) return;
+
+    // まず、今選んでいる判定の「つかめる場所」を調べます。
+    // 選択中を優先するので、重なっていても狙ったものを掴めます。
+    RectBox current;
+    DragMode mode = DragMode::None;
+    if (GetBoxRect(boxIndex_, current)) mode = HandleAtPoint(current, bx, by);
+
+    if (mode == DragMode::None) {
+        // 掴めなければ、その場所にある判定を選び直します。
+        int hit = BoxAtPoint(vx, vy);
+        if (hit < 0) return;
+        boxIndex_ = hit;
+        RebuildFields();
+        if (!GetBoxRect(boxIndex_, current)) return;
+        mode = DragMode::Move;
+    }
+
+    dragMode_ = mode;
+    dragStartX_ = bx;
+    dragStartY_ = by;
+    dragStartBox_ = current;
+}
+
+void Editor::HandleMouseMove(double vx, double vy) {
+    mouseVx_ = vx; mouseVy_ = vy;
+    if (dragMode_ == DragMode::None) return;
+    double bx = 0, by = 0;
+    // 枠の外へ出ても掴んだままにしたいので、範囲の判定はしません。
+    bx = vx - previewFootX_;
+    by = vy - previewFootY_;
+
+    double dx = bx - dragStartX_;
+    double dy = by - dragStartY_;
+
+    // つかんだ瞬間の四角形を基準に、辺の位置を動かします。
+    double left = dragStartBox_.Left();
+    double right = dragStartBox_.Right();
+    double top = dragStartBox_.Top();
+    double bottom = dragStartBox_.Bottom();
+
+    switch (dragMode_) {
+        case DragMode::Move: {
+            double cx = SnapValue(dragStartBox_.CenterX + dx);
+            double cy = SnapValue(dragStartBox_.CenterY + dy);
+            SetBoxRect(boxIndex_, RectBox(cx, cy, dragStartBox_.Width, dragStartBox_.Height));
+            dirty_ = true;
+            return;
+        }
+        case DragMode::Left: left = SnapValue(left + dx); break;
+        case DragMode::Right: right = SnapValue(right + dx); break;
+        case DragMode::Top: top = SnapValue(top + dy); break;
+        case DragMode::Bottom: bottom = SnapValue(bottom + dy); break;
+        case DragMode::TopLeft: left = SnapValue(left + dx); top = SnapValue(top + dy); break;
+        case DragMode::TopRight: right = SnapValue(right + dx); top = SnapValue(top + dy); break;
+        case DragMode::BottomLeft:
+            left = SnapValue(left + dx); bottom = SnapValue(bottom + dy); break;
+        case DragMode::BottomRight:
+            right = SnapValue(right + dx); bottom = SnapValue(bottom + dy); break;
+        default: return;
+    }
+    // 左右・上下が入れ替わってしまったら、つぶれないように直します。
+    if (right < left + 1) right = left + 1;
+    if (bottom < top + 1) bottom = top + 1;
+    SetBoxRect(boxIndex_, RectBox((left + right) / 2.0, (top + bottom) / 2.0,
+                                  right - left, bottom - top));
+    dirty_ = true;
+}
+
+void Editor::HandleMouseUp() { dragMode_ = DragMode::None; }
 
 // =====================================================================
 // 入力
@@ -779,6 +1445,20 @@ void Editor::AdjustSelected(int direction, bool shift) {
     Field& f = fields_[static_cast<size_t>(selected_)];
 
     if (f.kind == Field::Kind::Number && f.getNum && f.setNum) {
+        // 「D（ダウン）」を入れられる欄は、数値の上限のさらに右側に
+        // D があるものとして扱います。→ を押していくと最大値の次が D、
+        // D から ← を押すと最大値に戻ります。
+        if (f.getDown && f.setDown) {
+            if (f.getDown()) {
+                if (direction < 0) { f.setDown(false); f.setNum(f.maxV); dirty_ = true; }
+                return; // D のまま右へは動かさない
+            }
+            if (direction > 0 && f.hasRange && f.getNum() >= f.maxV) {
+                f.setDown(true);
+                dirty_ = true;
+                return;
+            }
+        }
         // Shift を押していると 10 倍動きます。細かい微調整と、
         // 大きく変えたいときを 1 つのキーで両立させるためです。
         double step = f.step * (shift ? 10.0 : 1.0);
@@ -799,6 +1479,12 @@ void Editor::ActivateSelected() {
     Field& f = fields_[static_cast<size_t>(selected_)];
     if (f.kind == Field::Kind::Action && f.onActivate) {
         f.onActivate();
+    } else if (f.kind == Field::Kind::Number && f.getDown && f.setDown) {
+        // 数値でも D でも入力できる欄。キーボードから直接打てます。
+        editingText_ = true;
+        editingField_ = selected_;
+        textBuffer_ = f.getDown() ? std::string("D")
+                                  : FormatNumber(f.getNum(), f.decimals);
     } else if (f.kind == Field::Kind::Text && f.getText) {
         // 文字入力の開始。今の値を編集用の文字列に写します。
         editingText_ = true;
@@ -809,12 +1495,31 @@ void Editor::ActivateSelected() {
 }
 
 bool Editor::HandleKey(SDL_Keycode key, bool shift) {
+    // ---- 確認ダイアログが出ている間は、そちらが入力を全部受け取る ----
+    if (confirmActive_) return HandleConfirmKey(key);
+
     // ---- 文字入力中の処理を先に ----
     if (editingText_) {
         if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
             if (editingField_ >= 0 && editingField_ < static_cast<int>(fields_.size())) {
                 Field& f = fields_[static_cast<size_t>(editingField_)];
-                if (f.setText) { f.setText(textBuffer_); dirty_ = true; }
+                if (f.kind == Field::Kind::Number && f.setDown && f.setNum) {
+                    // "D" または "d" ならダウン技。それ以外は数値として読みます。
+                    std::string t;
+                    for (char c : textBuffer_) { if (c != ' ') t += c; }
+                    if (t == "D" || t == "d") {
+                        f.setDown(true);
+                    } else if (!t.empty()) {
+                        f.setDown(false);
+                        double v = std::atof(t.c_str());
+                        if (f.hasRange) v = std::clamp(v, f.minV, f.maxV);
+                        f.setNum(v);
+                    }
+                    dirty_ = true;
+                } else if (f.setText) {
+                    f.setText(textBuffer_);
+                    dirty_ = true;
+                }
             }
             editingText_ = false;
             RebuildFields();
@@ -851,6 +1556,22 @@ bool Editor::HandleKey(SDL_Keycode key, bool shift) {
             return true;
         }
         case SDLK_s: Save(); return true;
+        case SDLK_g:
+            // 判定タブでの目盛り吸着（Snap to Grid）の ON / OFF。
+            gridSnap_ = !gridSnap_;
+            SetMessage(gridSnap_ ? "目盛りに吸着: ON" : "目盛りに吸着: OFF",
+                       gridSnap_ ? "SNAP TO GRID: ON" : "SNAP TO GRID: OFF");
+            return true;
+        case SDLK_LEFTBRACKET:
+            if (gridSize_ > 1) gridSize_ /= 2;
+            SetMessage("目盛り " + std::to_string(gridSize_) + "PX",
+                       "GRID " + std::to_string(gridSize_) + "PX");
+            return true;
+        case SDLK_RIGHTBRACKET:
+            if (gridSize_ < 16) gridSize_ *= 2;
+            SetMessage("目盛り " + std::to_string(gridSize_) + "PX",
+                       "GRID " + std::to_string(gridSize_) + "PX");
+            return true;
         case SDLK_l:
             // 表示言語の切り替え。ラベルは項目を組み立てるときに決まるので、
             // 切り替えたら一覧を作り直す必要があります。
@@ -908,6 +1629,7 @@ void Editor::Draw(Renderer& r) {
     }
 
     DrawFooter(r);
+    DrawConfirm(r); // 出ていれば、いちばん手前に重ねる
 
     if (messageTimer_ > 0.0) messageTimer_ -= 1.0 / 60.0;
 }
@@ -983,7 +1705,13 @@ void Editor::DrawFieldList(Renderer& r, float x, float y, float w, float h) {
         Color valueColor = isSelected ? pal.AccentDeep : pal.Ink;
         switch (f.kind) {
             case Field::Kind::Number:
-                if (f.getNum) {
+                if (editingText_ && index == editingField_) {
+                    value = textBuffer_ + "_"; // 入力中はカーソルを出す
+                    valueColor = pal.Accent;
+                } else if (f.getDown && f.getDown()) {
+                    // ダウン技の欄は、数値のかわりに D と出します。
+                    value = "D";
+                } else if (f.getNum) {
                     value = FormatNumber(f.getNum(), f.decimals);
                     if (!f.unit.empty()) value += " " + f.unit;
                 }
@@ -1035,6 +1763,13 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
     float footX = x + w * 0.45f;
     float footY = y + h - 14;
 
+    // マウス操作のために、原点と表示範囲を覚えておきます。
+    // 描くときと同じ値を使うので、見えている四角形とつかめる場所が
+    // ずれることがありません。
+    previewFootX_ = footX;
+    previewFootY_ = footY;
+    previewX_ = x; previewY_ = y; previewW_ = w; previewH_ = h;
+
     // 地面の線
     r.FillRect(x + 2, footY, w - 4, 1, pal.Ink45);
 
@@ -1072,10 +1807,18 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
         for (const auto& p : statsDraft_.Hurtboxes.PartsForStance(moveDraft_.Stance)) {
             drawBox(p.Box, Color(40, 170, 80), false);
         }
+    } else if (IsPushboxTarget()) {
+        // 押し合い判定を編集するときは、同じ姿勢の食らい判定を
+        // 薄く出します（体の幅と見比べられるように）。
+        for (const auto& p : statsDraft_.Hurtboxes.PartsForStance(CurrentStanceName())) {
+            drawBox(p.Box, Color(40, 170, 80), false);
+        }
     }
-    // 編集中の一式（攻撃判定なら赤、食らい判定なら緑）。
+    // 編集中の一式。攻撃判定は赤、食らい判定は緑、押し合いは青。
     // 選んでいる箱だけ濃く描いて、どれを編集中か分かるようにします。
-    Color boxColor = (boxTarget_ == BoxTarget::Hitbox) ? Color(220, 50, 40) : Color(40, 170, 80);
+    Color boxColor = (boxTarget_ == BoxTarget::Hitbox) ? Color(220, 50, 40)
+                   : IsPushboxTarget() ? Color(60, 110, 220)
+                                       : Color(40, 170, 80);
     for (int i = 0; i < CurrentBoxCount(); ++i) {
         RectBox b;
         if (GetBoxRect(i, b)) drawBox(b, boxColor, i == boxIndex_);
@@ -1095,6 +1838,67 @@ void Editor::DrawBoxPreview(Renderer& r, float x, float y, float w, float h) {
         }
         std::string size = FormatNumber(right - left, 0) + "x" + FormatNumber(bottom - top, 0);
         DrawPixelTextRight(r, size, x + w - 3, y + 3, 1.0f, pal.Ink55);
+    }
+
+    // 選んでいる判定に、つまめる印（ハンドル）を出します。
+    // 四隅は幅と高さの両方、辺はどちらか一方が変わります。
+    RectBox sel;
+    if (GetBoxRect(boxIndex_, sel)) {
+        float l = footX + static_cast<float>(sel.Left());
+        float rr = footX + static_cast<float>(sel.Right());
+        float t = footY + static_cast<float>(sel.Top());
+        float b = footY + static_cast<float>(sel.Bottom());
+        float mx = (l + rr) / 2.0f, my = (t + b) / 2.0f;
+        const float hs = 3.0f; // 印の大きさ
+        const float pts[8][2] = {{l, t}, {mx, t}, {rr, t}, {rr, my},
+                                 {rr, b}, {mx, b}, {l, b}, {l, my}};
+        for (const auto& p : pts) {
+            r.FillRect(p[0] - hs / 2, p[1] - hs / 2, hs, hs, pal.Ink);
+            r.DrawRect(p[0] - hs / 2, p[1] - hs / 2, hs, hs, pal.White, 1.0f);
+        }
+    }
+
+    // 目盛り吸着の状態を隅に出します（今どちらで動くのか分かるように）。
+    std::string grid = gridSnap_ ? (Loc("吸着 ", "SNAP ") + std::to_string(gridSize_) + "PX")
+                                 : Loc("吸着なし(1PX)", "FREE (1PX)");
+    DrawPixelText(r, grid, x + 3, y + h - 9, 1.0f, pal.Ink45);
+}
+
+// 確認ダイアログ（技の削除など）。画面の中央に出します。
+void Editor::DrawConfirm(Renderer& r) {
+    if (!confirmActive_) return;
+    const auto& pal = GetPalette();
+    float w = std::min(static_cast<float>(VirtualW) - 20.0f, 300.0f);
+    float lh = LineH();
+    float h = lh * 4.0f + 16.0f;
+    float x = (VirtualW - w) / 2.0f;
+    float y = (VirtualH - h) / 2.0f;
+
+    // 後ろを暗くして、ダイアログ以外を触れないことを伝えます。
+    r.FillRect(0, 0, static_cast<float>(VirtualW), static_cast<float>(VirtualH),
+               Color(0, 0, 0, 120));
+    r.FillRect(x, y, w, h, pal.PanelBg);
+    r.DrawRect(x, y, w, h, pal.Ink, 1.0f);
+
+    DrawPixelText(r, confirmTitle_, x + 6, y + 5, 1.0f, pal.Ink);
+    if (!confirmDetail_.empty()) {
+        DrawPixelText(r, confirmDetail_, x + 6, y + 5 + lh, 1.0f, pal.AccentDeep);
+    }
+
+    const std::string labels[2] = {Loc("キャンセル", "CANCEL"), Loc("削除", "DELETE")};
+    float by = y + h - lh - 5;
+    float bx = x + 6;
+    for (int i = 0; i < 2; ++i) {
+        float bw = PixelTextWidth(labels[i], 1.0f) + 10;
+        bool active = (confirmChoice_ == i);
+        if (active) {
+            r.FillRect(bx, by - 1, bw, lh + 2, pal.Ink);
+            DrawPixelText(r, labels[i], bx + 5, by, 1.0f, pal.White);
+        } else {
+            r.DrawRect(bx, by - 1, bw, lh + 2, pal.RuleSoft, 1.0f);
+            DrawPixelText(r, labels[i], bx + 5, by, 1.0f, pal.Ink55);
+        }
+        bx += bw + 6;
     }
 }
 
@@ -1118,9 +1922,23 @@ void Editor::DrawFooter(Renderer& r) {
         return;
     }
 
-    DrawPixelText(r, Loc("矢印:変更  SHIFT:10倍  ENTER:実行  TAB:ページ",
-                         "ARROWS:EDIT  SHIFT:X10  ENTER:GO  TAB:PAGE"),
-                  4, FooterY() + 2, 1.0f, pal.Ink70);
+    if (confirmActive_) {
+        DrawPixelText(r, Loc("← →:選ぶ  ENTER:決定  ESC:やめる",
+                             "LEFT/RIGHT:CHOOSE  ENTER:OK  ESC:CANCEL"),
+                      4, FooterY() + 3, 1.0f, pal.Ink70);
+        return;
+    }
+
+    if (tab_ == Tab::Boxes) {
+        // 判定タブはマウスでも編集できるので、その説明を出します。
+        DrawPixelText(r, Loc("マウス:判定をドラッグ / 角で大きさ変更  G:目盛り吸着  [ ]:目盛り幅",
+                             "MOUSE:DRAG BOX / CORNERS RESIZE  G:SNAP  [ ]:GRID SIZE"),
+                      4, FooterY() + 2, 1.0f, pal.Ink70);
+    } else {
+        DrawPixelText(r, Loc("矢印:変更  SHIFT:10倍  ENTER:実行  TAB:ページ",
+                             "ARROWS:EDIT  SHIFT:X10  ENTER:GO  TAB:PAGE"),
+                      4, FooterY() + 2, 1.0f, pal.Ink70);
+    }
     DrawPixelText(r, Loc("S:保存  PGUP/PGDN:キャラ  L:日本語/EN  ESC:戻る",
                          "S:SAVE  PGUP/PGDN:CHARACTER  L:JP/EN  ESC:BACK"),
                   4, FooterY() + 3 + LineH(), 1.0f, pal.Ink55);

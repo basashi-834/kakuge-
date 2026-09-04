@@ -10,6 +10,7 @@
     "blockAdvantage": -24,
     "knockdownFrames": 22,
     "hitstop": 7,
+    "guardstop": 5,
     "guardType": "High",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -25,11 +26,6 @@
     "hitOutcome": "Knockdown",
     "meterGain": 12,
     "meterCost": 0,
-    "cancelRoutes": [
-        "super_combo"
-    ],
-    "cancelStartFrame": 9,
-    "cancelEndFrame": 16,
     "tags": [
         "Special"
     ],
@@ -43,5 +39,42 @@
     "stance": "stand",
     "requiresAir": false,
     "projectile": {},
-    "effectiveRange": 102.56
+    "effectiveRange": 102.56,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 9,
+            "endFrame": 16,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 9,
+            "endFrame": 16,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 9,
+            "endFrame": 16,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 9,
+            "endFrame": 16,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }

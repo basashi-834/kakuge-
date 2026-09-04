@@ -25,6 +25,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include "engine/Constants.h"
 
 namespace kakuge {
 
@@ -92,6 +93,36 @@ struct HurtboxPart {
 // 理不尽に感じられるからです。
 // キャラクターごとの上書きは data/characters/*.json の "hurtboxes" で
 // 指定できます。
+// ---------------------------------------------------------------------
+// PushboxSet - 姿勢ごとの押し合い判定
+// ---------------------------------------------------------------------
+// 体と体が重ならないように押し合うためだけの四角形です。
+// 攻撃が当たるかどうかには一切関係しません。
+// 見た目の幅（52px）よりわざと細くしてあります。腕や髪で相手を
+// 押してしまうと不自然だからです（胴・腰・脚が目安）。
+//
+// 中心は「キャラクターの中心 X・足元 Y」からの相対。
+// 地上は足元に立ちますが、空中だけは胴体の位置を中心にします
+//（真下を通るときに、抱えた脚で相手を押さないように）。
+struct PushboxSet {
+    RectBox Stand{0, -GameSpec::PushboxStandHeight / 2.0,
+                  GameSpec::PushboxStandWidth, GameSpec::PushboxStandHeight};
+    RectBox Crouch{0, -GameSpec::PushboxCrouchHeight / 2.0,
+                   GameSpec::PushboxCrouchWidth, GameSpec::PushboxCrouchHeight};
+    RectBox Air{0, -45, GameSpec::PushboxAirWidth, GameSpec::PushboxAirHeight};
+
+    RectBox& ForStance(const std::string& stance) {
+        if (stance == "crouch") return Crouch;
+        if (stance == "air") return Air;
+        return Stand;
+    }
+    const RectBox& ForStance(const std::string& stance) const {
+        if (stance == "crouch") return Crouch;
+        if (stance == "air") return Air;
+        return Stand;
+    }
+};
+
 struct HurtboxSet {
     // 立ち: 脚 45 ＋ 胴 32 ＋ 頭 18 = ちょうど 95（キャラの身長）。
     // 部位どうしは隙間なく接しています（判定の抜けを作らないため）。

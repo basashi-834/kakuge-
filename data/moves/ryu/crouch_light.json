@@ -9,6 +9,7 @@
     "hitAdvantage": 3,
     "blockAdvantage": -2,
     "hitstop": 4,
+    "guardstop": 2,
     "guardType": "Low",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -24,16 +25,6 @@
     "hitOutcome": "Normal",
     "meterGain": 5,
     "meterCost": 0,
-    "cancelRoutes": [
-        "crouch_medium",
-        "crouch_heavy",
-        "standing_medium",
-        "fireball",
-        "anti_air_special",
-        "super_combo"
-    ],
-    "cancelStartFrame": 4,
-    "cancelEndFrame": 10,
     "tags": [
         "Light",
         "Normal",
@@ -46,5 +37,51 @@
     },
     "input": "",
     "button": "LK",
-    "stance": "crouch"
+    "stance": "crouch",
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 10,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "fireball",
+                "anti_air_special"
+            ]
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 10,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 4,
+            "endFrame": 10,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": true,
+            "startFrame": 4,
+            "endFrame": 10,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "crouch_medium",
+                "crouch_heavy",
+                "standing_medium"
+            ]
+        }
+    }
 }

@@ -93,6 +93,10 @@ public:
     double VelocityX = 0.0, VelocityY = 0.0;
 
     const MoveData* CurrentMoveData = nullptr;      // 今出している技
+    // 今出している技が当たったか（キャンセル条件の判定に使う）。
+    // 技を出した瞬間は Whiff（＝まだ当たっていない）で、
+    // 当たった / ガードされた時点で BattleSystem が書き換えます。
+    MoveContact CurrentMoveContact = MoveContact::Whiff;
     bool ProjectileSpawnedThisActivation = false;   // 飛び道具は 1 回だけ
 
     // 各種タイマー（すべてフレーム単位。0 になったら効果終了）
@@ -105,8 +109,10 @@ public:
     int KnockdownTimer = 0; // ダウン
     int WakeupTimer = 0;    // 起き上がり
     int ThrownTimer = 0;    // 投げられ中
-    int DashTimer = 0;      // ダッシュ中
-    int StepTimer = 0;      // ステップ中（決まった距離だけ前へ踏み込む）
+    int DashTimer = 0;      // 前ダッシュ中
+    int StepTimer = 0;      // 前ステップ中（決まった距離だけ前へ踏み込む）
+    int BackDashTimer = 0;  // バックダッシュ中
+    int BackStepTimer = 0;  // バックステップ中（決まった距離だけ後ろへ下がる）
     // 空中技の着地硬直。空中技の硬直は空中では消化されず、
     // 着地してからこのタイマーぶんだけ動けません。
     int LandingRecoveryTimer = 0;
@@ -114,15 +120,9 @@ public:
     bool IsCrouchingGuard = false;
     int FrameCounter = 0;   // 試合開始からの総フレーム数
 
-    // ---- 押し合い判定（プッシュボックス）の大きさ ----
-    // 見た目（幅 55 くらい）よりわざと細くしてあります。
-    // 伸ばした腕や広い足幅で相手を押してしまうと不自然だからです。
-    // 地上は足元に立ちますが、空中だけは胴体の位置を中心にします
-    //（真下を通るときに、抱えた脚で相手を押さないように）。
-    int PushboxStandW = GameSpec::PushboxStandWidth, PushboxStandH = GameSpec::PushboxStandHeight;
-    int PushboxCrouchW = GameSpec::PushboxCrouchWidth, PushboxCrouchH = GameSpec::PushboxCrouchHeight;
-    int PushboxAirW = GameSpec::PushboxAirWidth, PushboxAirH = GameSpec::PushboxAirHeight;
-    static constexpr int AirPushboxCenterY = -45;
+    // 押し合い判定（プッシュボックス）は、姿勢ごとの大きさを
+    // キャラクターデータ（Stats.Pushboxes）が持っています。
+    // エディタで 1px 単位に調整でき、書かなければ標準の値です。
 
     bool HitboxesWereLive = false;          // 前フレームに攻撃判定が出ていたか
     std::vector<RectBox> ActiveHitboxRects; // 今出ている攻撃判定（複数可）
@@ -163,6 +163,13 @@ public:
     int LastForwardTapFrame = -999;   // 前を入れた最後のフレーム
     bool ForwardHeldPrev = false;     // 前フレームに前を入れていたか
     bool ForwardTappedNow = false;    // 今フレームに前を「入れ直した」か
+    bool ForwardDoubleTapped = false; // 今フレームが「前・前」の 2 回目か
+    // 後ろも同じように数えます。前とは完全に別のカウンタなので、
+    // 前ステップの設定を変えてもバックステップには影響しません。
+    int LastBackTapFrame = -999;
+    bool BackHeldPrev = false;
+    bool BackTappedNow = false;
+    bool BackDoubleTapped = false;
 
     static constexpr double GroundY = 0.0;
     static constexpr int DashInputWindow = 14;   // 前・前 をこのフレーム以内に入れるとダッシュ
@@ -187,15 +194,22 @@ public:
         CurrentHP = Stats.MaxHP;
         IsDead = false;
         CurrentMoveData = nullptr;
+        CurrentMoveContact = MoveContact::Whiff;
         HitstunTimer = BlockstunTimer = HitstopTimer = 0;
         InputQueue.clear();
         BufferClock = 0;
         KnockdownTimer = WakeupTimer = ThrownTimer = DashTimer = StepTimer = 0;
+        BackDashTimer = BackStepTimer = 0;
         LandingRecoveryTimer = 0;
         LandedDuringMove = false;
         LastForwardTapFrame = -999;
         ForwardHeldPrev = false;
         ForwardTappedNow = false;
+        ForwardDoubleTapped = false;
+        LastBackTapFrame = -999;
+        BackHeldPrev = false;
+        BackTappedNow = false;
+        BackDoubleTapped = false;
         Gauge.Value = 0.0;
         InputBuf.Clear();
         SM.ChangeState(CharState::Idle, "");
@@ -273,12 +287,23 @@ public:
             return;
         }
 
-        // 3) 「前を入れ直したか」を判定する。ここでやるのは、
-        //    どの状態にいても（技の最中でも、のけぞり中でも）
-        //    レバーの前フレームとの差を正しく取り続けるためです。
+        // 3) 「前（後ろ）を入れ直したか」「2 回目か」を判定する。
+        //    ここでやるのは、どの状態にいても（技の最中でも、のけぞり
+        //    中でも）レバーの前フレームとの差を正しく取り続けるため
+        //    です。技の最中にも見ているのは、ドライブラッシュ
+        //    キャンセル（技をキャンセルして前へ踏み込む）のためです。
         bool forwardNow = IsHoldingForward(raw);
         ForwardTappedNow = forwardNow && !ForwardHeldPrev;
         ForwardHeldPrev = forwardNow;
+        ForwardDoubleTapped =
+            ForwardTappedNow && (FrameCounter - LastForwardTapFrame) <= DashInputWindow;
+        if (ForwardTappedNow) LastForwardTapFrame = FrameCounter;
+
+        bool backNow = IsHoldingBack(raw);
+        BackTappedNow = backNow && !BackHeldPrev;
+        BackHeldPrev = backNow;
+        BackDoubleTapped = BackTappedNow && (FrameCounter - LastBackTapFrame) <= DashInputWindow;
+        if (BackTappedNow) LastBackTapFrame = FrameCounter;
 
         // 4) 先行入力の管理。止まっていないフレームだけ時計を進めます。
         BufferClock += 1;
@@ -388,6 +413,12 @@ public:
             case CharState::Attack: {
                 // 技の最中。キャンセル可能時間帯なら次の技を受け付けます
                 //（＝コンボ）。受け付けなければ今の技を進めるだけ。
+                //
+                // 技へのキャンセルより先に、前・前 での踏み込み
+                //（ドライブラッシュキャンセル）を見ます。同じフレームに
+                // 両方成立することはまずありませんが、順番を決めておかないと
+                // 状況によって結果が変わってしまいます。
+                if (TryDriveRushCancel(raw)) break;
                 if (!TryStartMove(raw, pressed)) ProgressMove();
                 break;
             }
@@ -411,6 +442,7 @@ public:
             default: {
                 // 立ち・歩き・しゃがみ（操作を受け付けられる状態）
                 if (DashTimer > 0) DashTimer -= 1;
+                if (BackDashTimer > 0) BackDashTimer -= 1;
                 if (!TryStartMove(raw, pressed)) HandleGroundMovement(raw);
                 break;
             }
@@ -493,6 +525,61 @@ public:
         return Stats.StepDistance * Constants::Fps / frames;
     }
 
+    // このキャラクターの後退が「バックステップ」方式か。
+    bool UsesBackStep() const { return Stats.BackMoveType == "step"; }
+
+    // バックステップの速さ（px/秒）。前ステップと同じ考え方で、
+    // 「決めた距離を決めたフレーム数で下がりきる」速さを逆算します。
+    double BackStepSpeed() const {
+        int frames = std::max(1, Stats.BackStepFrames);
+        return Stats.BackStepDistance * Constants::Fps / frames;
+    }
+
+    // 前・前 が成立したときの踏み込み開始。
+    void StartForwardDash() {
+        if (UsesStep()) {
+            StepTimer = std::max(1, Stats.StepFrames);
+            // 「前・前」の記録を消します。消さないと、ステップ中に
+            // 入れた前入力でもう一度成立して 2 回連続で飛んでしまいます。
+            LastForwardTapFrame = -999;
+        } else {
+            DashTimer = DashDuration;
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // ドライブラッシュキャンセル（技をキャンセルして前へ踏み込む）
+    // -----------------------------------------------------------------
+    // 技の途中で 前・前 と入れると、残りのフレームを打ち切って
+    // 前ステップ（またはダッシュ）に移ります。技ごとに
+    // 「何フレーム目から何フレーム目まで」「ヒット時だけか」などを
+    // 設定できます（MoveData の CancelKind::DriveRush）。
+    bool TryDriveRushCancel(const RawInput& raw) {
+        if (CurrentMoveData == nullptr) return false;
+        if (!ForwardDoubleTapped) return false;
+        if (DashTimer > 0 || StepTimer > 0) return false;
+        if (!CurrentMoveData->AllowsCancel(CancelKind::DriveRush, SM.CurrentFrame,
+                                           CurrentMoveContact)) {
+            return false;
+        }
+        FinishMove(raw);          // 技を打ち切る（残りの持続・硬直を飛ばす）
+        StartForwardDash();
+        VelocityX = (StepTimer > 0 ? StepSpeed() : Stats.DashSpeed) * Facing;
+        SM.ChangeState(CharState::WalkForward, "");
+        PendingSounds.push_back("dash");
+        return true;
+    }
+
+    // 後ろ・後ろ が成立したときのバックステップ開始。
+    void StartBackDash() {
+        if (UsesBackStep()) {
+            BackStepTimer = std::max(1, Stats.BackStepFrames);
+            LastBackTapFrame = -999;
+        } else {
+            BackDashTimer = DashDuration;
+        }
+    }
+
     // 値を目標へ step ずつ近づける（行き過ぎないように）。
     static double MoveToward(double current, double target, double step) {
         if (current < target) return std::min(current + step, target);
@@ -517,6 +604,15 @@ public:
             VelocityX = StepSpeed() * Facing;
             SM.ChangeState(CharState::WalkForward, "");
             if (StepTimer <= 0) VelocityX = 0.0;
+            return;
+        }
+        // バックステップも同じ考え方で、最後まで下がりきります。
+        // フレーム数も距離も前ステップとは別の設定です。
+        if (BackStepTimer > 0) {
+            BackStepTimer -= 1;
+            VelocityX = -BackStepSpeed() * Facing;
+            SM.ChangeState(CharState::WalkBackward, "");
+            if (BackStepTimer <= 0) VelocityX = 0.0;
             return;
         }
 
@@ -547,21 +643,7 @@ public:
             // 2 回目の「入れ直し」が、前回から DashInputWindow フレーム
             // 以内なら踏み込みます。押しっぱなしは 1 回目のままなので、
             // ただの前歩きになります。
-            bool doubleTapped = ForwardTappedNow &&
-                                (FrameCounter - LastForwardTapFrame) <= DashInputWindow;
-            if (doubleTapped && DashTimer <= 0 && StepTimer <= 0) {
-                if (UsesStep()) {
-                    StepTimer = std::max(1, Stats.StepFrames);
-                    // 「前・前」の記録を消します。消さないと、ステップ中は
-                    // この関数を通らない（上で return する）ので前入力の
-                    // 時刻が古いまま残り、ステップが終わった直後に
-                    // もう一度成立して 2 回連続で飛んでしまいます。
-                    LastForwardTapFrame = -999;
-                } else {
-                    DashTimer = DashDuration;
-                }
-            }
-            if (StepTimer <= 0 && ForwardTappedNow) LastForwardTapFrame = FrameCounter;
+            if (ForwardDoubleTapped && DashTimer <= 0 && StepTimer <= 0) StartForwardDash();
             if (StepTimer > 0) {
                 // 踏み込んだ最初のフレーム。次のフレームからは上の
                 // 「ステップ中」の分岐が処理を引き継ぎます。
@@ -574,6 +656,17 @@ public:
             VelocityX = spd * Facing;
             SM.ChangeState(CharState::WalkForward, "");
         } else if (IsHoldingBack(raw)) {
+            // 後ろ・後ろ でバックステップ（バックダッシュ）。
+            // ガード姿勢に入る前に見ます。相手が攻撃している最中こそ
+            // 後ろへ逃げたい場面なので、そこで出せないと意味がありません。
+            if (BackDoubleTapped && BackDashTimer <= 0 && BackStepTimer <= 0) {
+                StartBackDash();
+                if (BackStepTimer > 0) {
+                    VelocityX = -BackStepSpeed() * Facing;
+                    SM.ChangeState(CharState::WalkBackward, "");
+                    return;
+                }
+            }
             // 後ろ入力。相手が技を出していれば、下がらずガード姿勢に入ります。
             // このとき速度を必ず 0 にするのが大事です。0 にしないと、
             // 同じフレームで設定した後退速度が残り、ガード硬直中に
@@ -582,7 +675,9 @@ public:
                 VelocityX = 0.0;
                 SM.ChangeState(CharState::Block, "");
             } else {
-                VelocityX = -Stats.WalkBackwardSpeed * Facing;
+                double spd = Stats.WalkBackwardSpeed;
+                if (BackDashTimer > 0) spd = Stats.BackDashSpeed;
+                VelocityX = -spd * Facing;
                 SM.ChangeState(CharState::WalkBackward, "");
             }
         } else {
@@ -698,10 +793,11 @@ public:
         if (SM.CurrentState == CharState::Attack) {
             if (CurrentMoveData == nullptr) return false;
             // 技の最中に出せるのはキャンセル可能時間帯だけ。
-            // 「どの技からどの技へ」という許可リストは使いません。
-            // タイミングさえ合えば何にでもつなげられる作りにして、
-            // コンボの自由度を高くしてあります。
-            return MoveExecutor::CanCancel(*CurrentMoveData, SM.CurrentFrame);
+            // 出したい技の種類（必殺技 / 超必殺技 / 通常技）ごとに
+            // 別々の設定を見るので、「必殺技にはキャンセルできるが
+            // 通常技にはできない」といった作り分けができます。
+            return MoveExecutor::CanCancelInto(*CurrentMoveData, SM.CurrentFrame,
+                                               CurrentMoveContact, move);
         }
         return true;
     }
@@ -709,6 +805,7 @@ public:
     void StartMove(const MoveData& move) {
         if (move.MeterCost > 0) Gauge.Spend(move.MeterCost);
         CurrentMoveData = &move;
+        CurrentMoveContact = MoveContact::Whiff; // まだ当たっていない
         ProjectileSpawnedThisActivation = false;
         AlreadyHit.clear();
         HitboxesWereLive = false;
@@ -991,10 +1088,7 @@ public:
         if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasPushbox) {
             return fb->pushbox.Width / 2.0;
         }
-        std::string stance = Stance();
-        if (stance == "air") return PushboxAirW / 2.0;
-        if (stance == "crouch") return PushboxCrouchW / 2.0;
-        return PushboxStandW / 2.0;
+        return Stats.Pushboxes.ForStance(Stance()).Width / 2.0;
     }
 
     // 指定した向き（+1 右 / -1 左）へ、壁にぶつかるまであと何動けるか。
@@ -1040,10 +1134,30 @@ public:
         else Facing = Constants::FacingLeft;
     }
 
+    // -----------------------------------------------------------------
+    // 空中判定
+    // -----------------------------------------------------------------
+    // 「ゲーム上の空中判定」は、次の 2 つのどちらかで成立します。
+    //   1. 実際に地面から浮いている（Y 座標が地面より上）
+    //   2. 出している技が「このフレームは空中判定」と指定している
+    //
+    // 2 があるおかげで、見た目は地面に足がついていても空中扱いに
+    // でき（昇龍拳の出際など）、地上投げを避けられます。逆に、
+    // 指定が無ければ少し浮いて見えても地上判定のままです。
+    bool IsPhysicallyAirborne() const { return PositionY < (GroundY - 0.01); }
+
+    bool IsAirborne() const {
+        if (IsPhysicallyAirborne()) return true;
+        if (SM.CurrentState == CharState::Attack && CurrentMoveData != nullptr) {
+            return CurrentMoveData->IsAirborneAtFrame(SM.CurrentFrame, IsPhysicallyAirborne());
+        }
+        return false;
+    }
+
     // 判定に使う姿勢名。CurrentStance() と似ていますが、
     // こちらは実際の高さ（空中にいるか）としゃがみガードも見ます。
     std::string Stance() const {
-        if (SM.CurrentState == CharState::Jump || PositionY < (GroundY - 0.01)) return "air";
+        if (SM.CurrentState == CharState::Jump || IsAirborne()) return "air";
         if (SM.CurrentState == CharState::Crouch || IsCrouchingGuard) return "crouch";
         return "stand";
     }
@@ -1066,15 +1180,13 @@ public:
     // 今フレームの押し合い判定（ワールド座標）。
     RectBox PushboxRect() const {
         double ox = std::round(PositionX), oy = std::round(PositionY);
+        int f = Facing < 0 ? -1 : 1;
         if (const FrameBoxSet* fb = CurrentFrameBoxes(); fb != nullptr && fb->hasPushbox) {
-            int f = Facing < 0 ? -1 : 1;
             return RectBox(ox + fb->pushbox.CenterX * f, oy + fb->pushbox.CenterY,
                            fb->pushbox.Width, fb->pushbox.Height);
         }
-        std::string stance = Stance();
-        if (stance == "air") return RectBox(ox, oy + AirPushboxCenterY, PushboxAirW, PushboxAirH);
-        if (stance == "crouch") return RectBox(ox, oy - PushboxCrouchH / 2.0, PushboxCrouchW, PushboxCrouchH);
-        return RectBox(ox, oy - PushboxStandH / 2.0, PushboxStandW, PushboxStandH);
+        const RectBox& b = Stats.Pushboxes.ForStance(Stance());
+        return RectBox(ox + b.CenterX * f, oy + b.CenterY, b.Width, b.Height);
     }
 
     // 投げられ得る状態か（投げる側ではなく、投げられる側の条件）。

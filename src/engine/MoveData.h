@@ -94,6 +94,79 @@ struct FrameBoxSet {
     bool Covers(int frame) const { return frame >= startFrame && frame <= endFrame; }
 };
 
+// ---------------------------------------------------------------------
+// CancelKind - キャンセルの種類
+// ---------------------------------------------------------------------
+// 「キャンセルできる / できない」の 2 択ではなく、種類ごとに
+// 別々の時間帯と条件を持たせます。通常技から必殺技へは繋がるが
+// 超必殺技へは繋がらない、といった作り分けができます。
+//
+// 種類を増やしたいときは、この enum と CancelKindKey / CancelKindCount
+// に 1 行足すだけで、データの読み書きもエディタも自動でついてきます。
+enum class CancelKind {
+    Special,     // 必殺技キャンセル
+    Super,       // 超必殺技キャンセル
+    DriveRush,   // ドライブラッシュ（前ステップ／ダッシュ）キャンセル
+    TargetCombo  // ターゲットコンボ（通常技から通常技）
+};
+inline constexpr int CancelKindCount = 4;
+
+// JSON に書くときのキー名。
+inline const char* CancelKindKey(CancelKind kind) {
+    switch (kind) {
+        case CancelKind::Special: return "special";
+        case CancelKind::Super: return "super";
+        case CancelKind::DriveRush: return "driveRush";
+        case CancelKind::TargetCombo: return "targetCombo";
+    }
+    return "special";
+}
+
+// ---------------------------------------------------------------------
+// CancelRule - 1 種類ぶんのキャンセル設定
+// ---------------------------------------------------------------------
+//   enabled      … この種類のキャンセルを使うか
+//   startFrame   … 何フレーム目からキャンセルできるか
+//   endFrame     … 何フレーム目までキャンセルできるか
+//   onHit / onBlock / onWhiff … どの結果のときに許すか
+//   allowedMoves … 派生できる技の ID（空なら制限なし）
+//
+// 時間帯は持続中に限りません。発生中・硬直中のどこにでも置けます
+//（発生前からキャンセルできる技、硬直だけキャンセルできる技も作れます）。
+struct CancelRule {
+    bool Enabled = false;
+    int StartFrame = 0;
+    int EndFrame = 0;
+    bool OnHit = true;
+    bool OnBlock = true;
+    bool OnWhiff = false;
+    std::vector<std::string> AllowedMoves;
+
+    bool CoversFrame(int frame) const {
+        if (StartFrame <= 0 && EndFrame <= 0) return false;
+        return frame >= StartFrame && frame <= EndFrame;
+    }
+    bool AllowsContact(MoveContact contact) const {
+        switch (contact) {
+            case MoveContact::Hit: return OnHit;
+            case MoveContact::Blocked: return OnBlock;
+            case MoveContact::Whiff: return OnWhiff;
+        }
+        return false;
+    }
+    bool AllowsTarget(const std::string& moveId) const {
+        if (AllowedMoves.empty()) return true; // 制限なし
+        return std::find(AllowedMoves.begin(), AllowedMoves.end(), moveId) != AllowedMoves.end();
+    }
+};
+
+// ---------------------------------------------------------------------
+// AirborneMode - 技中の空中判定の続き方
+// ---------------------------------------------------------------------
+//   FixedDuration … 指定したフレーム数だけ空中判定
+//   UntilLanding  … 指定フレームから、実際に着地するまで空中判定
+enum class AirborneMode { FixedDuration, UntilLanding };
+
 // 無敵時間の指定。
 //   type … 何に対して無敵か（Constants::Invincible* を参照）
 //   start_frame / end_frame … 何フレーム目から何フレーム目まで
@@ -200,13 +273,41 @@ public:
     // ---- キャンセル（コンボ）----
     // 技の途中から次の技に移れる時間帯。ここが開いている間だけ、
     // 硬直を飛ばして次の技を出せます。これがコンボの仕組みです。
-    // CancelRoutes は昔の「この技からこの技へ」という許可リストの
-    // 名残で、今は時間帯（下の 2 つ）だけで判定しています。
-    std::vector<std::string> CancelRoutes;
-    int CancelStartFrame = 0, CancelEndFrame = 0;
+    //
+    // 種類ごとに別々の時間帯・条件を持ちます（必殺技キャンセルは
+    // ヒット時とガード時だけ、ターゲットコンボは特定の技だけ…など）。
+    CancelRule Cancels[CancelKindCount];
+
+    CancelRule& Cancel(CancelKind kind) { return Cancels[static_cast<int>(kind)]; }
+    const CancelRule& Cancel(CancelKind kind) const { return Cancels[static_cast<int>(kind)]; }
 
     std::vector<std::string> Tags;  // 技の性質ラベル（Constants::Tag* 参照）
     Invincibility Inv;              // 無敵時間
+
+    // ---- 技中の空中判定 ----
+    // 「ゲーム上の空中判定」と「見た目の Y 座標」は別物として扱います。
+    // 地面に足がついて見えていても、指定したフレームの間は空中判定に
+    // でき（対空技や無敵技の表現）、逆に少し浮いて見えても
+    // 指定していなければ地上判定のままです。
+    //
+    //   AirborneStart    … 何フレーム目から空中判定になるか
+    //   AirborneDuration … 何フレーム続くか（FixedDuration のとき）
+    //   AirborneMode     … FixedDuration（指定フレーム数）
+    //                      UntilLanding（実際に着地するまで）
+    bool AirborneEnabled = false;
+    int AirborneStart = 0;
+    int AirborneDuration = 0;
+    AirborneMode AirborneKind = AirborneMode::FixedDuration;
+
+    // このフレームで空中判定か（技の指定だけを見る。Y 座標は見ない）。
+    // physicallyAirborne は UntilLanding のときだけ使い、
+    // 「まだ実際に空中にいるか」を呼び出し側から渡します。
+    bool IsAirborneAtFrame(int frame, bool physicallyAirborne) const {
+        if (!AirborneEnabled) return false;
+        if (frame < AirborneStart) return false;
+        if (AirborneKind == AirborneMode::UntilLanding) return physicallyAirborne;
+        return frame < AirborneStart + std::max(1, AirborneDuration);
+    }
 
     // ---- 出し方 ----
     std::string InputCommand;   // レバーコマンド（例 "236"）。空なら通常技
@@ -229,14 +330,36 @@ public:
     bool HasTag(const std::string& tag) const {
         return std::find(Tags.begin(), Tags.end(), tag) != Tags.end();
     }
-    bool CanCancelInto(const std::string& moveId) const {
-        return std::find(CancelRoutes.begin(), CancelRoutes.end(), moveId) != CancelRoutes.end();
+    // -----------------------------------------------------------------
+    // キャンセルできるか
+    // -----------------------------------------------------------------
+    // 次に出したい技の種類（必殺技 / 超必殺技 / 通常技）に対応する
+    // 設定を見て、フレーム・結果（ヒット/ガード/空振り）・派生先の
+    // 3 つがそろっていれば許可します。
+    bool AllowsCancel(CancelKind kind, int frame, MoveContact contact,
+                      const std::string& targetMoveId = std::string()) const {
+        const CancelRule& rule = Cancel(kind);
+        if (!rule.Enabled) return false;
+        if (!rule.CoversFrame(frame)) return false;
+        if (!rule.AllowsContact(contact)) return false;
+        return rule.AllowsTarget(targetMoveId);
     }
-    // 今のフレームがキャンセル可能時間帯の中か。
-    // どちらも 0 のままなら「キャンセル不可の技」という意味です。
-    bool IsCancelWindowOpen(int frame) const {
-        if (CancelStartFrame <= 0 && CancelEndFrame <= 0) return false;
-        return frame >= CancelStartFrame && frame <= CancelEndFrame;
+
+    // どの種類のキャンセルでもよいので、今キャンセルできるか。
+    bool IsCancelWindowOpen(int frame, MoveContact contact) const {
+        for (int i = 0; i < CancelKindCount; ++i) {
+            const CancelRule& rule = Cancels[i];
+            if (rule.Enabled && rule.CoversFrame(frame) && rule.AllowsContact(contact)) return true;
+        }
+        return false;
+    }
+
+    // 「この技へ移るとき、どの種類のキャンセルを使うか」。
+    // 技そのものの性質（タグ）で決まります。
+    CancelKind CancelKindAsTarget() const {
+        if (HasTag(Constants::TagSuper)) return CancelKind::Super;
+        if (HasTag(Constants::TagSpecial)) return CancelKind::Special;
+        return CancelKind::TargetCombo; // 通常技から通常技への派生
     }
 
     // このフレームに対する上書き指定があれば返す（無ければ nullptr）。
@@ -351,8 +474,19 @@ public:
         m.KnockdownFrames = obj.GetInt("knockdownFrames", 0);
         m.LandingRecovery = obj.GetInt("landingRecovery", 0);
         m.TotalFrame = m.TotalFrames();
-        m.Hitstop = obj.GetInt("hitstop", 0);
-        m.Guardstop = obj.GetInt("guardstop", DefaultGuardstop(m.Hitstop));
+        // ヒットストップ / ガードストップ。
+        // 別名（hitStopFrames / blockStopFrames）でも書けます。
+        // 2 つは完全に独立した値で、片方を変えてももう片方は変わりません。
+        // ガードストップが書かれていない古いデータのときだけ、
+        // ヒットストップから既定値を作ります。
+        m.Hitstop = obj.GetInt("hitstop", obj.GetInt("hitStopFrames", 0));
+        if (const Json* g = obj.Find("guardstop"); g != nullptr) {
+            m.Guardstop = g->AsInt();
+        } else if (const Json* g2 = obj.Find("blockStopFrames"); g2 != nullptr) {
+            m.Guardstop = g2->AsInt();
+        } else {
+            m.Guardstop = DefaultGuardstop(m.Hitstop);
+        }
         m.GuardType = obj.GetString("guardType", "High");
         m.ChipDamagePercent = obj.GetNumber("chipDamagePercent", 0.0);
 
@@ -403,11 +537,62 @@ public:
         m.MeterGain = obj.GetInt("meterGain", 0);
         m.MeterCost = obj.GetInt("meterCost", 0);
 
+        // ---- キャンセル設定 ----
+        // 新しい形式は "cancels": { "special": {...}, "super": {...} ... }。
+        // 古いデータには "cancelStartFrame" / "cancelEndFrame" /
+        // "cancelRoutes" しかないので、その場合は同じ内容になるよう
+        // 4 種類ぶんの設定へ読み替えます（古いデータもそのまま動きます）。
+        int legacyStart = obj.GetInt("cancelStartFrame", 0);
+        int legacyEnd = obj.GetInt("cancelEndFrame", 0);
+        std::vector<std::string> legacyRoutes;
         if (const Json* routes = obj.Find("cancelRoutes"); routes && routes->IsArray()) {
-            for (const Json& r : routes->Items()) m.CancelRoutes.push_back(r.AsString());
+            for (const Json& r : routes->Items()) legacyRoutes.push_back(r.AsString());
         }
-        m.CancelStartFrame = obj.GetInt("cancelStartFrame", 0);
-        m.CancelEndFrame = obj.GetInt("cancelEndFrame", 0);
+
+        const Json* cancels = obj.Find("cancels");
+        if (cancels != nullptr && cancels->IsObject()) {
+            for (int i = 0; i < CancelKindCount; ++i) {
+                CancelKind kind = static_cast<CancelKind>(i);
+                const Json* cj = cancels->Find(CancelKindKey(kind));
+                if (cj == nullptr || !cj->IsObject()) continue;
+                CancelRule& rule = m.Cancel(kind);
+                rule.Enabled = cj->GetBool("enabled", false);
+                rule.StartFrame = cj->GetInt("startFrame", 0);
+                rule.EndFrame = cj->GetInt("endFrame", 0);
+                rule.OnHit = cj->GetBool("onHit", true);
+                rule.OnBlock = cj->GetBool("onBlock", true);
+                rule.OnWhiff = cj->GetBool("onWhiff", false);
+                if (const Json* allowed = cj->Find("allowedMoves");
+                    allowed && allowed->IsArray()) {
+                    for (const Json& a : allowed->Items()) rule.AllowedMoves.push_back(a.AsString());
+                }
+            }
+        } else if (legacyStart > 0 || legacyEnd > 0) {
+            // 昔の「1 つだけのキャンセル時間帯」を、必殺技・超必殺技・
+            // ターゲットコンボの 3 種類に同じ内容で割り当てます。
+            for (CancelKind kind : {CancelKind::Special, CancelKind::Super,
+                                    CancelKind::TargetCombo}) {
+                CancelRule& rule = m.Cancel(kind);
+                rule.Enabled = true;
+                rule.StartFrame = legacyStart;
+                rule.EndFrame = legacyEnd;
+                rule.OnHit = true;
+                rule.OnBlock = true;
+                rule.OnWhiff = false;
+            }
+            // 昔の許可リストはターゲットコンボの派生先として引き継ぎます。
+            m.Cancel(CancelKind::TargetCombo).AllowedMoves = legacyRoutes;
+        }
+
+        // ---- 技中の空中判定 ----
+        if (const Json* air = obj.Find("airborne"); air && air->IsObject()) {
+            m.AirborneEnabled = air->GetBool("enabled", false);
+            m.AirborneStart = air->GetInt("startFrame", 0);
+            m.AirborneDuration = air->GetInt("durationFrames", 0);
+            m.AirborneKind = air->GetString("mode", "FixedDuration") == "UntilLanding"
+                                 ? AirborneMode::UntilLanding
+                                 : AirborneMode::FixedDuration;
+        }
 
         if (const Json* tags = obj.Find("tags"); tags && tags->IsArray()) {
             for (const Json& t : tags->Items()) m.Tags.push_back(t.AsString());
@@ -529,11 +714,36 @@ public:
         j.Set("meterGain", Json(MeterGain));
         j.Set("meterCost", Json(MeterCost));
 
-        Json routes = Json::MakeArray();
-        for (const auto& r : CancelRoutes) routes.Push(Json(r));
-        j.Set("cancelRoutes", std::move(routes));
-        j.Set("cancelStartFrame", Json(CancelStartFrame));
-        j.Set("cancelEndFrame", Json(CancelEndFrame));
+        Json cancels = Json::MakeObject();
+        for (int i = 0; i < CancelKindCount; ++i) {
+            CancelKind kind = static_cast<CancelKind>(i);
+            const CancelRule& rule = Cancel(kind);
+            Json cj = Json::MakeObject();
+            cj.Set("enabled", Json(rule.Enabled));
+            cj.Set("startFrame", Json(rule.StartFrame));
+            cj.Set("endFrame", Json(rule.EndFrame));
+            cj.Set("onHit", Json(rule.OnHit));
+            cj.Set("onBlock", Json(rule.OnBlock));
+            cj.Set("onWhiff", Json(rule.OnWhiff));
+            if (!rule.AllowedMoves.empty()) {
+                Json allowed = Json::MakeArray();
+                for (const auto& id : rule.AllowedMoves) allowed.Push(Json(id));
+                cj.Set("allowedMoves", std::move(allowed));
+            }
+            cancels.Set(CancelKindKey(kind), std::move(cj));
+        }
+        j.Set("cancels", std::move(cancels));
+
+        if (AirborneEnabled) {
+            Json air = Json::MakeObject();
+            air.Set("enabled", Json(AirborneEnabled));
+            air.Set("startFrame", Json(AirborneStart));
+            air.Set("durationFrames", Json(AirborneDuration));
+            air.Set("mode", Json(AirborneKind == AirborneMode::UntilLanding
+                                     ? std::string("UntilLanding")
+                                     : std::string("FixedDuration")));
+            j.Set("airborne", std::move(air));
+        }
 
         Json tags = Json::MakeArray();
         for (const auto& t : Tags) tags.Push(Json(t));

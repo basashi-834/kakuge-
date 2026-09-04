@@ -51,6 +51,16 @@ public:
     // "step" にかけるフレーム数。短いほど鋭く、長いほど重く見えます。
     int StepFrames = 12;
 
+    // ---- 後ろへ下がる方式（後ろ・後ろ と 2 回入れたとき）----
+    // 前へ踏み込む設定とは完全に別です。前ステップの数値を変えても
+    // バックステップは変わりません（逆も同じ）。格闘ゲームでは
+    // 「前は速く踏み込めるが、後ろは重い」といった非対称がふつうで、
+    // 同じ値を共有してしまうとその調整ができなくなります。
+    std::string BackMoveType = "step";
+    double BackStepDistance = 45.0; // 下がる距離（px）
+    int BackStepFrames = 20;        // 下がりきるまでのフレーム数
+    double BackDashSpeed = 100.0;   // "dash" のときの後退の速さ（px/秒）
+
     // ジャンプの初速度。上方向がマイナスなので負の値です。
     // 重力 Gravity で毎フレーム下向きに加速され、やがて落ちてきます。
     // 滞空時間 ≒ 2 * 900 / 2400 = 0.75 秒（約 45 フレーム）。
@@ -66,6 +76,9 @@ public:
     // 姿勢ごとの食らい判定。JSON に書かれていなければ
     // HurtboxSet の既定値（標準体型）がそのまま使われます。
     HurtboxSet Hurtboxes;
+
+    // 姿勢ごとの押し合い判定。書かれていなければ PushboxSet の既定値。
+    PushboxSet Pushboxes;
 
     // -----------------------------------------------------------------
     // JSON からの読み込み
@@ -87,6 +100,12 @@ public:
         s.StepDistance = obj.GetNumber("stepDistance", GameSpec::CharacterVisualWidth);
         s.StepFrames = obj.GetInt("stepFrames", 12);
         if (s.StepFrames < 1) s.StepFrames = 1;
+        s.BackMoveType = obj.GetString("backMoveType", "step");
+        if (s.BackMoveType != "dash") s.BackMoveType = "step"; // 未知の値は step 扱い
+        s.BackStepDistance = obj.GetNumber("backStepDistance", 45.0);
+        s.BackStepFrames = obj.GetInt("backStepFrames", 20);
+        if (s.BackStepFrames < 1) s.BackStepFrames = 1;
+        s.BackDashSpeed = obj.GetNumber("backDashSpeed", 100.0);
         s.JumpVelocity = obj.GetNumber("jumpVelocity", -900.0);
         s.Gravity = obj.GetNumber("gravity", 2400.0);
 
@@ -136,6 +155,20 @@ public:
             if (const Json* v = hb->Find("crouch")) loadStance(*v, s.Hurtboxes.Crouch);
             if (const Json* v = hb->Find("air")) loadStance(*v, s.Hurtboxes.Air);
         }
+
+        // 押し合い判定（姿勢ごとに 1 個）。
+        if (const Json* pb = obj.Find("pushboxes"); pb && pb->IsObject()) {
+            auto loadPush = [](const Json& j, RectBox& box) {
+                if (!j.IsObject()) return;
+                box.CenterX = j.GetNumber("offsetX", box.CenterX);
+                box.CenterY = j.GetNumber("offsetY", box.CenterY);
+                box.Width = j.GetNumber("width", box.Width);
+                box.Height = j.GetNumber("height", box.Height);
+            };
+            if (const Json* v = pb->Find("stand")) loadPush(*v, s.Pushboxes.Stand);
+            if (const Json* v = pb->Find("crouch")) loadPush(*v, s.Pushboxes.Crouch);
+            if (const Json* v = pb->Find("air")) loadPush(*v, s.Pushboxes.Air);
+        }
         return s;
     }
 
@@ -153,6 +186,10 @@ public:
         j.Set("forwardMoveType", Json(ForwardMoveType));
         j.Set("stepDistance", Json(StepDistance));
         j.Set("stepFrames", Json(StepFrames));
+        j.Set("backMoveType", Json(BackMoveType));
+        j.Set("backStepDistance", Json(BackStepDistance));
+        j.Set("backStepFrames", Json(BackStepFrames));
+        j.Set("backDashSpeed", Json(BackDashSpeed));
         j.Set("jumpVelocity", Json(JumpVelocity));
         j.Set("gravity", Json(Gravity));
 
@@ -180,6 +217,20 @@ public:
         hb.Set("crouch", saveStance(Hurtboxes.Crouch));
         hb.Set("air", saveStance(Hurtboxes.Air));
         j.Set("hurtboxes", std::move(hb));
+
+        auto savePush = [](const RectBox& b) {
+            Json o = Json::MakeObject();
+            o.Set("offsetX", Json(b.CenterX));
+            o.Set("offsetY", Json(b.CenterY));
+            o.Set("width", Json(b.Width));
+            o.Set("height", Json(b.Height));
+            return o;
+        };
+        Json pb = Json::MakeObject();
+        pb.Set("stand", savePush(Pushboxes.Stand));
+        pb.Set("crouch", savePush(Pushboxes.Crouch));
+        pb.Set("air", savePush(Pushboxes.Air));
+        j.Set("pushboxes", std::move(pb));
 
         Json moves = Json::MakeArray();
         for (const auto& id : MoveIds) moves.Push(Json(id));

@@ -275,9 +275,20 @@ int main(int argc, char** argv) {
         Check("4 フレーム後もまだ立ち弱パンチ中",
               fighter.SM.CurrentMove == "standing_light" && fighter.SM.CurrentFrame == 5);
 
+        // キャンセルは「当たったかどうか」でも変わります。
+        // 立ち弱パンチのターゲットコンボ設定は空振り時 × なので、
+        // 誰にも当たっていないこの状態ではキャンセルできません。
         RawInput heavyInput; heavyInput.Buttons.HP = true;
         fighter.FrameStep(dt, heavyInput);
-        Check("キャンセル可能時間内に強パンチでコンボが繋がる",
+        Check("空振りではキャンセルできない（空振り時 × の設定）",
+              fighter.SM.CurrentMove == "standing_light");
+
+        // ヒットしたことにすると、同じ入力でキャンセルできます。
+        // さっき押した強パンチは先行入力に残っているので、
+        // ボタンを押し直さなくても次のフレームで技になります。
+        fighter.CurrentMoveContact = MoveContact::Hit;
+        fighter.FrameStep(dt, RawInput{});
+        Check("ヒット時はキャンセル可能時間内に強パンチでコンボが繋がる",
               fighter.SM.CurrentMove == "standing_heavy" && fighter.SM.CurrentFrame == 1);
     }
 
@@ -366,7 +377,7 @@ int main(int argc, char** argv) {
         RectBox air = f.PushboxRect();
         Check("空中の押し合い判定は 30x56 で胴体の位置",
               air.Width == 30 && air.Height == 56 &&
-              air.CenterY == -40 + Fighter::AirPushboxCenterY);
+              air.CenterY == -40 + f.Stats.Pushboxes.Air.CenterY);
         f.SM.ChangeState(CharState::Idle, "");
         f.PositionY = 0;
 
@@ -1498,6 +1509,352 @@ int main(int argc, char** argv) {
         }
     }
 
+
+    // =================================================================
+    std::cout << "\n=== ヒットストップとガードストップは別々の値 ===\n";
+    // =================================================================
+    {
+        MoveData m;
+        m.Hitstop = 9;
+        m.Guardstop = 9;
+        // 片方を変えても、もう片方は変わらないこと（これが仕様の要点）。
+        m.Hitstop = 15;
+        Check("ヒットストップを変えてもガードストップは変わらない",
+              m.Hitstop == 15 && m.Guardstop == 9);
+        m.Guardstop = 13;
+        Check("ガードストップだけ別の値にできる", m.Hitstop == 15 && m.Guardstop == 13);
+
+        MoveData back = MoveData::FromJson(m.ToJson());
+        Check("2 つとも別々に保存・復元される",
+              back.Hitstop == 15 && back.Guardstop == 13);
+
+        // 別名（hitStopFrames / blockStopFrames）でも書ける。
+        Json j = Json::MakeObject();
+        j.Set("id", Json(std::string("alias_test")));
+        j.Set("hitStopFrames", Json(11));
+        j.Set("blockStopFrames", Json(7));
+        MoveData alias = MoveData::FromJson(j);
+        Check("hitStopFrames / blockStopFrames の名前でも読める",
+              alias.Hitstop == 11 && alias.Guardstop == 7);
+
+        // ガードストップが書かれていない古いデータは、既定値で補う。
+        Json legacy = Json::MakeObject();
+        legacy.Set("id", Json(std::string("legacy_stop")));
+        legacy.Set("hitstop", Json(9));
+        MoveData old = MoveData::FromJson(legacy);
+        Check("ガードストップが無い古いデータも読める", old.Hitstop == 9 && old.Guardstop > 0);
+    }
+
+    // =================================================================
+    std::cout << "\n=== キャンセルの種類ごとの設定 ===\n";
+    // =================================================================
+    {
+        MoveData m;
+        m.Startup = 6; m.Active = 3; m.Recovery = 10;
+        // 必殺技キャンセルは 6-11F、ヒット/ガード時のみ。
+        CancelRule& sp = m.Cancel(CancelKind::Special);
+        sp.Enabled = true; sp.StartFrame = 6; sp.EndFrame = 11;
+        sp.OnHit = true; sp.OnBlock = true; sp.OnWhiff = false;
+        // 超必キャンセルは硬直中（12-16F）だけ、ヒット時のみ。
+        CancelRule& su = m.Cancel(CancelKind::Super);
+        su.Enabled = true; su.StartFrame = 12; su.EndFrame = 16;
+        su.OnHit = true; su.OnBlock = false; su.OnWhiff = false;
+
+        Check("種類ごとに別々の時間帯を持てる",
+              m.AllowsCancel(CancelKind::Special, 6, MoveContact::Hit) &&
+              !m.AllowsCancel(CancelKind::Special, 12, MoveContact::Hit) &&
+              m.AllowsCancel(CancelKind::Super, 12, MoveContact::Hit) &&
+              !m.AllowsCancel(CancelKind::Super, 6, MoveContact::Hit));
+        Check("時間帯は硬直中にも置ける（持続中だけではない）",
+              m.Cancel(CancelKind::Super).StartFrame > m.Startup + m.Active - 1 &&
+              m.AllowsCancel(CancelKind::Super, 14, MoveContact::Hit));
+        Check("ヒット時・ガード時・空振り時を別々に設定できる",
+              m.AllowsCancel(CancelKind::Special, 8, MoveContact::Blocked) &&
+              !m.AllowsCancel(CancelKind::Special, 8, MoveContact::Whiff) &&
+              !m.AllowsCancel(CancelKind::Super, 13, MoveContact::Blocked));
+
+        // ターゲットコンボの派生先（指定した技だけ）
+        CancelRule& tc = m.Cancel(CancelKind::TargetCombo);
+        tc.Enabled = true; tc.StartFrame = 6; tc.EndFrame = 11;
+        tc.AllowedMoves = {"standing_heavy"};
+        Check("ターゲットコンボは派生先を技ごとに指定できる",
+              m.AllowsCancel(CancelKind::TargetCombo, 7, MoveContact::Hit, "standing_heavy") &&
+              !m.AllowsCancel(CancelKind::TargetCombo, 7, MoveContact::Hit, "crouch_medium"));
+        Check("派生先が空なら制限なし",
+              m.Cancel(CancelKind::Special).AllowsTarget("何でも"));
+
+        // 保存・復元
+        MoveData back = MoveData::FromJson(m.ToJson());
+        Check("キャンセル設定が JSON に保存・復元される",
+              back.Cancel(CancelKind::Super).StartFrame == 12 &&
+              back.Cancel(CancelKind::Super).OnBlock == false &&
+              back.Cancel(CancelKind::TargetCombo).AllowedMoves.size() == 1 &&
+              back.Cancel(CancelKind::TargetCombo).AllowedMoves[0] == "standing_heavy");
+
+        // 古い形式（1 つだけの時間帯）も読める
+        Json legacy = Json::MakeObject();
+        legacy.Set("id", Json(std::string("legacy_cancel")));
+        legacy.Set("cancelStartFrame", Json(4));
+        legacy.Set("cancelEndFrame", Json(10));
+        Json routes = Json::MakeArray();
+        routes.Push(Json(std::string("standing_heavy")));
+        legacy.Set("cancelRoutes", std::move(routes));
+        MoveData conv = MoveData::FromJson(legacy);
+        Check("古い形式のキャンセル指定も読める",
+              conv.Cancel(CancelKind::Special).Enabled &&
+              conv.Cancel(CancelKind::Special).StartFrame == 4 &&
+              conv.Cancel(CancelKind::Special).EndFrame == 10 &&
+              conv.Cancel(CancelKind::TargetCombo).AllowedMoves.size() == 1);
+
+        // 技の種類から、どの設定を見るかが決まる
+        const MoveData* fireball = dm.GetMove("ryu", "fireball");
+        const MoveData* super = dm.GetMove("ryu", "super_combo");
+        const MoveData* heavy = dm.GetMove("ryu", "standing_heavy");
+        Check("必殺技は必殺技キャンセル、超必は超必キャンセルで判定される",
+              fireball->CancelKindAsTarget() == CancelKind::Special &&
+              super->CancelKindAsTarget() == CancelKind::Super &&
+              heavy->CancelKindAsTarget() == CancelKind::TargetCombo);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 技中の空中判定 ===\n";
+    // =================================================================
+    {
+        MoveData m;
+        m.Startup = 4; m.Active = 3; m.Recovery = 10;
+        m.AirborneEnabled = true;
+        m.AirborneStart = 5;
+        m.AirborneDuration = 8;
+        // 5F から 8 フレーム＝ 5〜12F が空中、13F からは地上。
+        Check("指定したフレームだけ空中判定になる（5-12F）",
+              !m.IsAirborneAtFrame(4, false) && m.IsAirborneAtFrame(5, false) &&
+              m.IsAirborneAtFrame(12, false) && !m.IsAirborneAtFrame(13, false));
+        Check("空中判定は技のフェーズと関係なく設定できる",
+              m.IsAirborneAtFrame(5, false) &&              // 発生中
+              m.IsAirborneAtFrame(8, false));               // 硬直中
+
+        m.AirborneKind = AirborneMode::UntilLanding;
+        Check("着地までモードでは、実際に着地するまで続く",
+              m.IsAirborneAtFrame(30, true) && !m.IsAirborneAtFrame(30, false));
+
+        MoveData back = MoveData::FromJson(m.ToJson());
+        Check("空中判定の設定が JSON に保存・復元される",
+              back.AirborneEnabled && back.AirborneStart == 5 &&
+              back.AirborneDuration == 8 &&
+              back.AirborneKind == AirborneMode::UntilLanding);
+
+        // 実際のキャラクターで、地面にいても空中扱いになるか
+        std::unordered_map<std::string, MoveData> ms = *dm.GetMoveset("ryu");
+        MoveData& shoryu = ms["anti_air_special"];
+        shoryu.AirborneEnabled = true;
+        shoryu.AirborneStart = 5;
+        shoryu.AirborneDuration = 8;
+        shoryu.AirborneKind = AirborneMode::FixedDuration;
+
+        Fighter f;
+        f.Setup(*dm.GetCharacter("ryu"), &ms);
+        f.Opponent = &f;
+        f.CurrentMoveData = &shoryu;
+        f.SM.ChangeState(CharState::Attack, shoryu.Id);
+        f.SM.CurrentFrame = 6;
+        f.PositionY = 0.0; // 見た目は地面に立ったまま
+        Check("Y 座標が地面でも、指定フレームなら空中判定になる",
+              f.IsAirborne() && f.Stance() == "air" && !f.IsThrowable());
+        f.SM.CurrentFrame = 14;
+        Check("指定フレームを過ぎれば地上判定に戻る",
+              !f.IsAirborne() && f.Stance() == "stand" && f.IsThrowable());
+    }
+
+    // =================================================================
+    std::cout << "\n=== バックステップ（前ステップとは独立）===\n";
+    // =================================================================
+    {
+        double dt = 1.0 / 60.0;
+        CharacterStats cs = *dm.GetCharacter("ryu");
+        const auto* ms = dm.GetMoveset("ryu");
+
+        // 前とバックで別々の設定を持てること
+        cs.ForwardMoveType = "step";
+        cs.StepDistance = 52; cs.StepFrames = 12;
+        cs.BackMoveType = "step";
+        cs.BackStepDistance = 45; cs.BackStepFrames = 20;
+        CharacterStats copy = cs;
+        copy.StepDistance = 100; copy.StepFrames = 5;
+        Check("前ステップの値を変えてもバックステップは変わらない",
+              copy.BackStepDistance == cs.BackStepDistance &&
+              copy.BackStepFrames == cs.BackStepFrames);
+
+        CharacterStats back = CharacterStats::FromJson(cs.ToJson());
+        Check("バックステップの設定が JSON に保存・復元される",
+              back.BackMoveType == "step" && back.BackStepDistance == 45 &&
+              back.BackStepFrames == 20);
+
+        // 実際に後ろへ 2 回入れて下がる距離を測る
+        auto stepDistance = [&](bool forward) {
+            Fighter f;
+            f.Setup(cs, ms);
+            Fighter dummy;
+            dummy.Setup(cs, ms);
+            dummy.PositionX = 200; // 右にいる＝ f は右向き
+            f.Opponent = &dummy;
+            f.PositionX = 0;
+            double start = f.PositionX;
+            RawInput dir;
+            // 右向きなので、前 = 右、後ろ = 左
+            RawInput tap;
+            if (forward) tap.Right = true; else tap.Left = true;
+            f.FrameStep(dt, tap);            // 1 回目
+            f.FrameStep(dt, RawInput{});     // 離す
+            f.FrameStep(dt, tap);            // 2 回目 → 成立
+            for (int i = 0; i < 40; ++i) f.FrameStep(dt, RawInput{});
+            return f.PositionX - start;
+        };
+        double fwd = stepDistance(true);
+        double bwd = stepDistance(false);
+        Check("後ろ・後ろ でバックステップが出る (" + std::to_string(static_cast<int>(bwd)) + "px)",
+              bwd < -30.0);
+        Check("前ステップとバックステップで距離が違う (" +
+                  std::to_string(static_cast<int>(fwd)) + " / " +
+                  std::to_string(static_cast<int>(bwd)) + ")",
+              fwd > 30.0 && std::abs(std::abs(fwd) - std::abs(bwd)) > 3.0);
+    }
+
+    // =================================================================
+    std::cout << "\n=== 技の追加・複製・削除（保存まで）===\n";
+    // =================================================================
+    {
+        DataManager dm3(dataDir, tempUserDir / "moveedit");
+        dm3.ReloadAll();
+        size_t before = dm3.GetMoveset("ryu")->size();
+
+        // 追加
+        MoveData added;
+        added.Id = "move_001";
+        added.Name = "New Move";
+        added.Startup = 1; added.Active = 1; added.Recovery = 1;
+        dm3.SaveMove("ryu", added);
+        Check("技を追加できる", dm3.GetMove("ryu", "move_001") != nullptr &&
+                                dm3.GetMoveset("ryu")->size() == before + 1);
+
+        // 複製（ID だけ新しくする）
+        MoveData copy = *dm3.GetMove("ryu", "standing_light");
+        copy.Id = "standing_light_copy";
+        copy.Name = copy.Name + " Copy";
+        dm3.SaveMove("ryu", copy);
+        const MoveData* saved = dm3.GetMove("ryu", "standing_light_copy");
+        Check("技を複製できる（中身は同じ、ID だけ別）",
+              saved != nullptr && saved->Startup == 4 && saved->HitAdvantage == 4 &&
+              saved->Id != "standing_light");
+
+        // 再読み込みしても残っている
+        DataManager dm4(dataDir, tempUserDir / "moveedit");
+        dm4.ReloadAll();
+        Check("追加・複製した技は読み直しても残る",
+              dm4.GetMove("ryu", "move_001") != nullptr &&
+              dm4.GetMove("ryu", "standing_light_copy") != nullptr);
+
+        // 削除（自分で足した技）
+        dm4.DeleteMove("ryu", "move_001");
+        Check("追加した技を削除できる", dm4.GetMove("ryu", "move_001") == nullptr);
+
+        // 削除（元データにある技）→ 消した印で残らないこと
+        dm4.DeleteMove("ryu", "standing_light_kick");
+        DataManager dm5(dataDir, tempUserDir / "moveedit");
+        dm5.ReloadAll();
+        Check("元データにある技を消しても、読み直して復活しない",
+              dm5.GetMove("ryu", "standing_light_kick") == nullptr &&
+              dm5.GetMove("ryu", "standing_light") != nullptr);
+    }
+
+    // =================================================================
+    std::cout << "\n=== ストップ中のキャンセル入力 ===\n";
+    // =================================================================
+    // ヒットストップ中も入力は受け付け、ストップが解けた瞬間に
+    // キャンセルが成立する、という流れを実際に走らせて確かめます。
+    {
+        const CharacterStats* cs = dm.GetCharacter("ryu");
+        std::unordered_map<std::string, MoveData> ms = *dm.GetMoveset("ryu");
+        for (auto& kv : ms) kv.second.KnockbackX = 0.0; // 間合いを保つ
+
+        BattleSystem bs;
+        bs.StartMatch(*cs, &ms, *cs, &ms, 99);
+        bs.TrainingMode = true;
+        bs.TrainingAutoHeal = false;
+        bs.CpuAI->Mode = DummyMode::Stand;
+        bs.Player1.PositionX = -18; bs.Player2.PositionX = 18;
+
+        RawInput in;
+        in.Buttons.MP = true;              // 立ち中パンチ
+        bool stopSeen = false, commandDuringStop = false;
+        bool cancelled = false;
+        int commandStep = 0;
+        for (int f = 0; f < 90; ++f) {
+            bs.Update(1.0 / 60.0, in);
+            in.Buttons.MP = false;
+
+            if (bs.Player1.IsStopped()) {
+                stopSeen = true;
+                commandDuringStop = true;
+                // ストップ中に波動拳コマンド（2 → 3 → 6 ＋ P）を入れる
+                RawInput cmd;
+                if (commandStep == 0) { cmd.Down = true; }
+                else if (commandStep == 1) { cmd.Down = true; cmd.Right = true; }
+                else if (commandStep == 2) { cmd.Right = true; }
+                else { cmd.Right = true; cmd.Buttons.LP = true; }
+                commandStep++;
+                in = cmd;
+            } else if (commandDuringStop) {
+                in = RawInput{}; // ストップが解けたら入力はもう足さない
+            }
+            if (bs.Player1.SM.CurrentMove == "fireball") { cancelled = true; break; }
+        }
+        Check("ヒットストップが実際に起きている", stopSeen);
+        Check("ストップ中に入れたコマンドで、解けたあとキャンセルが成立する", cancelled);
+    }
+
+    // =================================================================
+    std::cout << "\n=== ドライブラッシュキャンセル（技をキャンセルして踏み込む）===\n";
+    // =================================================================
+    {
+        double dt = 1.0 / 60.0;
+        CharacterStats cs = *dm.GetCharacter("ryu");
+        std::unordered_map<std::string, MoveData> ms = *dm.GetMoveset("ryu");
+
+        Fighter f;
+        Fighter dummy;
+        f.Setup(cs, &ms);
+        dummy.Setup(cs, &ms);
+        dummy.PositionX = 200;          // 右にいる＝ f は右向き
+        f.Opponent = &dummy;
+
+        RawInput mp; mp.Buttons.MP = true;
+        f.FrameStep(dt, mp);            // 立ち中パンチ（キャンセル 6-11F）
+        f.CurrentMoveContact = MoveContact::Hit; // 当たったことにする
+        for (int i = 0; i < 5; ++i) f.FrameStep(dt, RawInput{}); // 6F 目まで進める
+        bool inWindow = f.SM.CurrentState == CharState::Attack && f.SM.CurrentFrame >= 6;
+
+        RawInput fwd; fwd.Right = true;
+        f.FrameStep(dt, fwd);              // 前 1 回目
+        f.FrameStep(dt, RawInput{});       // 離す
+        f.FrameStep(dt, fwd);              // 前 2 回目 → キャンセルして踏み込む
+        Check("キャンセル可能時間中に 前・前 で技をキャンセルして踏み込める",
+              inWindow && f.SM.CurrentState == CharState::WalkForward &&
+              f.CurrentMoveData == nullptr);
+
+        // 設定を切ってあれば起きないこと
+        ms["standing_medium"].Cancel(CancelKind::DriveRush).Enabled = false;
+        Fighter g;
+        g.Setup(cs, &ms);
+        g.Opponent = &dummy;
+        g.FrameStep(dt, mp);
+        g.CurrentMoveContact = MoveContact::Hit;
+        for (int i = 0; i < 5; ++i) g.FrameStep(dt, RawInput{});
+        g.FrameStep(dt, fwd);
+        g.FrameStep(dt, RawInput{});
+        g.FrameStep(dt, fwd);
+        Check("設定を切ればドライブラッシュキャンセルは起きない",
+              g.SM.CurrentState == CharState::Attack);
+    }
 
     // =================================================================
     std::cout << "\n=== 日本語フォントの読み込み（TrueType）===\n";

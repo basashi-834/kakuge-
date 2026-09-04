@@ -172,6 +172,12 @@ void Game::HandleEvents() {
             case SDL_MOUSEBUTTONDOWN:
                 if (e.button.button == SDL_BUTTON_LEFT) OnMouseClick(e.button.x, e.button.y);
                 break;
+            case SDL_MOUSEBUTTONUP:
+                // エディタで判定をつかんでいたら、ここで離します。
+                if (e.button.button == SDL_BUTTON_LEFT && current_ == Screen::Editor && editor_) {
+                    editor_->HandleMouseUp();
+                }
+                break;
             case SDL_WINDOWEVENT:
                 // ウィンドウからフォーカスが外れたら、押しているキーを
                 // 全部離した扱いにします。そうしないと、別の画面を
@@ -328,6 +334,11 @@ void Game::WindowToVirtual(int wx, int wy, double& vx, double& vy) const {
 
 void Game::OnMouseMove(int windowX, int windowY) {
     WindowToVirtual(windowX, windowY, mouseVx_, mouseVy_);
+    // エディタ画面では、判定の四角形をマウスで動かせます。
+    if (current_ == Screen::Editor && editor_) {
+        editor_->HandleMouseMove(mouseVx_, mouseVy_);
+        return;
+    }
     // マウスを乗せたボタンを選択状態にします（キーボードと連動）。
     for (size_t i = 0; i < buttons_.size(); ++i) {
         if (buttons_[i].HitTest(mouseVx_, mouseVy_)) {
@@ -340,6 +351,10 @@ void Game::OnMouseMove(int windowX, int windowY) {
 void Game::OnMouseClick(int windowX, int windowY) {
     double vx, vy;
     WindowToVirtual(windowX, windowY, vx, vy);
+    if (current_ == Screen::Editor && editor_) {
+        editor_->HandleMouseDown(vx, vy);
+        return;
+    }
     for (const auto& b : buttons_) {
         if (b.HitTest(vx, vy)) { DoAction(b.action); return; }
     }

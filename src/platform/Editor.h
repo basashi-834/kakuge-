@@ -66,6 +66,12 @@ public:
     // 文字入力（名前などのテキスト項目用）。
     void HandleText(const char* utf8Text);
 
+    // ---- マウス操作（判定タブで、判定の四角形を直接つかむ）----
+    // 座標は内部キャンバス（VirtualW x VirtualH）のものを渡します。
+    void HandleMouseMove(double vx, double vy);
+    void HandleMouseDown(double vx, double vy);
+    void HandleMouseUp();
+
     void Draw(Renderer& r);
 
     // BACK が押されたか（Game 側がタイトルへ戻すのに使う）。
@@ -123,13 +129,21 @@ private:
         // 動作項目 / 表示だけの項目
         std::function<void()> onActivate;
         std::function<std::string()> getInfo;
+
+        // 「D（ダウン）」を入力できる数値項目のための読み書き。
+        // 設定されていれば、数値のかわりに D と表示・入力できます
+        //（ヒット時硬直差の欄で使います）。
+        std::function<bool()> getDown;
+        std::function<void(bool)> setDown;
     };
 
     // どのタブを開いているか。
     enum class Tab { Character, Move, Boxes };
 
     // BOXES タブで、どの判定を編集しているか。
-    enum class BoxTarget { Hitbox, HurtStand, HurtCrouch, HurtAir };
+    // 番号は HurtParts() の引数にも使うので、並びを変えないでください。
+    enum class BoxTarget { Hitbox, HurtStand, HurtCrouch, HurtAir,
+                           PushStand, PushCrouch, PushAir };
 
     // ---- 状態 ----
     DataManager* dm_ = nullptr;
@@ -154,6 +168,29 @@ private:
     BoxTarget boxTarget_ = BoxTarget::Hitbox;
     int boxIndex_ = 0;
 
+    // ---- 確認ダイアログ（技の削除など、取り返しのつかない操作用）----
+    bool confirmActive_ = false;
+    std::string confirmTitle_;
+    std::string confirmDetail_;
+    int confirmChoice_ = 0; // 0 = キャンセル / 1 = 実行
+    std::function<void()> confirmAction_;
+
+    // ---- マウスで判定を編集するための状態 ----
+    // どこをつかんでいるか。四隅・辺をつかむと大きさが、
+    // 内側をつかむと位置が変わります。
+    enum class DragMode { None, Move, Left, Right, Top, Bottom,
+                          TopLeft, TopRight, BottomLeft, BottomRight };
+    DragMode dragMode_ = DragMode::None;
+    double dragStartX_ = 0, dragStartY_ = 0;  // つかんだ位置（判定の座標系）
+    RectBox dragStartBox_;                     // つかんだ瞬間の四角形
+    double mouseVx_ = 0, mouseVy_ = 0;         // 今のマウス位置（内部キャンバス）
+    bool gridSnap_ = false;                    // 目盛りに吸着させるか
+    int gridSize_ = 4;                         // 吸着の間隔（px）
+    // プレビューの原点（キャラクターの足元）と表示範囲。
+    // マウス座標を判定の座標へ戻すのに使うので、描画のたびに覚えます。
+    float previewFootX_ = 0, previewFootY_ = 0;
+    float previewX_ = 0, previewY_ = 0, previewW_ = 0, previewH_ = 0;
+
     // ---- 文字入力中の状態 ----
     bool editingText_ = false;
     std::string textBuffer_;
@@ -174,6 +211,37 @@ private:
     void AddBox();
     void DeleteBox();
 
+    // ---- 技の管理 ----
+    void BuildCancelFields();       // キャンセル設定の行を並べる
+    void AddMove();                 // 新しい技を追加する
+    void DuplicateMove();           // 今の技を複製する
+    void RequestDeleteMove();       // 削除の確認を出す
+    void DeleteCurrentMove();       // 実際に削除する
+    // 引数の技を「派生先」に指定している技の一覧（削除時の警告に使う）。
+    std::vector<std::string> MovesReferencing(const std::string& moveId) const;
+    // 使われていない技 ID を作る（move_001 のような通し番号）。
+    // alwaysNumber が true なら、base 自体が空いていても番号を付けます。
+    std::string MakeUniqueMoveId(const std::string& base, bool alwaysNumber = false) const;
+    void SelectMoveById(const std::string& moveId);
+
+    // ---- 確認ダイアログ ----
+    void OpenConfirm(const std::string& title, const std::string& detail,
+                     std::function<void()> action);
+    bool HandleConfirmKey(SDL_Keycode key);
+    void DrawConfirm(Renderer& r);
+
+    // ---- マウスで判定を編集する ----
+    // マウス位置（内部キャンバス）を判定の座標へ直す。
+    bool PreviewToBox(double vx, double vy, double& bx, double& by) const;
+    // 位置を目盛りに合わせる（Snap to Grid が ON のときだけ）。
+    double SnapValue(double v) const;
+    // 今の対象の判定を書き換える（マウス操作の結果を反映）。
+    void SetBoxRect(int index, const RectBox& box);
+    // (vx, vy) の位置にある判定を探す。見つからなければ -1。
+    int BoxAtPoint(double vx, double vy) const;
+    // 選んでいる判定の、つかめる場所を調べる。
+    DragMode HandleAtPoint(const RectBox& box, double bx, double by) const;
+
     // BOXES タブの値の読み書き。
     //
     // ポインタで箱を覚えず、読み書きのたびに「今の対象・今の番号」から
@@ -187,6 +255,9 @@ private:
     bool GetBoxRect(int index, RectBox& out) const;
     int CurrentBoxCount() const;
     std::string CurrentStanceName() const;
+    bool IsPushboxTarget() const;       // 押し合い判定を編集中か
+    RectBox* CurrentPushbox();          // 編集中の押し合い判定（無ければ nullptr）
+    const RectBox* CurrentPushbox() const;
 
     // 表示言語に応じて日本語か英語を返す。ラベルはすべてこれを通します。
     std::string Loc(const std::string& jp, const std::string& en) const {

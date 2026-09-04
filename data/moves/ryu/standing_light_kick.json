@@ -9,6 +9,7 @@
     "hitAdvantage": 4,
     "blockAdvantage": -2,
     "hitstop": 4,
+    "guardstop": 2,
     "guardType": "High",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -24,15 +25,6 @@
     "hitOutcome": "Normal",
     "meterGain": 5,
     "meterCost": 0,
-    "cancelRoutes": [
-        "standing_medium_kick",
-        "standing_heavy_kick",
-        "fireball",
-        "anti_air_special",
-        "super_combo"
-    ],
-    "cancelStartFrame": 5,
-    "cancelEndFrame": 11,
     "tags": [
         "Light",
         "Normal"
@@ -44,5 +36,50 @@
     },
     "input": "",
     "button": "LK",
-    "stance": "stand"
+    "stance": "stand",
+    "cancels": {
+        "special": {
+            "enabled": true,
+            "startFrame": 5,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "fireball",
+                "anti_air_special"
+            ]
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 5,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 5,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": true,
+            "startFrame": 5,
+            "endFrame": 11,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "standing_medium_kick",
+                "standing_heavy_kick"
+            ]
+        }
+    }
 }

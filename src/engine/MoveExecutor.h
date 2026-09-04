@@ -71,8 +71,17 @@ struct MoveExecutor {
         return inv.type == kind;
     }
 
-    static bool CanCancel(const MoveData& move, int frame) {
-        return move.IsCancelWindowOpen(frame);
+    // 今のフレームで、何らかのキャンセルができるか。
+    // contact は「今出している技が当たったか / ガードされたか / 空振りか」。
+    static bool CanCancel(const MoveData& move, int frame, MoveContact contact) {
+        return move.IsCancelWindowOpen(frame, contact);
+    }
+
+    // 「この技へ」キャンセルできるか。技の種類（必殺技 / 超必殺技 /
+    // 通常技）に対応する設定を見ます。
+    static bool CanCancelInto(const MoveData& move, int frame, MoveContact contact,
+                              const MoveData& target) {
+        return move.AllowsCancel(target.CancelKindAsTarget(), frame, contact, target.Id);
     }
 
     // -----------------------------------------------------------------

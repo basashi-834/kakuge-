@@ -10,6 +10,7 @@
     "blockAdvantage": 2,
     "landingRecovery": 3,
     "hitstop": 4,
+    "guardstop": 2,
     "guardType": "Overhead",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -25,9 +26,6 @@
     "hitOutcome": "Normal",
     "meterGain": 5,
     "meterCost": 0,
-    "cancelRoutes": [],
-    "cancelStartFrame": 0,
-    "cancelEndFrame": 0,
     "tags": [
         "Light",
         "Normal",
@@ -40,5 +38,39 @@
     },
     "input": "",
     "button": "LP",
-    "stance": "air"
+    "stance": "air",
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }

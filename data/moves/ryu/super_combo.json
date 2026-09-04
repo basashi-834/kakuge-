@@ -10,6 +10,7 @@
     "blockAdvantage": -24,
     "knockdownFrames": 60,
     "hitstop": 14,
+    "guardstop": 12,
     "guardType": "High",
     "chipDamagePercent": 0.1,
     "hitbox": [
@@ -25,9 +26,6 @@
     "hitOutcome": "HardKnockdown",
     "meterGain": 0,
     "meterCost": 100,
-    "cancelRoutes": [],
-    "cancelStartFrame": 0,
-    "cancelEndFrame": 0,
     "tags": [
         "Super",
         "Reversal"
@@ -40,5 +38,39 @@
     "input": "236236",
     "button": "AnyP",
     "stance": "stand",
-    "effectiveRange": 157.61
+    "effectiveRange": 157.61,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }

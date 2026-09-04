@@ -98,7 +98,16 @@ public:
             if (entry.path().extension() != ".json") continue;
             Json data;
             if (!ReadJsonFile(entry.path(), data)) continue;
-            if (data.GetString("id", "").empty()) continue;
+            std::string id = data.GetString("id", "");
+            if (id.empty()) continue;
+            // 「消した」印のファイル。元データ（data/）にある技を
+            // ユーザーが消した場合、元ファイルは書き換えられないので、
+            // ユーザーフォルダ側にこの印だけを書いておき、
+            // 読み込みのときに取り除きます。
+            if (data.GetBool("deleted", false)) {
+                Movesets[charId].erase(id);
+                continue;
+            }
             MoveData move = MoveData::FromJson(data);
             Movesets[charId][move.Id] = move;
         }
@@ -131,7 +140,36 @@ public:
 
     void SaveMove(const std::string& charId, const MoveData& move) {
         Movesets[charId][move.Id] = move;
+        std::error_code ec;
+        fs::create_directories(UserDir / "moves" / charId, ec);
         WriteJsonFile(UserDir / "moves" / charId / (move.Id + ".json"), move.ToJson());
+    }
+
+    // 技を消す。
+    //
+    // 元データ（data/moves/...）は書き換えない方針なので、そちらに
+    // 同じ技がある場合は「消した」印のファイルをユーザーフォルダへ
+    // 書きます。次に読み込んだとき、その印を見て取り除きます。
+    // ユーザーフォルダにしか無い技（自分で追加した技）は、
+    // ファイルごと消せば済みます。
+    bool DeleteMove(const std::string& charId, const std::string& moveId) {
+        auto it = Movesets.find(charId);
+        if (it == Movesets.end() || it->second.find(moveId) == it->second.end()) return false;
+        it->second.erase(moveId);
+
+        std::error_code ec;
+        fs::path userFile = UserDir / "moves" / charId / (moveId + ".json");
+        fs::remove(userFile, ec);
+
+        fs::path baseFile = BaseDir / "moves" / charId / (moveId + ".json");
+        if (fs::exists(baseFile, ec)) {
+            fs::create_directories(UserDir / "moves" / charId, ec);
+            Json tomb = Json::MakeObject();
+            tomb.Set("id", Json(moveId));
+            tomb.Set("deleted", Json(true));
+            WriteJsonFile(userFile, tomb);
+        }
+        return true;
     }
 
     // 既存のキャラクターを雛形として、新しいキャラクターを作る。

@@ -10,6 +10,7 @@
     "blockAdvantage": 0,
     "knockdownFrames": 40,
     "hitstop": 10,
+    "guardstop": 8,
     "guardType": "Throw",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -25,9 +26,6 @@
     "hitOutcome": "Knockdown",
     "meterGain": 10,
     "meterCost": 0,
-    "cancelRoutes": [],
-    "cancelStartFrame": 0,
-    "cancelEndFrame": 0,
     "tags": [
         "Normal",
         "Throw"
@@ -41,5 +39,39 @@
     "button": "Throw",
     "stance": "stand",
     "effectiveRange": 30.23,
-    "throwRange": 30
+    "throwRange": 30,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }

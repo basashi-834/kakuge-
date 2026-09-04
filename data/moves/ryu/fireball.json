@@ -9,6 +9,7 @@
     "hitAdvantage": 18,
     "blockAdvantage": 14,
     "hitstop": 8,
+    "guardstop": 6,
     "guardType": "High",
     "chipDamagePercent": 0.05,
     "hitbox": [],
@@ -17,11 +18,6 @@
     "hitOutcome": "Normal",
     "meterGain": 10,
     "meterCost": 0,
-    "cancelRoutes": [
-        "super_combo"
-    ],
-    "cancelStartFrame": 14,
-    "cancelEndFrame": 20,
     "tags": [
         "Special",
         "Projectile"
@@ -42,5 +38,42 @@
         "spawnOffsetX": 39.94,
         "spawnOffsetY": -47.5
     },
-    "effectiveRange": 710.34
+    "effectiveRange": 710.34,
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 14,
+            "endFrame": 20,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": true,
+            "startFrame": 14,
+            "endFrame": 20,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false,
+            "allowedMoves": [
+                "super_combo"
+            ]
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 14,
+            "endFrame": 20,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 14,
+            "endFrame": 20,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }

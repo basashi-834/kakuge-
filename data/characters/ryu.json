@@ -5,6 +5,10 @@
     "walkForwardSpeed": 67.12,
     "walkBackwardSpeed": 51.86,
     "dashSpeed": 131.19,
+    "backMoveType": "step",
+    "backStepDistance": 45.0,
+    "backStepFrames": 20,
+    "backDashSpeed": 100.0,
     "jumpVelocity": -226.7,
     "gravity": 732.21,
     "color": [

@@ -10,6 +10,7 @@
     "blockAdvantage": 3,
     "landingRecovery": 4,
     "hitstop": 6,
+    "guardstop": 4,
     "guardType": "Overhead",
     "chipDamagePercent": 0.0,
     "hitbox": [
@@ -25,9 +26,6 @@
     "hitOutcome": "Normal",
     "meterGain": 8,
     "meterCost": 0,
-    "cancelRoutes": [],
-    "cancelStartFrame": 0,
-    "cancelEndFrame": 0,
     "tags": [
         "Medium",
         "Normal",
@@ -40,5 +38,39 @@
     },
     "input": "",
     "button": "MP",
-    "stance": "air"
+    "stance": "air",
+    "cancels": {
+        "special": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "super": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "driveRush": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        },
+        "targetCombo": {
+            "enabled": false,
+            "startFrame": 0,
+            "endFrame": 0,
+            "onHit": true,
+            "onBlock": true,
+            "onWhiff": false
+        }
+    }
 }
